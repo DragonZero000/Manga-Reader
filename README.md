@@ -1,215 +1,75 @@
+**English** | [Русский](README.ru.md)
+
 # MangaReader
 
-Читалка манги из zip-архивов для Windows и Android на Go + [Fyne](https://fyne.io): библиотека, читалка, поиск по тегам и встроенный браузер на движке Firefox для загрузки архивов прямо в библиотеку. Интерфейс пока только на русском.
+[![CI](https://github.com/DragonZero000/Manga-Reader/actions/workflows/ci.yml/badge.svg)](https://github.com/DragonZero000/Manga-Reader/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/DragonZero000/Manga-Reader)](https://github.com/DragonZero000/Manga-Reader/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-## Скачать
+An offline manga reader for zip archives on **Windows** and **Android**, with a built-in Firefox-based browser: archives you download in it go straight into your library. Written in Go with [Fyne](https://fyne.io).
 
-Готовые сборки — на странице [Releases](https://github.com/DragonZero000/Manga-Reader/releases/latest):
+> **The interface is currently in Russian only.** The [user guide](docs/en/user-guide.md) gives every button and tab with an English translation.
 
-| Файл | Платформа |
+## Features
+
+- **Library** — a grid of covers from a folder of `.zip` archives; new files show up on their own, no restart needed.
+- **Metadata** — titles, tags grouped by type (artist, group, character, language…), upload date and more from a `meta.json` inside the archive.
+- **Reader** — paged mode (tap zones, swipe, keyboard, ×2 zoom) and a continuous strip.
+- **Search** — by words and phrases, tags, excluded tags, page count, dates, file size; tapping a tag searches for it.
+- **Built-in browser** — Firefox ESR on Windows, GeckoView on Android; downloads are saved right into the library, and the app remembers the page each file came from.
+- **Errors** — anything that isn't an archive of images (HTML instead of an archive, a broken zip, a PDF…) is listed on a separate tab with the reason; files are never deleted.
+- **Portable on Windows** — everything lives in one folder you can carry on a USB stick.
+
+## Download
+
+Ready-made builds are on the [Releases](https://github.com/DragonZero000/Manga-Reader/releases/latest) page:
+
+| File | For |
 |---|---|
-| `MangaReader-X.Y.Z-windows-x64.zip` | Windows 10/11, 64-бит. Распакуйте куда угодно (где есть права на запись) и запустите `MangaReader\mangareader.exe`. Встроенный браузер уже внутри |
-| `MangaReader-X.Y.Z-android-arm64.apk` | Android 11+ (arm64) |
-| `SHA256SUMS.txt` | Контрольные суммы: `sha256sum -c SHA256SUMS.txt` (Linux, Git Bash) или `Get-FileHash <файл>` (PowerShell) |
+| `MangaReader-X.Y.Z-windows-x64.zip` | Windows 10/11, 64-bit (~155 MB, the built-in browser is included) |
+| `MangaReader-X.Y.Z-android-arm64.apk` | Android 11+ (~115 MB) |
+| `SHA256SUMS.txt` | Checksums: `sha256sum -c SHA256SUMS.txt` (Linux, Git Bash) or `Get-FileHash <file>` (PowerShell) |
 
-**Установка APK.** Откройте файл на телефоне и разрешите установку из этого источника (браузера или файлового менеджера), когда Android попросит. Новые релизы ставятся **поверх** старых: настройки и выбранная папка сохраняются. Если раньше вы ставили APK, собранный самостоятельно (`make build-android`), его подпись другая — удалите его один раз перед установкой релиза; файлы манги не затрагиваются.
+### Installing on Windows
 
-Лицензия — [MIT](LICENSE); сторонние компоненты (Firefox ESR, GeckoView и др.) — в [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+1. Unpack the zip anywhere you have write access (not `Program Files`), e.g. `D:\MangaReader`.
+2. Run `MangaReader\mangareader.exe`.
+3. Put `.zip` archives into the `manga` folder next to the app, or download them with the **Браузер** (Browser) button.
 
-## Требования
+To update, replace `mangareader.exe` and the `browser\firefox` folder with the ones from the new zip; `manga`, `settings.json` and `browser\profile` are kept.
 
-- Go 1.26+
-- Windows: gcc (например, mingw64) — Fyne использует cgo
-- Android: Android Studio (из неё берётся JDK — JBR), а в Android Studio → Settings → Android SDK:
-  - *SDK Platforms*: Android 15 (API 35);
-  - *SDK Tools*: NDK (Side by side) **27** или новее, Android SDK Command-line Tools.
+### Installing on Android
 
-  Kotlin и Gradle отдельно ставить не нужно — их скачивает Gradle Wrapper. Недостающие Build-Tools Gradle доустанавливает сам. Телефон — Android 11+ (arm64).
+1. Download the APK on your phone and open it; allow installing from that source when Android asks.
+2. On first start, pick a library folder inside `Download`, e.g. `Download/manga`.
 
-## Команды
+New releases install **over** old ones: settings and the chosen folder are kept. If you previously installed an APK you built yourself, its signature differs — uninstall it once before installing a release (your manga files are not affected).
+
+## System requirements
+
+| Platform | Requirements |
+|---|---|
+| Windows | Windows 10 or 11, x64; ~350 MB of disk space (including the built-in Firefox) |
+| Android | Android 11 or newer, arm64; ~250 MB after install |
+| Linux, macOS | Not supported yet |
+
+## Documentation
+
+- [User guide](docs/en/user-guide.md) — library folder, archive format and `meta.json`, reader, search syntax, browser, errors, settings.
+- [Building and releases](docs/en/building.md) — requirements, commands, Android, releasing, the signing key.
+- [Architecture](docs/en/architecture.md) — packages, platforms, threads, how the browser works.
+
+## For developers
 
 ```sh
-make run            # запуск в режиме разработки (проверки потоков Fyne включены)
+make run            # run (needs Go 1.26+ and gcc)
 make test           # go vet + go test
 make build-windows  # dist/mangareader.exe
-make build-android  # dist/mangareader.apk (Gradle, arm64)
-make build-android-release  # dist/mangareader-release.apk (ключ — см. ниже)
-make browser          # портативный Firefox ESR в browser/firefox (для make run, только Windows)
-make package-windows  # dist/MangaReader/ с браузером и лицензиями и dist/MangaReader.zip
+make build-android  # dist/mangareader.apk (needs Android Studio and NDK 27+)
 ```
 
-Команды запускаются из корня проекта и работают из PowerShell, cmd и Git Bash.
+Details are in [building.md](docs/en/building.md). How to propose a change: [CONTRIBUTING.md](CONTRIBUTING.md).
 
-### Сборка для Android
+## License
 
-`make build-android` (он же `go run ./tools/android-build`) собирает Go-часть в `libmangareader.so` компилятором из NDK, берёт Java-классы Fyne из модуля той версии, что в `go.mod`, и собирает APK Gradle-проектом из папки `android/`.
-
-- SDK — `ANDROID_HOME` (Android Studio задаёт его сама); NDK — `ANDROID_NDK_HOME` или самая новая версия ≥ 27 из `%ANDROID_HOME%\ndk`; JDK — `JAVA_HOME`, если это JDK 17+, иначе JBR из Android Studio.
-- Версия — только из `FyneApp.toml` (поле `Version`, формат `MAJOR.MINOR.PATCH`); номер сборки Android вычисляется из неё (`0.2.0` → `200`), поэтому новая версия всегда ставится поверх предыдущей. Эту же версию получает `make build-windows`.
-- Архитектуры — `ANDROID_ABIS` (по умолчанию `arm64-v8a`): `make build-android ANDROID_ABIS=arm64-v8a,armeabi-v7a`. Доступны `arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`; каждая добавляет к APK ~25 МБ.
-- Отладочная сборка подписывается отладочным ключом Android SDK — новые сборки ставятся поверх (`adb install -r dist/mangareader.apk`) без потери настроек. Release-сборка подписывается ключом из `MANGAREADER_KEYSTORE`, `MANGAREADER_KEY_ALIAS`, `MANGAREADER_KEY_PASSWORD` (без них APK не подписан).
-- Библиотека выравнивается по страницам памяти 16 КБ (иначе Android 15+ предупреждает о несовместимости).
-
-**Переход с версии, собранной `fyne package`:** ключ подписи другой, поэтому старую версию нужно один раз удалить (`adb uninstall io.github.mangareader.app` или из настроек телефона) и заново выбрать папку при первом запуске. Файлы в `Download/manga` не затрагиваются.
-
-### Выпуск релиза
-
-Релизы собирает GitHub Actions ([`.github/workflows/release.yml`](.github/workflows/release.yml)); на каждый push и pull request [`ci.yml`](.github/workflows/ci.yml) запускает тесты и сборку APK.
-
-1. Поднимите `Version` в `FyneApp.toml`, закоммитьте.
-2. Отправьте тег той же версии: `git tag v0.2.0 && git push origin v0.2.0`. Если тег не совпадает с `FyneApp.toml`, сборка остановится.
-3. Когда сборка закончится, в Releases появится **черновик** с zip, APK и `SHA256SUMS.txt`. Проверьте заметки и файлы и нажмите *Publish release*.
-
-**Ключ подписи APK (один раз).** Все релизы подписываются одним ключом — только тогда новые версии ставятся поверх старых.
-
-```sh
-keytool -genkeypair -v -keystore mangareader-release.jks -alias mangareader -keyalg RSA -keysize 4096 -validity 10000
-```
-
-Затем задайте четыре секрета репозитория. Надёжнее всего — через [GitHub CLI](https://cli.github.com) из папки с ключом: значения не копируются вручную, и в них не попадут лишние пробелы или переводы строк:
-
-```powershell
-# PowerShell
-[Convert]::ToBase64String([IO.File]::ReadAllBytes("$PWD\mangareader-release.jks")) | gh secret set ANDROID_KEYSTORE_BASE64
-gh secret set ANDROID_KEYSTORE_PASSWORD   # спросит значение
-gh secret set ANDROID_KEY_ALIAS --body mangareader
-gh secret set ANDROID_KEY_PASSWORD        # для PKCS12 (по умолчанию у keytool) — тот же пароль, что у хранилища
-```
-
-```sh
-# Linux / Git Bash
-base64 -w0 mangareader-release.jks | gh secret set ANDROID_KEYSTORE_BASE64
-gh secret set ANDROID_KEYSTORE_PASSWORD
-gh secret set ANDROID_KEY_ALIAS --body mangareader
-gh secret set ANDROID_KEY_PASSWORD
-```
-
-То же можно сделать в Settings → Secrets and variables → Actions. Не используйте `certutil -encode` — он добавляет строки-заголовки, и файл ключа портится. Сборка релиза выводит SHA-256 восстановленного файла ключа — он должен совпасть с `Get-FileHash mangareader-release.jks` (PowerShell) или `sha256sum mangareader-release.jks`; проверить пароль локально: `keytool -list -keystore mangareader-release.jks`.
-
-Первая сборка релиза остановится и выведет в журнал SHA-256 отпечаток сертификата: сохраните его в *переменную* (вкладка Variables) `ANDROID_CERT_SHA256` и перезапустите сборку. Дальше CI не выпустит APK, подписанный другим ключом.
-
-> ⚠ **Сохраните резервную копию `mangareader-release.jks` и паролей вне репозитория** (например, в менеджере паролей). Потерянный ключ не восстановить: выпускать обновления, которые ставятся поверх, станет невозможно. Файлы `*.jks` и `*.keystore` в `.gitignore`.
-
-Локально release-APK с тем же ключом: задайте `MANGAREADER_KEYSTORE` (путь к `.jks`), `MANGAREADER_KEYSTORE_PASSWORD`, `MANGAREADER_KEY_ALIAS`, `MANGAREADER_KEY_PASSWORD` и выполните `make build-android-release`. Флаг `go run ./tools/android-build -release -require-signing` запрещает сборку без ключа (так собирает CI).
-
-## Папка библиотеки
-
-### ПК — портативный режим
-
-Всё хранится в папке приложения, больше нигде (ни в `%APPDATA%`, ни в профиле пользователя):
-
-```
-MangaReader\
-├── mangareader.exe
-├── settings.json   ← настройки (режим читалки, браузер), появляется после первого изменения
-├── manga\          ← сюда копируйте .zip-архивы (создаётся при первом запуске)
-└── browser\        ← встроенный браузер (дистрибутив make package-windows)
-    ├── firefox\    ← Firefox ESR, распакованный из установщика
-    └── profile\    ← профиль: закладки, cookies, расширения (создаётся при первом открытии)
-```
-
-Пока приложение открыто, библиотека обновляется сама: новые, изменённые и удалённые файлы в `manga` (и во вложенных папках) появляются через секунду-две без кнопки «Обновить». Незавершённые загрузки (`*.part`) не мешают — файл проверяется, когда загрузка закончится. Если файл ненадолго занят другой программой (например, антивирусом), приложение подождёт; если он занят дольше ~10 секунд, на вкладке «Ошибки» появится «Файл занят другой программой».
-
-Папку приложения можно переносить целиком, например на флешку. Не кладите её туда, где нет прав на запись (например, в `Program Files`) — приложение покажет ошибку с путём.
-
-При запуске через `go run` папкой приложения считается рабочая папка: `manga` появится в корне проекта (она в `.gitignore`).
-
-### Android — папка, выбранная вами
-
-При первом запуске откроется системный выбор папки. Выберите или создайте папку **внутри** `Download`, например `Download/manga`, и нажмите «Использовать эту папку» → «Разрешить». Приложение запомнит выбор и будет видеть всё, что лежит в этой папке и её подпапках: файлы, сохранённые браузером, перенесённые файловым менеджером или скопированные с ПК по USB. Особые разрешения («доступ ко всем файлам») не нужны.
-
-- Корень `Download` Android выбрать не даёт: если браузер сохранил архив прямо в `Download`, перенесите его в выбранную папку.
-- Сменить папку — «Настройки» → «Изменить папку».
-- Если папку удалили или переименовали, приложение попросит выбрать её снова.
-
-Копирование с ПК через adb:
-
-```sh
-adb push example.zip /sdcard/Download/manga/
-```
-
-### Переход со старых версий
-
-Прежние папки больше не используются — перенесите архивы вручную:
-
-| Было | Стало |
-|---|---|
-| `%USERPROFILE%\MangaReader\manga` | `manga` рядом с `mangareader.exe` |
-| `Android/data/io.github.mangareader.app/files/manga` | выбранная папка, например `Download/manga` (перенесите файлы до удаления старой версии: Android удаляет эту папку вместе с приложением) |
-
-## Браузер (Windows)
-
-Кнопка «Браузер» на панели библиотеки открывает встроенный браузер — портативный Firefox ESR из папки `browser\firefox` рядом с приложением. Установленные в системе браузеры и их профили не используются.
-
-- Окно браузера привязано к окну приложения, как браузер в Telegram: всегда поверх него, сворачивается вместе с ним, без отдельной кнопки на панели задач. Закрытие приложения закрывает браузер.
-- Полосы вкладок нет, вкладки переключаются кнопкой «Все вкладки» в шапке (рядом — «Новая вкладка»). Кнопка «MangaReader» (значок книги) сворачивает браузер и показывает приложение; вернуться в браузер — кнопкой «Браузер».
-- Всё, что вы скачиваете, сохраняется прямо в `manga` без вопросов. Через секунду-две архив появляется в библиотеке, а невалидный файл (картинка, веб-страница вместо архива и т.п.) — на вкладке «Ошибки»; файл остаётся в папке.
-- На странице произведения есть кнопка «Открыть в браузере», если известна ссылка: из `meta.json` (поля `url`, `source`, `link`, `source_url`, `gallery_url`) или адрес страницы, с которой файл скачан. Этот адрес сообщает встроенное расширение MangaReader (точный, даже если сайт отдаёт файл через API или другой домен) и приложение сохраняет его вместе с файлом (NTFS-поток `:mangareader.source`, переживает переименование; теряется при копировании на флешку FAT/exFAT). Для файлов, скачанных другими браузерами, используется адрес из метки загрузки Windows — сайты часто обрезают его до главной страницы.
-- «Настройки» → «Браузер»: домашняя страница, «Поисковик» (открывает настройки поиска Firefox — выбор сохраняется в профиле браузера), расширения (устанавливаются с addons.mozilla.org и сохраняются в профиле), очистка cookies и истории. Очистка выполняется при следующем открытии браузера; закладки сохраняются. Тема браузера всегда тёмная.
-- Обновления, телеметрия, реклама и приветственные окна Firefox отключены настройками профиля (`browser\profile\user.js` перезаписывается при каждом запуске). Корпоративные политики не используются, поэтому Firefox не пишет «Ваш браузер управляется Вашей организацией».
-- Встроенное расширение MangaReader (`browser\profile\extensions\bridge@mangareader.app.xpi`) пересобирается при каждом запуске и общается с приложением только через `127.0.0.1` с одноразовым токеном. Версия Firefox обновляется вместе с новой сборкой приложения — обновляйте приложение.
-- Firefox, пока открыт, хранит несколько служебных значений в реестре (`HKCU\Software\Mozilla\Firefox`, с путём встроенного браузера). После закрытия браузера приложение их удаляет; значения других установок Firefox не трогаются.
-- Размер: папка `browser` — около 345 МБ (zip дистрибутива — около 155 МБ).
-
-Для разработки: `make browser` один раз скачивает Firefox (версия и SHA-256 закреплены в `tools/fetch-firefox`) в `browser\firefox`; без него кнопка «Браузер» показывает «Браузер не найден».
-
-## Браузер (Android)
-
-Кнопка «Браузер» на панели библиотеки открывает встроенный браузер на движке Firefox (GeckoView) — экраном поверх читалки, в том же приложении (отдельной иконки и карточки в недавних нет).
-
-- Панель браузера: адрес или поиск, назад/вперёд, обновить, **вкладки** (число — сколько открыто), **MangaReader** (вернуться в читалку), **☆** (закладка), меню: новая вкладка, закладки, загрузки, расширения. Панель можно поставить сверху или снизу: «Настройки» → «Браузер».
-- «MangaReader» и системная «Назад» на первой странице вкладки возвращают в читалку; вкладки сохраняются, пока приложение не выгружено системой.
-- Всё, что скачивает браузер (обычная ссылка, загрузка через API сайта с перенаправлением, форма, файл, собранный страницей), сохраняется в корень папки библиотеки: во время загрузки — `имя.part`, при совпадении имени — `имя (1).zip`. Пока идёт загрузка, в шторке видно уведомление с прогрессом (Android попросит разрешение на уведомления при первой загрузке) — загрузка не прервётся, если уйти в читалку или свернуть приложение. После загрузки архив появляется в библиотеке, невалидный файл — на вкладке «Ошибки».
-- У скачанных файлов запоминается адрес страницы, откуда они скачаны, — кнопка «Открыть в браузере» на странице произведения открывает именно её (в новой вкладке).
-- Расширения ставятся с addons.mozilla.org кнопкой «Добавить в Firefox» (например, uBlock Origin); меню → «Расширения» — включить, выключить, удалить.
-- «Настройки» → «Браузер»: домашняя страница, поисковик, положение панели, очистка cookies и истории (сразу; закладки и расширения сохраняются).
-- Браузер работает с папкой библиотеки на запись. Если папка была выбрана в старой версии (только чтение), при первом открытии браузера приложение попросит выбрать её ещё раз.
-- Размер: APK ~124 МБ (движок Firefox), после установки ~250 МБ. Версия движка обновляется вместе с приложением.
-
-
-
-Пример — `testdata/example.zip`:
-
-```
-example.zip
-└── example/
-    ├── 1.jpg
-    ├── 2.jpg
-    └── meta.json   # id, title.english/japanese, tags[{type,name}], upload_date, ...
-```
-
-## Ошибки
-
-Приложение проверяет **все** файлы в папке библиотеки. Галереей становится только `.zip`-архив с изображениями; всё остальное попадает на вкладку «Ошибки» с причиной, например:
-
-- «Изображение — поддерживаются только zip-архивы» (картинка, видео, аудио, PDF, RAR/7z, текст — тип определяется по содержимому, а не по расширению);
-- «Веб-страница (HTML) вместо архива» — сайт вернул страницу с ошибкой или проверкой вместо файла;
-- «не zip-архив или архив повреждён», «нет изображений», «Пустой файл».
-
-Ошибочные файлы **не удаляются** — удалите или замените их сами; запись исчезнет после следующего сканирования. Число на иконке вкладки — непросмотренные ошибки; открытие вкладки отмечает их просмотренными (статус сохраняется между запусками). Если файл заменили и он снова ошибочен, ошибка снова станет новой.
-
-Не считаются ошибками:
-
-- скрытые файлы и папки (имя начинается с `.`) — туда можно убрать посторонние файлы;
-- незавершённые загрузки браузера: `*.part` и пустой файл, рядом с которым лежит `<имя>.part`.
-
-## Структура
-
-```
-cmd/mangareader/     точка входа
-internal/app/        сборка зависимостей (без виджетов)
-internal/ui/         оболочка: вкладки, toast; screens/ — экраны
-internal/paths/      папка библиотеки по платформам
-internal/model/      Gallery, Tag, Key, натуральная сортировка
-internal/library/    сканирование папки, разбор архивов, определение типа файлов
-internal/problems/   список ошибок библиотеки и статус просмотра
-internal/browser/    встроенный браузер Windows: профиль Firefox, расширение-мост, окно, уборка реестра
-internal/mobilebrowser/ мост к встроенному браузеру Android (JNI)
-android/             Gradle-проект Android; браузер — app/src/main/kotlin/…/browser
-tools/fetch-firefox/ загрузка и распаковка Firefox ESR для дистрибутива
-tools/android-build/ сборка APK через Gradle
-tools/version/       версия из FyneApp.toml для Makefile
-internal/appversion/ разбор версии и номер сборки Android
-internal/search/     поля поиска, Query, валидация, интерфейс Index
-internal/archtest/   проверка границ между пакетами
-```
+The project's code is [MIT](LICENSE). Third-party components (Firefox ESR, GeckoView, Fyne and others) are distributed under their own licenses — see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Firefox is a trademark of the Mozilla Foundation; this project is not affiliated with Mozilla.
