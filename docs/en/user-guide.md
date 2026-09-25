@@ -85,11 +85,18 @@ Example: [`testdata/example.zip`](../../testdata/example.zip).
 
 The **Библиотека** (Library) tab shows galleries as a grid of cards: cover and title. Newest files come first (by file modification time). At the top are the gallery count and the **Обновить** (Refresh) button — usually not needed, since the folder is watched automatically.
 
+![Library on Windows](../images/library.png)
+
 Tapping a card opens its gallery page. If the library is empty, the app shows the path of the folder to put archives into; you can copy the path in **Настройки** (Settings).
+
+<img src="../images/mobile-library.png" alt="Empty library on Android" width="280">
 
 ## Gallery page
 
 Everything about one gallery:
+
+![Gallery page](../images/manga-page.png)
+
 
 - cover, title and alternative title;
 - the **Читать** (Read) button;
@@ -100,6 +107,8 @@ Everything about one gallery:
 ## Reader
 
 **Читать** (Read) opens the reader on top of all tabs. Close it with ✕ on the panel, Esc (PC) or Back (Android). Esc and Back close the reader first, then the gallery page.
+
+![Reader with the panel shown](../images/reader.png)
 
 Two modes, switched on the panel and remembered:
 
@@ -121,6 +130,8 @@ The panel has the title, page number "N / total", a slider to jump to a page, th
 ## Search
 
 The **Поиск** (Search) tab searches the whole library. When the query is empty, a **Как искать** (How to search) cheat sheet is shown below it. Conditions separated by spaces are combined with AND.
+
+![Search by tag](../images/search.png)
 
 | Query | Finds |
 |---|---|
@@ -154,6 +165,8 @@ The **Браузер** (Browser) button on the library toolbar opens a Firefox-b
 - While open, Firefox keeps a few values in the registry (`HKCU\Software\Mozilla\Firefox`); after the browser closes, the app removes them. Values of other Firefox installations are left alone.
 
 ### Android
+
+<img src="../images/mobile-browser.png" alt="Built-in browser on Android" width="280">
 
 - A Firefox engine (GeckoView) inside the app — a screen on top of the reader, with no separate icon.
 - Toolbar: address or search, back/forward, reload, **tabs** (the number shows how many are open), **MangaReader** (back to the reader), **☆** (bookmark), and a menu: new tab, bookmarks, downloads, extensions. The toolbar can be at the top or at the bottom.

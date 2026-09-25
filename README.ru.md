@@ -10,6 +10,12 @@
 
 > Интерфейс пока только на русском.
 
+<p align="center">
+  <img src="docs/images/library.png" alt="Библиотека на Windows" height="240">
+  <img src="docs/images/reader.png" alt="Читалка на Windows" height="240">
+  <img src="docs/images/mobile-library.png" alt="Библиотека на Android" height="240">
+</p>
+
 ## Возможности
 
 - **Библиотека** — сетка обложек из папки с `.zip`-архивами; новые файлы появляются сами, без перезапуска.

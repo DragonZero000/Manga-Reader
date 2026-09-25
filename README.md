@@ -10,6 +10,12 @@ An offline manga reader for zip archives on **Windows** and **Android**, with a 
 
 > **The interface is currently in Russian only.** The [user guide](docs/en/user-guide.md) gives every button and tab with an English translation.
 
+<p align="center">
+  <img src="docs/images/library.png" alt="Library on Windows" height="240">
+  <img src="docs/images/reader.png" alt="Reader on Windows" height="240">
+  <img src="docs/images/mobile-library.png" alt="Library on Android" height="240">
+</p>
+
 ## Features
 
 - **Library** — a grid of covers from a folder of `.zip` archives; new files show up on their own, no restart needed.
