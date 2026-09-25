@@ -23,6 +23,7 @@ SHELL      := cmd.exe
 MKDIR_DIST := if not exist $(DIST) mkdir $(DIST)
 RM_DIST    := if exist $(DIST) rmdir /S /Q $(DIST)
 COPY_EXE   := copy /Y $(DIST)\$(APP_NAME).exe $(DIST)\MangaReader\ >nul
+COPY_LIC   := copy /Y LICENSE $(DIST)\MangaReader\ >nul && copy /Y THIRD_PARTY_NOTICES.md $(DIST)\MangaReader\ >nul
 RM_ZIP     := if exist $(DIST)\MangaReader.zip del $(DIST)\MangaReader.zip
 # tar из Windows (bsdtar) умеет zip; tar из Git (GNU) — нет
 ZIP_DIST   := "%SystemRoot%\System32\tar.exe" -a -cf $(DIST)\MangaReader.zip --options zip:compression=deflate -C $(DIST) MangaReader
@@ -30,6 +31,7 @@ else
 MKDIR_DIST := mkdir -p $(DIST)
 RM_DIST    := rm -rf $(DIST)
 COPY_EXE   := cp $(DIST)/$(APP_NAME).exe $(DIST)/MangaReader/
+COPY_LIC   := cp LICENSE THIRD_PARTY_NOTICES.md $(DIST)/MangaReader/
 RM_ZIP     := rm -f $(DIST)/MangaReader.zip
 ZIP_DIST   := cd $(DIST) && zip -qr MangaReader.zip MangaReader
 endif
@@ -65,10 +67,11 @@ build-android-release:
 browser:
 	go run ./tools/fetch-firefox -dst browser/firefox -cache browser/.cache
 
-# Папка дистрибутива Windows с браузером и её zip: dist/MangaReader(.zip).
+# Папка дистрибутива Windows с браузером и лицензиями и её zip: dist/MangaReader(.zip).
 package-windows: build-windows
 	go run ./tools/fetch-firefox -dst $(DIST)/MangaReader/browser/firefox -cache browser/.cache
 	$(COPY_EXE)
+	$(COPY_LIC)
 	$(RM_ZIP)
 	$(ZIP_DIST)
 

@@ -14,6 +14,25 @@ func TestSplitABIs(t *testing.T) {
 	}
 }
 
+func TestCheckSigning(t *testing.T) {
+	cases := []struct {
+		release, require bool
+		keystore         string
+		wantErr          bool
+	}{
+		{false, false, "", false},
+		{true, false, "", false}, // make build-android-release без ключа — неподписанный APK
+		{true, true, "k.jks", false},
+		{true, true, "", true},
+		{false, true, "k.jks", true}, // -require-signing без -release
+	}
+	for _, c := range cases {
+		if err := checkSigning(c.release, c.require, c.keystore); (err != nil) != c.wantErr {
+			t.Errorf("release=%v require=%v keystore=%q: %v", c.release, c.require, c.keystore, err)
+		}
+	}
+}
+
 func TestFindNDK(t *testing.T) {
 	sdk := t.TempDir()
 	for _, v := range []string{"21.4.7075529", "27.3.13750724", "27.10.1", "readme"} {

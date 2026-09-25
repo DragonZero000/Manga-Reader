@@ -16,6 +16,7 @@ dist/
 /android/app/src/main/java/org/golang/
 /android/app/src/main/jniLibs/
 /android/app/src/main/res/mipmap-*/
+/android/app/src/main/assets/
 /android/local.properties
 
 # Ключи подписи — никогда не коммитить

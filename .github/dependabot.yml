@@ -1,0 +1,8 @@
+# Обновления GitHub Actions. Go-модули обновляются вручную: вместе с ними
+# нужно обновлять THIRD_PARTY_NOTICES.md.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

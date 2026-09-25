@@ -1,0 +1,183 @@
+# Релиз по тегу vX.Y.Z: проверка версии → тесты → пакеты Windows и Android →
+# черновик GitHub Release. Публикует черновик автор вручную.
+#
+# Нужно настроить в репозитории (Settings → Secrets and variables → Actions):
+#   секреты:    ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
+#               ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+#   переменная: ANDROID_CERT_SHA256 — отпечаток сертификата подписи
+#               (первый прогон без неё выведет значение в журнал)
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  version:
+    name: Тег совпадает с FyneApp.toml
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - id: check
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::тег $TAG не вида vX.Y.Z"
+            exit 1
+          fi
+          version=$(go run ./tools/version)
+          if [ "${TAG#v}" != "$version" ]; then
+            echo "::error::тег $TAG не совпадает с версией $version в FyneApp.toml"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  test:
+    name: go vet + go test (Windows)
+    needs: version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: gcc
+        shell: bash
+        run: gcc --version || choco install mingw --no-progress -y
+      - run: go vet ./...
+      - run: go test ./...
+
+  windows:
+    name: Пакет Windows
+    needs: [version, test]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: gcc и make
+        shell: bash
+        run: |
+          gcc --version || choco install mingw --no-progress -y
+          make --version || choco install make --no-progress -y
+      # установщик Firefox ESR; версия и SHA-256 закреплены в fetch-firefox
+      - uses: actions/cache@v6
+        with:
+          path: browser/.cache
+          key: firefox-${{ hashFiles('tools/fetch-firefox/main.go') }}
+      - run: make package-windows
+      - name: Имя файла релиза
+        shell: bash
+        run: mv dist/MangaReader.zip "dist/MangaReader-${{ needs.version.outputs.version }}-windows-x64.zip"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows
+          path: dist/MangaReader-*-windows-x64.zip
+          if-no-files-found: error
+
+  android:
+    name: Пакет Android
+    needs: [version, test]
+    runs-on: ubuntu-latest
+    env:
+      APK: dist/MangaReader-${{ needs.version.outputs.version }}-android-arm64.apk
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Ключ подписи
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::не задан секрет $name"
+              exit 1
+            fi
+          done
+          # вне рабочей копии: не попадёт в артефакты
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\r\n ' | base64 -d > "$RUNNER_TEMP/release.jks"
+      - name: Сборка APK
+        env:
+          MANGAREADER_KEYSTORE: ${{ runner.temp }}/release.jks
+          MANGAREADER_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          MANGAREADER_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          MANGAREADER_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: go run ./tools/android-build -release -require-signing -o "$APK"
+      # APK с другим ключом не встанет поверх установленного — такой релиз не выпускаем
+      - name: Отпечаток сертификата
+        env:
+          EXPECTED: ${{ vars.ANDROID_CERT_SHA256 }}
+        run: |
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
+          actual=$("$apksigner" verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)
+          norm() { tr -d ': ' | tr '[:upper:]' '[:lower:]'; }
+          actual=$(printf '%s' "$actual" | norm)
+          if [ -z "$actual" ]; then
+            echo "::error::APK не подписан"
+            exit 1
+          fi
+          if [ -z "$EXPECTED" ]; then
+            echo "::error::задайте переменную репозитория ANDROID_CERT_SHA256 = $actual и перезапустите сборку"
+            exit 1
+          fi
+          if [ "$(printf '%s' "$EXPECTED" | norm)" != "$actual" ]; then
+            echo "::error::APK подписан другим ключом: $actual, ожидался $EXPECTED"
+            exit 1
+          fi
+          echo "подпись: $actual"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android
+          path: ${{ env.APK }}
+          if-no-files-found: error
+
+  publish:
+    name: Черновик релиза
+    needs: [version, windows, android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Контрольные суммы
+        working-directory: dist
+        run: |
+          sha256sum MangaReader-* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Черновик
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          gh release create "$TAG" dist/* \
+            --repo "${{ github.repository }}" \
+            --draft --generate-notes \
+            --title "MangaReader $VERSION"

@@ -3,7 +3,7 @@
 // Java-классы Fyne — из модуля Fyne той версии, что в go.mod, затем
 // gradlew assembleDebug/assembleRelease в папке android/ и копия APK в dist/.
 //
-//	go run ./tools/android-build [-abis arm64-v8a,armeabi-v7a] [-release]
+//	go run ./tools/android-build [-abis arm64-v8a,armeabi-v7a] [-release [-require-signing]]
 package main
 
 import (
@@ -46,12 +46,28 @@ var abis = map[string]abi{
 func main() {
 	abiList := flag.String("abis", "arm64-v8a", "архитектуры через запятую или пробел")
 	release := flag.Bool("release", false, "release-сборка (ключ из MANGAREADER_KEYSTORE…)")
+	requireSigning := flag.Bool("require-signing", false, "с -release: ошибка, если ключ не задан (для релизов)")
 	out := flag.String("o", filepath.Join("dist", "mangareader.apk"), "куда положить APK")
 	flag.Parse()
 	log.SetFlags(0)
+	if err := checkSigning(*release, *requireSigning, os.Getenv("MANGAREADER_KEYSTORE")); err != nil {
+		log.Fatal("android-build: ", err)
+	}
 	if err := run(splitABIs(*abiList), *release, *out); err != nil {
 		log.Fatal("android-build: ", err)
 	}
+}
+
+// checkSigning проверяет флаги подписи до сборки: релиз проекта не должен
+// выйти неподписанным — такой APK не ставится поверх предыдущего.
+func checkSigning(release, require bool, keystore string) error {
+	if require && !release {
+		return errors.New("флаг -require-signing имеет смысл только с -release")
+	}
+	if require && keystore == "" {
+		return errors.New("не задан ключ подписи: нужны MANGAREADER_KEYSTORE, MANGAREADER_KEYSTORE_PASSWORD, MANGAREADER_KEY_ALIAS, MANGAREADER_KEY_PASSWORD")
+	}
+	return nil
 }
 
 func run(list []string, release bool, out string) error {
@@ -89,6 +105,12 @@ func run(list []string, release bool, out string) error {
 	}
 	if err := copyFile("Icon.png", filepath.Join(src, "res", "mipmap-xxxhdpi", "ic_launcher.png")); err != nil {
 		return fmt.Errorf("иконка: %w", err)
+	}
+	// лицензии — в assets/ APK (копии генерируются, в репозитории их нет)
+	for _, f := range []string{"LICENSE", "THIRD_PARTY_NOTICES.md"} {
+		if err := copyFile(f, filepath.Join(src, "assets", f)); err != nil {
+			return fmt.Errorf("лицензии: %w", err)
+		}
 	}
 	jni := filepath.Join(src, "jniLibs")
 	if err := os.RemoveAll(jni); err != nil { // без библиотек прежних архитектур

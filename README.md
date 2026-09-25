@@ -1,6 +1,20 @@
 # MangaReader
 
-Читалка манги для Windows и Android на Go + [Fyne](https://fyne.io). Сейчас это каркас: навигация, папка библиотеки и модель данных. Чтение архивов, читалка и поиск будут в следующих изменениях (см. `openspec/`).
+Читалка манги из zip-архивов для Windows и Android на Go + [Fyne](https://fyne.io): библиотека, читалка, поиск по тегам и встроенный браузер на движке Firefox для загрузки архивов прямо в библиотеку. Интерфейс пока только на русском.
+
+## Скачать
+
+Готовые сборки — на странице [Releases](https://github.com/DragonZero000/Manga-Reader/releases/latest):
+
+| Файл | Платформа |
+|---|---|
+| `MangaReader-X.Y.Z-windows-x64.zip` | Windows 10/11, 64-бит. Распакуйте куда угодно (где есть права на запись) и запустите `MangaReader\mangareader.exe`. Встроенный браузер уже внутри |
+| `MangaReader-X.Y.Z-android-arm64.apk` | Android 11+ (arm64) |
+| `SHA256SUMS.txt` | Контрольные суммы: `sha256sum -c SHA256SUMS.txt` (Linux, Git Bash) или `Get-FileHash <файл>` (PowerShell) |
+
+**Установка APK.** Откройте файл на телефоне и разрешите установку из этого источника (браузера или файлового менеджера), когда Android попросит. Новые релизы ставятся **поверх** старых: настройки и выбранная папка сохраняются. Если раньше вы ставили APK, собранный самостоятельно (`make build-android`), его подпись другая — удалите его один раз перед установкой релиза; файлы манги не затрагиваются.
+
+Лицензия — [MIT](LICENSE); сторонние компоненты (Firefox ESR, GeckoView и др.) — в [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Требования
 
@@ -21,7 +35,7 @@ make build-windows  # dist/mangareader.exe
 make build-android  # dist/mangareader.apk (Gradle, arm64)
 make build-android-release  # dist/mangareader-release.apk (ключ — см. ниже)
 make browser          # портативный Firefox ESR в browser/firefox (для make run, только Windows)
-make package-windows  # dist/MangaReader/ с браузером и dist/MangaReader.zip
+make package-windows  # dist/MangaReader/ с браузером и лицензиями и dist/MangaReader.zip
 ```
 
 Команды запускаются из корня проекта и работают из PowerShell, cmd и Git Bash.
@@ -37,6 +51,35 @@ make package-windows  # dist/MangaReader/ с браузером и dist/MangaRea
 - Библиотека выравнивается по страницам памяти 16 КБ (иначе Android 15+ предупреждает о несовместимости).
 
 **Переход с версии, собранной `fyne package`:** ключ подписи другой, поэтому старую версию нужно один раз удалить (`adb uninstall io.github.mangareader.app` или из настроек телефона) и заново выбрать папку при первом запуске. Файлы в `Download/manga` не затрагиваются.
+
+### Выпуск релиза
+
+Релизы собирает GitHub Actions ([`.github/workflows/release.yml`](.github/workflows/release.yml)); на каждый push и pull request [`ci.yml`](.github/workflows/ci.yml) запускает тесты и сборку APK.
+
+1. Поднимите `Version` в `FyneApp.toml`, закоммитьте.
+2. Отправьте тег той же версии: `git tag v0.2.0 && git push origin v0.2.0`. Если тег не совпадает с `FyneApp.toml`, сборка остановится.
+3. Когда сборка закончится, в Releases появится **черновик** с zip, APK и `SHA256SUMS.txt`. Проверьте заметки и файлы и нажмите *Publish release*.
+
+**Ключ подписи APK (один раз).** Все релизы подписываются одним ключом — только тогда новые версии ставятся поверх старых.
+
+```sh
+keytool -genkeypair -v -keystore mangareader-release.jks -alias mangareader -keyalg RSA -keysize 4096 -validity 10000
+```
+
+Затем в Settings → Secrets and variables → Actions репозитория задайте секреты (или `gh secret set <имя>`):
+
+| Секрет | Значение |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | файл ключа в base64: `base64 -w0 mangareader-release.jks` (Linux/Git Bash) или `[Convert]::ToBase64String([IO.File]::ReadAllBytes("mangareader-release.jks"))` (PowerShell) |
+| `ANDROID_KEYSTORE_PASSWORD` | пароль хранилища |
+| `ANDROID_KEY_ALIAS` | `mangareader` |
+| `ANDROID_KEY_PASSWORD` | пароль ключа |
+
+Первая сборка релиза остановится и выведет в журнал SHA-256 отпечаток сертификата: сохраните его в *переменную* (вкладка Variables) `ANDROID_CERT_SHA256` и перезапустите сборку. Дальше CI не выпустит APK, подписанный другим ключом.
+
+> ⚠ **Сохраните резервную копию `mangareader-release.jks` и паролей вне репозитория** (например, в менеджере паролей). Потерянный ключ не восстановить: выпускать обновления, которые ставятся поверх, станет невозможно. Файлы `*.jks` и `*.keystore` в `.gitignore`.
+
+Локально release-APK с тем же ключом: задайте `MANGAREADER_KEYSTORE` (путь к `.jks`), `MANGAREADER_KEYSTORE_PASSWORD`, `MANGAREADER_KEY_ALIAS`, `MANGAREADER_KEY_PASSWORD` и выполните `make build-android-release`. Флаг `go run ./tools/android-build -release -require-signing` запрещает сборку без ключа (так собирает CI).
 
 ## Папка библиотеки
 

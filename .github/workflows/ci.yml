@@ -1,0 +1,47 @@
+# Проверка на каждый push и pull request: тесты на Windows и сборка APK.
+# Секреты не нужны — работает и для pull request из форков.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: go vet + go test (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      # Fyne использует cgo: нужен gcc (MinGW-w64 есть в образе раннера)
+      - name: gcc
+        shell: bash
+        run: gcc --version || choco install mingw --no-progress -y
+      - run: go vet ./...
+      - run: go test ./...
+
+  android:
+    name: Сборка APK (без подписи ключом проекта)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v6
+      # Android SDK и NDK есть в образе раннера; debug-APK подписывается
+      # отладочным ключом раннера и никуда не публикуется
+      - run: go run ./tools/android-build
