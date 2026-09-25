@@ -31,11 +31,10 @@ make package-windows  # dist/MangaReader/ с браузером и dist/MangaRea
 `make build-android` (он же `go run ./tools/android-build`) собирает Go-часть в `libmangareader.so` компилятором из NDK, берёт Java-классы Fyne из модуля той версии, что в `go.mod`, и собирает APK Gradle-проектом из папки `android/`.
 
 - SDK — `ANDROID_HOME` (Android Studio задаёт его сама); NDK — `ANDROID_NDK_HOME` или самая новая версия ≥ 27 из `%ANDROID_HOME%\ndk`; JDK — `JAVA_HOME`, если это JDK 17+, иначе JBR из Android Studio.
-- Версия и номер сборки — из `FyneApp.toml`.
+- Версия — только из `FyneApp.toml` (поле `Version`, формат `MAJOR.MINOR.PATCH`); номер сборки Android вычисляется из неё (`0.2.0` → `200`), поэтому новая версия всегда ставится поверх предыдущей. Эту же версию получает `make build-windows`.
 - Архитектуры — `ANDROID_ABIS` (по умолчанию `arm64-v8a`): `make build-android ANDROID_ABIS=arm64-v8a,armeabi-v7a`. Доступны `arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`; каждая добавляет к APK ~25 МБ.
 - Отладочная сборка подписывается отладочным ключом Android SDK — новые сборки ставятся поверх (`adb install -r dist/mangareader.apk`) без потери настроек. Release-сборка подписывается ключом из `MANGAREADER_KEYSTORE`, `MANGAREADER_KEY_ALIAS`, `MANGAREADER_KEY_PASSWORD` (без них APK не подписан).
 - Библиотека выравнивается по страницам памяти 16 КБ (иначе Android 15+ предупреждает о несовместимости).
-- `make build-android-fyne` — прежняя сборка через `fyne package` (нужен `fyne` CLI), пока переход на Gradle не завершён.
 
 **Переход с версии, собранной `fyne package`:** ключ подписи другой, поэтому старую версию нужно один раз удалить (`adb uninstall io.github.mangareader.app` или из настроек телефона) и заново выбрать папку при первом запуске. Файлы в `Download/manga` не затрагиваются.
 
@@ -154,7 +153,9 @@ internal/browser/    встроенный браузер Windows: профиль
 internal/mobilebrowser/ мост к встроенному браузеру Android (JNI)
 android/             Gradle-проект Android; браузер — app/src/main/kotlin/…/browser
 tools/fetch-firefox/ загрузка и распаковка Firefox ESR для дистрибутива
+tools/android-build/ сборка APK через Gradle
+tools/version/       версия из FyneApp.toml для Makefile
+internal/appversion/ разбор версии и номер сборки Android
 internal/search/     поля поиска, Query, валидация, интерфейс Index
 internal/archtest/   проверка границ между пакетами
-spikes/              эксперименты в отдельных модулях
 ```

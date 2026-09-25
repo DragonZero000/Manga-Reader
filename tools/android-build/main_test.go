@@ -14,19 +14,6 @@ func TestSplitABIs(t *testing.T) {
 	}
 }
 
-func TestReadMetadata(t *testing.T) {
-	p := filepath.Join(t.TempDir(), "FyneApp.toml")
-	os.WriteFile(p, []byte("[Details]\n  Name = \"MangaReader\"\n  Version = \"0.2.1\"\n  Build = 7\n"), 0o644)
-	v, b, err := readMetadata(p)
-	if err != nil || v != "0.2.1" || b != 7 {
-		t.Fatalf("%q %d %v", v, b, err)
-	}
-	os.WriteFile(p, []byte("[Details]\n"), 0o644)
-	if _, _, err := readMetadata(p); err == nil {
-		t.Fatal("без версии — ошибка")
-	}
-}
-
 func TestFindNDK(t *testing.T) {
 	sdk := t.TempDir()
 	for _, v := range []string{"21.4.7075529", "27.3.13750724", "27.10.1", "readme"} {

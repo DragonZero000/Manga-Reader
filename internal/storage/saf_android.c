@@ -1,7 +1,7 @@
 //go:build android
 
 #include <jni.h>
-// JNI-вызовы Storage Access Framework (проверены спайком spikes/saf-android).
+// JNI-вызовы Storage Access Framework (проверены спайком saf-android, см. openspec/changes/archive/2026-09-24-storage-location).
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>

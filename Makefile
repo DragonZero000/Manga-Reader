@@ -2,11 +2,12 @@
 # Запускать из корня проекта: make build-windows / make build-android
 
 APP_NAME := mangareader
-APP_ID   := io.github.mangareader.app
 MAIN     := ./cmd/mangareader
 DIST     := dist
-VERSION  ?= 0.1.0
-LDFLAGS  := -X main.version=$(VERSION)
+# Версия — только в FyneApp.toml. «=» — вычисляется лишь в целях сборки
+# (make run и make test утилиту не запускают); override запрещает make VERSION=…
+override VERSION = $(shell go run ./tools/version)
+LDFLAGS  = -X main.version=$(VERSION)
 # Код мигрирован на fyne.Do: в релизных сборках отключаем проверки потоков.
 # В `make run` FyneApp.toml читается из корня и проверки остаются включены.
 TAGS     := migrated_fynedo
@@ -20,7 +21,6 @@ ifeq ($(OS),Windows_NT)
 SHELL      := cmd.exe
 .SHELLFLAGS := /c
 MKDIR_DIST := if not exist $(DIST) mkdir $(DIST)
-MOVE_APK   := move /Y cmd\mangareader\*.apk $(DIST)\$(APP_NAME).apk >nul
 RM_DIST    := if exist $(DIST) rmdir /S /Q $(DIST)
 COPY_EXE   := copy /Y $(DIST)\$(APP_NAME).exe $(DIST)\MangaReader\ >nul
 RM_ZIP     := if exist $(DIST)\MangaReader.zip del $(DIST)\MangaReader.zip
@@ -28,14 +28,13 @@ RM_ZIP     := if exist $(DIST)\MangaReader.zip del $(DIST)\MangaReader.zip
 ZIP_DIST   := "%SystemRoot%\System32\tar.exe" -a -cf $(DIST)\MangaReader.zip --options zip:compression=deflate -C $(DIST) MangaReader
 else
 MKDIR_DIST := mkdir -p $(DIST)
-MOVE_APK   := mv $(MAIN)/*.apk $(DIST)/$(APP_NAME).apk
 RM_DIST    := rm -rf $(DIST)
 COPY_EXE   := cp $(DIST)/$(APP_NAME).exe $(DIST)/MangaReader/
 RM_ZIP     := rm -f $(DIST)/MangaReader.zip
 ZIP_DIST   := cd $(DIST) && zip -qr MangaReader.zip MangaReader
 endif
 
-.PHONY: run test build-windows build-android build-android-release build-android-fyne browser package-windows clean
+.PHONY: run test build-windows build-android build-android-release browser package-windows clean
 
 run:
 	go run $(MAIN)
@@ -45,6 +44,7 @@ test:
 	go test ./...
 
 build-windows:
+	$(if $(VERSION),,$(error не удалось прочитать версию из FyneApp.toml — см. сообщение выше))
 	$(MKDIR_DIST)
 	go build -tags $(TAGS) -ldflags "-H windowsgui $(LDFLAGS)" -o $(DIST)/$(APP_NAME).exe $(MAIN)
 
@@ -59,12 +59,6 @@ build-android:
 # MANGAREADER_KEY_PASSWORD (без них — неподписанный).
 build-android-release:
 	go run ./tools/android-build -abis "$(ANDROID_ABIS)" -release -o $(DIST)/mangareader-release.apk
-
-# Прежняя сборка через fyne package (до перехода на Gradle): fyne CLI, NDK.
-build-android-fyne:
-	$(MKDIR_DIST)
-	cd cmd/mangareader && fyne package -os android --tags $(TAGS) --app-id $(APP_ID) --icon ../../Icon.png --name MangaReader --app-version $(VERSION) --app-build 1
-	$(MOVE_APK)
 
 # Портативный Firefox ESR для встроенного браузера (только Windows):
 # browser/firefox — для make run; версия и SHA-256 закреплены в tools/fetch-firefox.

@@ -14,6 +14,7 @@ func TestServicePackagesHaveNoWidgets(t *testing.T) {
 		"fyne.io/fyne/v2/container",
 	}
 	for _, pkg := range []string{
+		"mangareader/internal/appversion",
 		"mangareader/internal/paths",
 		"mangareader/internal/model",
 		"mangareader/internal/search",

@@ -20,6 +20,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"mangareader/internal/appversion"
 )
 
 // minSdk — минимальная версия Android (API 30 = Android 11); clang из NDK
@@ -61,10 +63,11 @@ func run(list []string, release bool, out string) error {
 			return fmt.Errorf("неизвестная архитектура %q (есть: %s)", a, strings.Join(knownABIs(), ", "))
 		}
 	}
-	version, build, err := readMetadata("FyneApp.toml")
+	ver, err := appversion.Read("FyneApp.toml")
 	if err != nil {
 		return err
 	}
+	version, build := ver.String(), ver.Code()
 	sdk, err := androidHome()
 	if err != nil {
 		return err
@@ -146,26 +149,6 @@ func knownABIs() []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-var (
-	reVersion = regexp.MustCompile(`(?m)^\s*Version\s*=\s*"([^"]+)"`)
-	reBuild   = regexp.MustCompile(`(?m)^\s*Build\s*=\s*(\d+)`)
-)
-
-// readMetadata — версия и номер сборки из FyneApp.toml.
-func readMetadata(path string) (string, int, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", 0, fmt.Errorf("метаданные: %w (запускайте из корня проекта)", err)
-	}
-	v := reVersion.FindSubmatch(data)
-	b := reBuild.FindSubmatch(data)
-	if v == nil || b == nil {
-		return "", 0, fmt.Errorf("в %s нет Version или Build", path)
-	}
-	n, _ := strconv.Atoi(string(b[1]))
-	return string(v[1]), n, nil
 }
 
 func androidHome() (string, error) {

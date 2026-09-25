@@ -2,27 +2,54 @@ schema: spec-driven
 
 # Project context — показывается AI при создании артефактов
 context: |
-  Project: MangaReader — desktop/mobile client
-  Stack: Go (go.mod says 1.26.0), Fyne v2.8.0, modernc.org/sqlite, stdlib crypto/aes
-  UI: Fyne with fyneDo=true migration; updates from goroutines must use fyne.Do
-  Domain: online/offline gallery browser, zip download, tag search, favorites, cache
+  Project: MangaReader — офлайн-читалка манги из zip-архивов (изображения + meta.json)
+  со встроенным браузером на движке Firefox для загрузки архивов прямо в библиотеку.
+  Repo: https://github.com/DragonZero000/Manga-Reader (MIT). Сетевого API и каталогов нет —
+  приложение работает с локальной папкой; сеть использует только встроенный браузер.
 
-  Known blockers (do not mark as done until fixed):
-  - rate limit is a no-op (sleep after request in detached goroutine)
-  - no page navigation in app.go (only homePage is shown)
-  - download flow stops at []byte in memory (no file/DB write)
+  Stack: Go 1.26 (go.mod), Fyne v2.8.0 с миграцией fyneDo: обновления UI из горутин —
+  только через fyne.Do; сборки идут с тегом migrated_fynedo, make run — с проверками потоков.
+  Без базы данных: индекс поиска в памяти, настройки — settings.json / Preferences.
 
-  Conventions:
-  - Russian UI strings and comments are acceptable
-  - Specs and tasks must reflect actual code, not aspirational status
-  - Prefer minimal focused changes per task
+  Platforms:
+  - Windows (amd64): портативный режим — всё в папке рядом с exe (manga/, settings.json,
+    browser/); встроенный браузер — портативный Firefox ESR (tools/fetch-firefox),
+    окно привязано к окну приложения (Win32).
+  - Android 11+ (arm64): папка библиотеки через SAF; браузер — GeckoView (Kotlin, android/),
+    мост Go ↔ Kotlin через JNI (internal/mobilebrowser); сборка — Gradle (tools/android-build).
+  - Linux: в планах (изменение linux-support), пока не поддерживается.
+  Platform code split by build tags: windows / !windows, android / !android (файлы *_windows.go,
+  *_android.go, *_other.go). Новая платформенная функция — со stub для остальных платформ.
+
+  Layout: cmd/mangareader — точка входа; internal/app — сборка зависимостей без виджетов;
+  internal/ui — оболочка и экраны (единственное место с виджетами Fyne); остальные internal/*
+  — сервисные пакеты. internal/archtest проверяет, что сервисные пакеты не импортируют
+  fyne widget/container (для GOOS=windows и android). tools/ — утилиты сборки.
+
+  Version: единственный источник — FyneApp.toml (Version, MAJOR.MINOR.PATCH);
+  Android versionCode = MAJOR*10000 + MINOR*100 + PATCH (internal/appversion).
+
+  Language: интерфейс только на русском (i18n пока нет, строки в коде); комментарии в коде — на русском.
+  Docs: README.md (English) + README.ru.md; docs/en/ и docs/ru/ с одинаковыми именами файлов;
+  THIRD_PARTY_NOTICES.md — распространяемые сторонние компоненты и их лицензии.
+
+  Verify: make test (go vet + go test). Сборка: make build-windows, make build-android.
 
 rules:
   proposal:
     - Keep proposals under 500 words when possible
     - Always include Non-goals if scope is large
+    - List affected platforms (Windows, Android, Linux) when behavior differs between them
+  specs:
+    - Scenarios must be testable; state platform explicitly when a requirement is platform-specific
+  design:
+    - List affected platforms and build tags; describe behavior on platforms where the feature is absent (stub)
+    - Call out UI thread safety explicitly (fyne.Do for updates from goroutines)
+    - New distributed third-party component or version bump → note THIRD_PARTY_NOTICES.md update
   tasks:
     - Break tasks into chunks of max ~2 hours
     - Only mark [x] when code actually implements the item
-  design:
-    - Call out rate limiting, API paths, and UI thread safety explicitly
+    - Always end with a verification task that runs make test (plus platform builds if build code changed)
+    - If user-visible behavior or build steps change, add a task to update docs in BOTH languages (docs/en + docs/ru, README.md + README.ru.md)
+    - New package in internal/ → add it to internal/archtest and to the architecture docs (docs/en/architecture.md, docs/ru/architecture.md)
+    - Changed distributed components (Firefox ESR, GeckoView, go.mod modules) → task to update THIRD_PARTY_NOTICES.md

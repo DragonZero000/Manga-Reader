@@ -20,7 +20,9 @@ android {
         applicationId = "io.github.mangareader.app"
         minSdk = 30
         targetSdk = 35
-        versionName = prop("versionName", "0.1.0")
+        // версию и versionCode передаёт tools/android-build из FyneApp.toml;
+        // значения по умолчанию — только для запуска Gradle напрямую (Android Studio)
+        versionName = prop("versionName", "dev")
         versionCode = prop("versionCode", "1").toInt()
         ndk { abiFilters += abis }
     }
@@ -55,7 +57,8 @@ android {
     }
 }
 
-// встроенный браузер: GeckoView (движок Firefox), release-канал
+// встроенный браузер: GeckoView (движок Firefox), release-канал.
+// При обновлении версии обновите THIRD_PARTY_NOTICES.md (версия и ссылка на исходники).
 val geckoviewVersion = "156.0.20260921121718"
 
 dependencies {

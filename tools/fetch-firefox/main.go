@@ -23,6 +23,7 @@ import (
 // Закреплённая версия: обновляется вручную вместе с контрольной суммой из
 // https://archive.mozilla.org/pub/firefox/releases/<версия>/SHA256SUMS
 // (строка win64/ru/Firefox Setup <версия>.exe).
+// При обновлении версии обновите THIRD_PARTY_NOTICES.md (версия и ссылка на исходники).
 const (
 	version = "153.3.0esr"
 	locale  = "ru"
