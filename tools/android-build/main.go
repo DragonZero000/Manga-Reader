@@ -7,6 +7,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -294,17 +295,41 @@ func androidStudioJBR() string {
 
 // copyFyneJava копирует Java-классы Fyne из модуля той версии, что в go.mod.
 func copyFyneJava(dst string) error {
-	out, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", "fyne.io/fyne/v2").Output()
+	dir, err := moduleDir("fyne.io/fyne/v2")
 	if err != nil {
-		return fmt.Errorf("модуль Fyne: %w", err)
+		return err
 	}
-	src := filepath.Join(strings.TrimSpace(string(out)), "internal", "driver", "mobile", "app")
+	src := filepath.Join(dir, "internal", "driver", "mobile", "app")
 	for _, name := range []string{"GoNativeActivity.java", "FyneNotificationReceiver.java"} {
 		if err := copyFile(filepath.Join(src, name), filepath.Join(dst, name)); err != nil {
 			return fmt.Errorf("Java-классы Fyne: %w", err)
 		}
 	}
 	return nil
+}
+
+// moduleDir — папка модуля той версии, что в go.mod. «go list -m» на чистом
+// кэше модулей (CI) возвращает пустой Dir, а «go mod download» сначала скачивает.
+func moduleDir(path string) (string, error) {
+	out, err := exec.Command("go", "mod", "download", "-json", path).Output()
+	if err != nil {
+		return "", fmt.Errorf("модуль %s: %w", path, err)
+	}
+	return parseModuleDir(path, out)
+}
+
+func parseModuleDir(path string, data []byte) (string, error) {
+	var m struct{ Dir, Error string }
+	if err := json.Unmarshal(data, &m); err != nil {
+		return "", fmt.Errorf("модуль %s: %w", path, err)
+	}
+	if m.Error != "" {
+		return "", fmt.Errorf("модуль %s: %s", path, m.Error)
+	}
+	if m.Dir == "" {
+		return "", fmt.Errorf("модуль %s: go mod download не сообщил папку", path)
+	}
+	return m.Dir, nil
 }
 
 // buildLib собирает libmangareader.so для архитектуры a в каталог dir.

@@ -33,6 +33,17 @@ func TestCheckSigning(t *testing.T) {
 	}
 }
 
+func TestParseModuleDir(t *testing.T) {
+	if d, err := parseModuleDir("m", []byte(`{"Path":"m","Version":"v1.0.0","Dir":"/cache/m@v1.0.0"}`)); err != nil || d != "/cache/m@v1.0.0" {
+		t.Errorf("%q %v", d, err)
+	}
+	for _, in := range []string{`{"Path":"m"}`, `{"Path":"m","Error":"not found"}`, `not json`} {
+		if _, err := parseModuleDir("m", []byte(in)); err == nil {
+			t.Errorf("%s: ожидалась ошибка", in)
+		}
+	}
+}
+
 func TestFindNDK(t *testing.T) {
 	sdk := t.TempDir()
 	for _, v := range []string{"21.4.7075529", "27.3.13750724", "27.10.1", "readme"} {
