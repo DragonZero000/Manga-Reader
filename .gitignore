@@ -1,11 +1,14 @@
+# Результаты сборки
 dist/
 *.apk
-*.exe
 *.aab
-spikes/**/*.db
+*.exe
+
+# Данные запуска из корня проекта (make run): библиотека, настройки, браузер
 /manga/
 /settings.json
 /browser/
+
 # Android (Gradle): генерируется make build-android
 /android/.gradle/
 /android/build/
@@ -14,8 +17,14 @@ spikes/**/*.db
 /android/app/src/main/jniLibs/
 /android/app/src/main/res/mipmap-*/
 /android/local.properties
-spikes/**/android/.gradle/
-spikes/**/android/build/
-spikes/**/android/app/build/
-spikes/**/android/app/src/main/jniLibs/
-spikes/**/android/app/src/main/java/org/golang/
+
+# Ключи подписи — никогда не коммитить
+*.jks
+*.keystore
+
+# IDE и AI-агенты: у каждого разработчика свои (openspec/ хранится)
+.idea/
+.vscode/
+.claude/
+.cline/
+.clinerules/

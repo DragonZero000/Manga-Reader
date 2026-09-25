@@ -1,0 +1,18 @@
+# Текст в репозитории — всегда LF, независимо от core.autocrlf.
+* text=auto eol=lf
+
+# Скрипты Windows — CRLF, скрипты Unix — LF.
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+gradlew text eol=lf
+*.sh    text eol=lf
+
+# Бинарные файлы: без преобразования строк и текстового diff.
+*.png binary
+*.jpg binary
+*.jar binary
+*.zip binary
+*.xpi binary
+*.apk binary
+*.aab binary
+*.so  binary
