@@ -119,7 +119,19 @@ jobs:
             fi
           done
           # вне рабочей копии: не попадёт в артефакты
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\r\n ' | base64 -d > "$RUNNER_TEMP/release.jks"
+          ks="$RUNNER_TEMP/release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '\r\n ' | base64 -d > "$ks"
+          # SHA-256 файла — не секрет: сверьте с Get-FileHash / sha256sum исходного .jks
+          echo "SHA-256 файла ключа: $(sha256sum "$ks" | cut -d' ' -f1)"
+          # проверка до долгой сборки: пароль хранилища и alias
+          if ! keytool -list -keystore "$ks" -storepass:env ANDROID_KEYSTORE_PASSWORD > /dev/null 2>&1; then
+            echo "::error::не удалось открыть ключ: неверен ANDROID_KEYSTORE_PASSWORD или файл испорчен при переводе в base64 (сверьте SHA-256 выше с исходным файлом)"
+            exit 1
+          fi
+          if ! keytool -list -keystore "$ks" -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" > /dev/null 2>&1; then
+            echo "::error::в ключе нет alias из ANDROID_KEY_ALIAS; список: keytool -list -keystore <файл>"
+            exit 1
+          fi
       - name: Сборка APK
         env:
           MANGAREADER_KEYSTORE: ${{ runner.temp }}/release.jks
@@ -133,11 +145,19 @@ jobs:
           EXPECTED: ${{ vars.ANDROID_CERT_SHA256 }}
         run: |
           apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
-          actual=$("$apksigner" verify --print-certs "$APK" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)
+          if ! certs=$("$apksigner" verify --print-certs "$APK" 2>&1); then
+            printf '%s\n' "$certs"
+            echo "::error::apksigner: подпись APK не проходит проверку"
+            exit 1
+          fi
+          # формат зависит от build-tools: «Signer #1 certificate SHA-256 digest: …»
+          # или «V2 Signer: certificate SHA-256 digest: …» — берём первую такую строку
+          actual=$(printf '%s\n' "$certs" | sed -n 's/.*certificate SHA-256 digest: *//p' | head -1)
           norm() { tr -d ': ' | tr '[:upper:]' '[:lower:]'; }
           actual=$(printf '%s' "$actual" | norm)
           if [ -z "$actual" ]; then
-            echo "::error::APK не подписан"
+            printf '%s\n' "$certs"
+            echo "::error::в выводе apksigner нет SHA-256 сертификата"
             exit 1
           fi
           if [ -z "$EXPECTED" ]; then

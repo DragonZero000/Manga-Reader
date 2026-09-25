@@ -66,14 +66,25 @@ make package-windows  # dist/MangaReader/ с браузером и лиценз�
 keytool -genkeypair -v -keystore mangareader-release.jks -alias mangareader -keyalg RSA -keysize 4096 -validity 10000
 ```
 
-Затем в Settings → Secrets and variables → Actions репозитория задайте секреты (или `gh secret set <имя>`):
+Затем задайте четыре секрета репозитория. Надёжнее всего — через [GitHub CLI](https://cli.github.com) из папки с ключом: значения не копируются вручную, и в них не попадут лишние пробелы или переводы строк:
 
-| Секрет | Значение |
-|---|---|
-| `ANDROID_KEYSTORE_BASE64` | файл ключа в base64: `base64 -w0 mangareader-release.jks` (Linux/Git Bash) или `[Convert]::ToBase64String([IO.File]::ReadAllBytes("mangareader-release.jks"))` (PowerShell) |
-| `ANDROID_KEYSTORE_PASSWORD` | пароль хранилища |
-| `ANDROID_KEY_ALIAS` | `mangareader` |
-| `ANDROID_KEY_PASSWORD` | пароль ключа |
+```powershell
+# PowerShell
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("$PWD\mangareader-release.jks")) | gh secret set ANDROID_KEYSTORE_BASE64
+gh secret set ANDROID_KEYSTORE_PASSWORD   # спросит значение
+gh secret set ANDROID_KEY_ALIAS --body mangareader
+gh secret set ANDROID_KEY_PASSWORD        # для PKCS12 (по умолчанию у keytool) — тот же пароль, что у хранилища
+```
+
+```sh
+# Linux / Git Bash
+base64 -w0 mangareader-release.jks | gh secret set ANDROID_KEYSTORE_BASE64
+gh secret set ANDROID_KEYSTORE_PASSWORD
+gh secret set ANDROID_KEY_ALIAS --body mangareader
+gh secret set ANDROID_KEY_PASSWORD
+```
+
+То же можно сделать в Settings → Secrets and variables → Actions. Не используйте `certutil -encode` — он добавляет строки-заголовки, и файл ключа портится. Сборка релиза выводит SHA-256 восстановленного файла ключа — он должен совпасть с `Get-FileHash mangareader-release.jks` (PowerShell) или `sha256sum mangareader-release.jks`; проверить пароль локально: `keytool -list -keystore mangareader-release.jks`.
 
 Первая сборка релиза остановится и выведет в журнал SHA-256 отпечаток сертификата: сохраните его в *переменную* (вкладка Variables) `ANDROID_CERT_SHA256` и перезапустите сборку. Дальше CI не выпустит APK, подписанный другим ключом.
 
