@@ -41,5 +41,5 @@
 
 - [x] 6.1 `make test` проходит
 - [x] 6.2 `make build-windows` и `make build-android` проходят; `aapt dump badging dist/mangareader.apk` показывает `versionName='0.1.0'` и `versionCode='100'`
-- [ ] 6.3 APK с `versionCode 100` устанавливается командой `adb install -r` поверх ранее установленной сборки (`versionCode 1`) без удаления; выбранная папка библиотеки сохраняется
+- [x] 6.3 APK с `versionCode 100` устанавливается командой `adb install -r` поверх ранее установленной сборки (`versionCode 1`) без удаления; выбранная папка библиотеки сохраняется
 - [x] 6.4 Чистый клон в отдельную папку: `git status` чист, `android/gradlew` имеет LF, `android/gradlew.bat` — CRLF, в `git ls-files` нет `spikes/`, `-p/`, `.idea/`, `.claude/`, `.cline/`, `.clinerules/`
