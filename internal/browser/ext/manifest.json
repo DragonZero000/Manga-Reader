@@ -1,0 +1,13 @@
+{
+  "manifest_version": 2,
+  "name": "MangaReader",
+  "description": "Встроенное расширение MangaReader: кнопка возврата в приложение и ссылка на страницу загрузки.",
+  "version": "1.0",
+  "browser_specific_settings": { "gecko": { "id": "bridge@mangareader.app" } },
+  "permissions": ["downloads", "tabs", "http://127.0.0.1/*"],
+  "background": { "scripts": ["config.js", "bg.js"] },
+  "browser_action": {
+    "default_title": "MangaReader — показать приложение",
+    "default_icon": "icon.svg"
+  }
+}

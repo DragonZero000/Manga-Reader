@@ -1,0 +1,11 @@
+Website = "https://github.com/mangareader/mangareader"
+
+[Details]
+  Icon = "Icon.png"
+  Name = "MangaReader"
+  ID = "io.github.mangareader.app"
+  Version = "0.1.0"
+  Build = 1
+
+[Migrations]
+  fyneDo = true

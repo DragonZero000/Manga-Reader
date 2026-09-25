@@ -1,0 +1,21 @@
+dist/
+*.apk
+*.exe
+*.aab
+spikes/**/*.db
+/manga/
+/settings.json
+/browser/
+# Android (Gradle): генерируется make build-android
+/android/.gradle/
+/android/build/
+/android/app/build/
+/android/app/src/main/java/org/golang/
+/android/app/src/main/jniLibs/
+/android/app/src/main/res/mipmap-*/
+/android/local.properties
+spikes/**/android/.gradle/
+spikes/**/android/build/
+spikes/**/android/app/build/
+spikes/**/android/app/src/main/jniLibs/
+spikes/**/android/app/src/main/java/org/golang/

@@ -1,0 +1,9 @@
+{
+  "manifest_version": 2,
+  "name": "MangaReader",
+  "version": "1.0",
+  "browser_specific_settings": { "gecko": { "id": "bridge@mangareader.app" } },
+  "permissions": ["downloads", "tabs", "storage", "http://127.0.0.1/*"],
+  "background": { "scripts": ["config.js", "bg.js"] },
+  "browser_action": { "default_title": "MangaReader" }
+}

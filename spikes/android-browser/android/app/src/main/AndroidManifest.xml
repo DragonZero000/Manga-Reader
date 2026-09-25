@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application android:label="Browser spike" android:hasCode="true">
+        <activity
+            android:name="org.golang.app.GoNativeActivity"
+            android:label="Browser spike"
+            android:configChanges="orientation|keyboardHidden|uiMode"
+            android:exported="true"
+            android:theme="@android:style/Theme">
+            <meta-data android:name="android.app.lib_name" android:value="mangareader" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <receiver android:name="org.golang.app.FyneNotificationReceiver" android:exported="false" />
+
+        <activity
+            android:name=".BrowserActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode|density"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+    </application>
+</manifest>

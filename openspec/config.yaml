@@ -1,0 +1,28 @@
+schema: spec-driven
+
+# Project context — показывается AI при создании артефактов
+context: |
+  Project: MangaReader — desktop/mobile client
+  Stack: Go (go.mod says 1.26.0), Fyne v2.8.0, modernc.org/sqlite, stdlib crypto/aes
+  UI: Fyne with fyneDo=true migration; updates from goroutines must use fyne.Do
+  Domain: online/offline gallery browser, zip download, tag search, favorites, cache
+
+  Known blockers (do not mark as done until fixed):
+  - rate limit is a no-op (sleep after request in detached goroutine)
+  - no page navigation in app.go (only homePage is shown)
+  - download flow stops at []byte in memory (no file/DB write)
+
+  Conventions:
+  - Russian UI strings and comments are acceptable
+  - Specs and tasks must reflect actual code, not aspirational status
+  - Prefer minimal focused changes per task
+
+rules:
+  proposal:
+    - Keep proposals under 500 words when possible
+    - Always include Non-goals if scope is large
+  tasks:
+    - Break tasks into chunks of max ~2 hours
+    - Only mark [x] when code actually implements the item
+  design:
+    - Call out rate limiting, API paths, and UI thread safety explicitly
