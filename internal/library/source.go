@@ -26,6 +26,7 @@ const maxPageSize = 256 << 20
 // доступ к страницам. Методы безопасны для вызова из разных горутин.
 type Source struct {
 	index search.Index
+	store ScanStore // nil — результаты сканирования только в памяти
 
 	stMu    sync.RWMutex
 	st      storage.Storage // nil — папка не выбрана (Android)
@@ -43,11 +44,17 @@ type Source struct {
 // NewSource создаёт источник для хранилища st (nil — папка не выбрана).
 // idx получает изменения после каждого сканирования; nil — без индекса.
 func NewSource(st storage.Storage, idx search.Index) *Source {
+	return NewSourceWithStore(st, idx, nil)
+}
+
+// NewSourceWithStore — источник, сканер которого хранит результаты в store
+// (каталог библиотеки) между запусками.
+func NewSourceWithStore(st storage.Storage, idx search.Index, store ScanStore) *Source {
 	if idx == nil {
 		idx = search.NopIndex{}
 	}
-	s := &Source{index: idx, byKey: map[model.Key]int{}}
-	s.st, s.scanner = st, newScannerFor(st)
+	s := &Source{index: idx, store: store, byKey: map[model.Key]int{}}
+	s.st, s.scanner = st, s.newScannerFor(st)
 	return s
 }
 
@@ -56,11 +63,11 @@ func NewDirSource(dir string, idx search.Index) *Source {
 	return NewSource(storage.NewFS(dir), idx)
 }
 
-func newScannerFor(st storage.Storage) *Scanner {
+func (s *Source) newScannerFor(st storage.Storage) *Scanner {
 	if st == nil {
 		return nil
 	}
-	return NewScanner(st)
+	return NewScannerWithStore(st, s.store)
 }
 
 // Root возвращает папку библиотеки для показа («» — не выбрана).
@@ -84,7 +91,7 @@ func (s *Source) SetStorage(st storage.Storage) {
 	s.scanMu.Lock()
 	defer s.scanMu.Unlock()
 	s.stMu.Lock()
-	s.st, s.scanner = st, newScannerFor(st)
+	s.st, s.scanner = st, s.newScannerFor(st)
 	s.stMu.Unlock()
 
 	s.mu.Lock()
@@ -121,6 +128,32 @@ func (s *Source) Invalidate(relPath string) {
 	}
 }
 
+// LoadCatalog показывает результаты прошлых сканирований из хранилища без
+// обхода папки: галереи доступны сразу при запуске. Индекс не трогается —
+// он хранится вместе с результатами. Ждёт идущего сканирования.
+func (s *Source) LoadCatalog() ScanResult {
+	s.scanMu.Lock()
+	defer s.scanMu.Unlock()
+	s.stMu.RLock()
+	scanner := s.scanner
+	s.stMu.RUnlock()
+	if scanner == nil {
+		return ScanResult{}
+	}
+	start := time.Now()
+	res := scanner.Cached()
+	byKey := make(map[model.Key]int, len(res.Galleries))
+	for i, g := range res.Galleries {
+		byKey[g.Key] = i
+	}
+	s.mu.Lock()
+	s.galleries, s.byKey = res.Galleries, byKey
+	s.mu.Unlock()
+	log.Printf("каталог: загружено %d галерей и %d ошибок за %v",
+		len(res.Galleries), len(res.Errors), time.Since(start).Round(time.Millisecond))
+	return res
+}
+
 // Scan сканирует папку и обновляет список галерей и индекс.
 // Если сканирование уже идёт, сразу возвращает ErrScanInProgress.
 func (s *Source) Scan(ctx context.Context) (ScanResult, error) {
@@ -141,8 +174,8 @@ func (s *Source) Scan(ctx context.Context) (ScanResult, error) {
 	if err != nil {
 		return ScanResult{}, err
 	}
-	log.Printf("библиотека: %d галерей, новых/изменённых %d, ошибок %d, за %v",
-		len(res.Galleries), len(res.Added)+len(res.Changed), len(res.Errors), time.Since(start).Round(time.Millisecond))
+	log.Printf("библиотека: %d галерей, новых/изменённых %d, ошибок %d, открыто файлов %d, за %v",
+		len(res.Galleries), len(res.Added)+len(res.Changed), len(res.Errors), res.Opened, time.Since(start).Round(time.Millisecond))
 
 	byKey := make(map[model.Key]int, len(res.Galleries))
 	for i, g := range res.Galleries {

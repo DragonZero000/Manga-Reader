@@ -110,6 +110,9 @@ func NewShell(a fyne.App, svc *app.Services) *Shell {
 			if svc.CanChooseFolder && !svc.FolderChosen() {
 				s.ChooseFolder()
 			}
+			// библиотека из каталога — сразу, до окончания сканирования
+			s.library.ShowCached(svc.Cached)
+			s.updateErrors()
 			s.library.AutoRefresh()
 			s.attachBrowser()
 			s.applyDisplay()
@@ -117,6 +120,7 @@ func NewShell(a fyne.App, svc *app.Services) *Shell {
 		})
 		s.startWatcher(a)
 	})
+	s.addOnStopped(svc.Close)
 	a.Lifecycle().SetOnEnteredForeground(func() {
 		fyne.Do(func() {
 			s.library.AutoRefresh()

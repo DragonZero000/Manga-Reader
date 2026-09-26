@@ -42,7 +42,7 @@ Ready-made builds are on the [Releases](https://github.com/DragonZero000/Manga-R
 2. Run `MangaReader\mangareader.exe`.
 3. Put `.zip` archives into the `manga` folder next to the app, or download them with the **Браузер** (Browser) button.
 
-To update, replace `mangareader.exe` and the `browser\firefox` folder with the ones from the new zip; `manga`, `settings.json` and `browser\profile` are kept.
+To update, replace `mangareader.exe` and the `browser\firefox` folder with the ones from the new zip; `manga`, `settings.json`, `library.db` and `browser\profile` are kept.
 
 ### Installing on Android
 

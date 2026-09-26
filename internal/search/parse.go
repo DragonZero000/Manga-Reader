@@ -66,7 +66,7 @@ func Parse(s string) (Query, error) {
 			if neg {
 				return Query{}, &ParseError{tok, "исключение поддерживается только для тегов"}
 			}
-			if w := strings.ToLower(strings.TrimSpace(unquote(body))); w != "" {
+			if w := Normalize(strings.TrimSpace(unquote(body))); w != "" {
 				q.Terms = append(q.Terms, w)
 			}
 			continue
@@ -150,7 +150,7 @@ func parseFilter(fp fieldParser, value string, neg bool) (Filter, error) {
 		}
 		return Filter{Field: FieldTag, Op: op, Value: Value{Tag: model.Tag{Type: fp.tagType, Name: value}}}, nil
 	case fp.field == FieldTitle || fp.field == FieldScanlator:
-		return Filter{Field: fp.field, Op: OpContains, Value: Value{Text: strings.ToLower(value)}}, nil
+		return Filter{Field: fp.field, Op: OpContains, Value: Value{Text: Normalize(value)}}, nil
 	case fp.field == FieldUploaded:
 		return parseDate(fp.field, value, time.UTC)
 	case fp.field == FieldAdded:

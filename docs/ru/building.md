@@ -39,7 +39,9 @@ make browser                # портативный Firefox ESR в browser/fire
 make clean                  # удалить dist/
 ```
 
-При запуске через `make run` (`go run`) папкой приложения считается рабочая папка: `manga/`, `settings.json` и `browser/` появятся в корне проекта (они в `.gitignore`).
+При запуске через `make run` (`go run`) папкой приложения считается рабочая папка: `manga/`, `settings.json`, `library.db` и `browser/` появятся в корне проекта (они в `.gitignore`).
+
+Код собирается только с тегом `sqlite_fts5`: каталог библиотеки (`internal/catalog`) использует SQLite с полнотекстовым поиском FTS5 (`github.com/mattn/go-sqlite3`, cgo). Цели Makefile и CI добавляют тег сами; при ручном запуске — `go test -tags sqlite_fts5 ./...`. Без тега сборка останавливается ошибкой `каталогу_нужен_тег_сборки_sqlite_fts5`. В редакторе с gopls добавьте тег в настройки (`"gopls": {"buildFlags": ["-tags=sqlite_fts5"]}`). Первая сборка на каждой платформе компилирует SQLite из C — 1–2 минуты, дальше берётся кэш Go.
 
 > `make package-windows` не очищает `dist/MangaReader/`. Если вы запускали `mangareader.exe` оттуда, в zip попадут ваши `manga/` и `browser/profile/` (cookies, история). Для раздачи используйте zip из [Releases](https://github.com/DragonZero000/Manga-Reader/releases) или удалите `dist/` перед сборкой (`make clean`).
 

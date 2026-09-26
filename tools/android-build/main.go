@@ -163,10 +163,10 @@ func run(list []string, release bool, out, tags string) error {
 	return nil
 }
 
-// buildTags — теги сборки библиотеки: migrated_fynedo и дополнительные
-// (через запятую или пробел), без повторов.
+// buildTags — теги сборки библиотеки: migrated_fynedo, sqlite_fts5 (FTS5 в
+// SQLite каталога) и дополнительные (через запятую или пробел), без повторов.
 func buildTags(extra string) string {
-	tags := []string{"migrated_fynedo"}
+	tags := []string{"migrated_fynedo", "sqlite_fts5"}
 	for _, t := range splitABIs(extra) {
 		if !slices.Contains(tags, t) {
 			tags = append(tags, t)

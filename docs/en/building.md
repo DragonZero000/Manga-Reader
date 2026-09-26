@@ -39,7 +39,9 @@ make browser                # portable Firefox ESR in browser/firefox (for make 
 make clean                  # delete dist/
 ```
 
-With `make run` (`go run`) the working directory is treated as the application folder: `manga/`, `settings.json` and `browser/` appear in the project root (they are in `.gitignore`).
+With `make run` (`go run`) the working directory is treated as the application folder: `manga/`, `settings.json`, `library.db` and `browser/` appear in the project root (they are in `.gitignore`).
+
+The code builds only with the `sqlite_fts5` tag: the library catalog (`internal/catalog`) uses SQLite with FTS5 full-text search (`github.com/mattn/go-sqlite3`, cgo). The Makefile targets and CI add the tag themselves; by hand, run `go test -tags sqlite_fts5 ./...`. Without the tag the build stops with the error `каталогу_нужен_тег_сборки_sqlite_fts5`. For an editor with gopls, add the tag to its settings (`"gopls": {"buildFlags": ["-tags=sqlite_fts5"]}`). The first build on each platform compiles SQLite from C — 1–2 minutes; after that the Go build cache is used.
 
 > `make package-windows` does not clean `dist/MangaReader/`. If you ran `mangareader.exe` from there, your `manga/` and `browser/profile/` (cookies, history) end up in the zip. For distribution use the zip from [Releases](https://github.com/DragonZero000/Manga-Reader/releases), or delete `dist/` before building (`make clean`).
 

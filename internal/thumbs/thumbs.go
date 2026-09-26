@@ -4,14 +4,16 @@
 package thumbs
 
 import (
+	"bytes"
 	"container/list"
 	"errors"
 	"fmt"
 	"image"
-	_ "image/gif"  // регистрация декодеров
-	_ "image/jpeg" //
-	_ "image/png"  //
+	_ "image/gif" // регистрация декодеров
+	"image/jpeg"
+	_ "image/png" //
 	"io"
+	"log"
 	"runtime"
 	"slices"
 	"strconv"
@@ -43,6 +45,18 @@ type OpenFunc func(k model.Key, page string) (io.ReadCloser, error)
 // Callback получает результат загрузки. Вызывается из фоновой горутины.
 type Callback func(img image.Image, err error)
 
+// Store — миниатюры на диске (каталог библиотеки): готовая миниатюра
+// читается без открытия архива. Методы вызываются из фоновых горутин.
+type Store interface {
+	// Load — JPEG миниатюры key для области w×h (false — нет).
+	Load(key string, w, h int) ([]byte, bool)
+	// Save сохраняет JPEG миниатюры key файла rel для области w×h.
+	Save(key, rel string, w, h int, jpeg []byte)
+}
+
+// jpegQuality — качество миниатюр на диске.
+const jpegQuality = 85
+
 // Cache — LRU-кэш миниатюр, ограниченный по объёму, с фиксированным числом
 // фоновых декодеров. Ожидающие задания выполняются с конца (новые — раньше):
 // при быстрой прокрутке сначала грузятся видимые сейчас карточки. Задание,
@@ -62,8 +76,10 @@ type Cache struct {
 	stack    []*job          // ожидающие задания; вершина — конец среза
 	jobs     map[string]*job // ожидающие и выполняющиеся, по ключу кэша
 	waiterID int
+	store    Store // nil — миниатюры только в памяти
 
-	decodes atomic.Int64 // число декодирований (для тестов)
+	decodes   atomic.Int64 // число декодирований архивов (для тестов)
+	storeHits atomic.Int64 // миниатюр, взятых из хранилища (для тестов)
 }
 
 type entry struct {
@@ -119,6 +135,13 @@ func (c *Cache) SetBox(w, h int) {
 	c.lru.Init()
 	c.items = map[string]*list.Element{}
 	c.bytes = 0
+}
+
+// SetStore задаёт хранилище миниатюр на диске (nil — только память).
+func (c *Cache) SetStore(s Store) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.store = s
 }
 
 // CacheKey — ключ миниатюры: изменённый архив получает новую обложку.
@@ -207,10 +230,10 @@ func (c *Cache) worker() {
 			continue
 		}
 		j.running = true
-		w, h := c.boxW, c.boxH
+		w, h, store := c.boxW, c.boxH, c.store
 		c.mu.Unlock()
 
-		img, err := c.load(j.g, w, h)
+		img, err := c.load(j.g, w, h, store)
 
 		c.mu.Lock()
 		if w == c.boxW && h == c.boxH { // область не сменилась, пока декодировали
@@ -228,11 +251,37 @@ func (c *Cache) worker() {
 	}
 }
 
-func (c *Cache) load(g model.Gallery, w, h int) (image.Image, error) {
+func (c *Cache) load(g model.Gallery, w, h int, store Store) (image.Image, error) {
 	cover, ok := g.Cover()
 	if !ok {
 		return nil, ErrNoCover
 	}
+	key := CacheKey(g)
+	if store != nil {
+		if data, ok := store.Load(key, w, h); ok {
+			if img, err := jpeg.Decode(bytes.NewReader(data)); err == nil {
+				c.storeHits.Add(1)
+				return pages.ToRGBA(img), nil
+			}
+		}
+	}
+	img, err := c.decode(g, cover, w, h)
+	if err != nil {
+		return nil, err // не (*image.RGBA)(nil): интерфейс должен быть nil
+	}
+	if store != nil {
+		var buf bytes.Buffer
+		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: jpegQuality}); err != nil {
+			log.Printf("миниатюра %s: %v", g.Key, err)
+		} else {
+			store.Save(key, g.Key.ID, w, h, buf.Bytes())
+		}
+	}
+	return img, nil
+}
+
+// decode декодирует обложку из архива и уменьшает до области w×h.
+func (c *Cache) decode(g model.Gallery, cover model.Page, w, h int) (*image.RGBA, error) {
 	rc, err := c.open(g.Key, cover.Name)
 	if err != nil {
 		return nil, err

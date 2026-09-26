@@ -45,6 +45,7 @@ type Library struct {
 
 	scanning bool
 	pending  bool // во время скана пришёл запрос — сканировать ещё раз
+	scanned  bool // сканирование уже показало результат — каталог устарел
 	lastAuto time.Time
 
 	busyTries int           // подряд сканов с занятыми файлами
@@ -144,6 +145,22 @@ func (l *Library) AutoRefresh() {
 	l.Refresh()
 }
 
+// ShowCached показывает библиотеку из каталога до окончания первого
+// сканирования (галереи и ошибки прошлых запусков). Пустой результат ничего
+// не меняет: пустое состояние покажет сканирование; если сканирование уже
+// показало свой результат, он свежее. Вызывать из UI-потока.
+func (l *Library) ShowCached(res library.ScanResult) {
+	if l.scanned || (len(res.Galleries) == 0 && len(res.Errors) == 0) {
+		return
+	}
+	l.grid.SetItems(res.Galleries)
+	l.updateCount()
+	if len(res.Galleries) > 0 {
+		l.show(l.grid.Widget())
+	}
+	l.problems.Sync(res.Errors) // ошибки прошлых запусков уже известны — без toast
+}
+
 func (l *Library) applyScan(res library.ScanResult, err error) {
 	l.scanning = false
 	l.activity.Stop()
@@ -171,6 +188,7 @@ func (l *Library) applyScan(res library.ScanResult, err error) {
 		l.notify("Не удалось прочитать папку библиотеки: " + err.Error())
 		return
 	}
+	l.scanned = true
 	l.retryBusy(len(res.Busy))
 	l.grid.SetItems(res.Galleries)
 	l.updateCount()

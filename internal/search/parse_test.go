@@ -38,7 +38,7 @@ func TestParseWords(t *testing.T) {
 		`"Re:Zero kara"`:     {"re:zero kara"},
 		"  ":                 nil,
 		`title_like:Школа`:   {"title_like:школа"},
-		`Ёлка`:               {"ёлка"},
+		`Ёлка`:               {"елка"}, // Normalize: регистр и ё → е,
 		`"незакрытая фраза`:  {"незакрытая фраза"},
 	}
 	for s, want := range cases {

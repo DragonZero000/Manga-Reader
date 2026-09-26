@@ -22,11 +22,12 @@ type MemIndex struct {
 // doc — произведение с подготовленными для поиска данными.
 type doc struct {
 	g     model.Gallery
-	hay   []string           // нижний регистр: названия, теги, сканлейтор, файл, ID
-	tags  map[model.Tag]bool // нормализованные теги
-	names map[string]bool    // имена тегов без типа
-	title string             // основное и альтернативное название, нижний регистр
-	scan  string             // сканлейтор, нижний регистр
+	hay   []string           // Normalize: названия, теги, сканлейтор, файл, ID
+	tags  map[model.Tag]bool // теги как в model.NewTag (для подсказок)
+	ntags map[model.Tag]bool // теги с именем через Normalize (для сравнения)
+	names map[string]bool    // имена тегов без типа, Normalize
+	title string             // основное и альтернативное название, Normalize
+	scan  string             // сканлейтор, Normalize
 }
 
 var _ Index = (*MemIndex)(nil)
@@ -36,9 +37,9 @@ func NewMemIndex() *MemIndex {
 }
 
 func newDoc(g model.Gallery) *doc {
-	d := &doc{g: g, tags: map[model.Tag]bool{}, names: map[string]bool{}}
+	d := &doc{g: g, tags: map[model.Tag]bool{}, ntags: map[model.Tag]bool{}, names: map[string]bool{}}
 	add := func(s string) {
-		if s = strings.ToLower(strings.TrimSpace(s)); s != "" {
+		if s = Normalize(strings.TrimSpace(s)); s != "" {
 			d.hay = append(d.hay, s)
 		}
 	}
@@ -47,7 +48,8 @@ func newDoc(g model.Gallery) *doc {
 	for _, t := range g.Tags {
 		t = model.NewTag(t.Type, t.Name)
 		d.tags[t] = true
-		d.names[t.Name] = true
+		d.ntags[normTag(t)] = true
+		d.names[Normalize(t.Name)] = true
 		add(t.Name)
 		add(t.String())
 	}
@@ -56,8 +58,8 @@ func newDoc(g model.Gallery) *doc {
 	if g.ExternalID > 0 {
 		add(strconv.FormatInt(g.ExternalID, 10))
 	}
-	d.title = strings.ToLower(g.Title + "\n" + g.AltTitle)
-	d.scan = strings.ToLower(strings.TrimSpace(g.Scanlator))
+	d.title = Normalize(g.Title + "\n" + g.AltTitle)
+	d.scan = Normalize(strings.TrimSpace(g.Scanlator))
 	return d
 }
 
@@ -115,6 +117,7 @@ func (m *MemIndex) Search(ctx context.Context, q Query) ([]model.Key, int, error
 // matchTerms: каждое слово — подстрока хотя бы одного поля.
 func (d *doc) matchTerms(terms []string) bool {
 	for _, t := range terms {
+		t = Normalize(t)
 		found := false
 		for _, h := range d.hay {
 			if strings.Contains(h, t) {
@@ -149,12 +152,12 @@ func (d *doc) match(f Filter) bool {
 		}
 		return has
 	case FieldTitle:
-		return strings.Contains(d.title, strings.ToLower(v.Text))
+		return strings.Contains(d.title, Normalize(v.Text))
 	case FieldScanlator:
 		if d.scan == "" {
 			return false
 		}
-		want := strings.ToLower(strings.TrimSpace(v.Text))
+		want := Normalize(strings.TrimSpace(v.Text))
 		if f.Op == OpEq {
 			return d.scan == want
 		}
@@ -176,11 +179,15 @@ func (d *doc) match(f Filter) bool {
 }
 
 func (d *doc) hasTag(t model.Tag) bool {
+	t = normTag(t)
 	if t.Type == "" {
 		return d.names[t.Name]
 	}
-	return d.tags[t]
+	return d.ntags[t]
 }
+
+// normTag — тег для сравнения: имя через Normalize, тип как есть.
+func normTag(t model.Tag) model.Tag { return model.Tag{Type: t.Type, Name: Normalize(t.Name)} }
 
 // cmpNum сравнивает число; нулевое значение (поле отсутствует) не проходит.
 func cmpNum(n int64, f Filter) bool {
@@ -262,13 +269,13 @@ func cmp64(a, b int64) int {
 // SuggestTags возвращает теги с именем, начинающимся с prefix (без учёта
 // регистра), и числом произведений; при заданном типе — только этого типа.
 func (m *MemIndex) SuggestTags(_ context.Context, tagType, prefix string, limit int) ([]TagCount, error) {
-	prefix = strings.ToLower(strings.TrimSpace(prefix))
+	prefix = Normalize(strings.TrimSpace(prefix))
 	tagType = strings.ToLower(strings.TrimSpace(tagType))
 	counts := map[model.Tag]int{}
 	m.mu.RLock()
 	for _, d := range m.docs {
 		for t := range d.tags {
-			if (tagType == "" || t.Type == tagType) && strings.HasPrefix(t.Name, prefix) {
+			if (tagType == "" || t.Type == tagType) && strings.HasPrefix(Normalize(t.Name), prefix) {
 				counts[t]++
 			}
 		}

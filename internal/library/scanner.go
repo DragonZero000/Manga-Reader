@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"path"
 	"path/filepath"
 	"sort"
@@ -33,6 +34,8 @@ type ScanResult struct {
 	// Busy — файлы, занятые другим процессом (сканирование стоит повторить).
 	// Заполняется всегда; в ошибки они попадают только при BusyAsError.
 	Busy []string
+	// Opened — сколько файлов открыто при этом сканировании.
+	Opened int
 
 	Added   []model.Gallery
 	Changed []model.Gallery
@@ -41,10 +44,12 @@ type ScanResult struct {
 
 // Scanner обходит папку библиотеки и проверяет все файлы: .zip разбираются
 // как архивы, остальные попадают в ошибки. Неизменённые файлы (размер и
-// время изменения совпадают) повторно не открываются.
+// время изменения совпадают) повторно не открываются; с хранилищем
+// (ScanStore) — и после перезапуска приложения.
 // Scanner не потокобезопасен — синхронизацию обеспечивает Source.
 type Scanner struct {
 	st    storage.Storage
+	store ScanStore             // nil — результаты только в памяти
 	cache map[string]cacheEntry // по относительному пути
 
 	// BusyAsError — занятые файлы попадают в ошибки («Файл занят другой
@@ -62,14 +67,51 @@ type cacheEntry struct {
 	transient bool
 }
 
-func NewScanner(st storage.Storage) *Scanner {
-	return &Scanner{st: st, cache: map[string]cacheEntry{}}
+// NewScanner — сканер без хранилища: результаты только в памяти.
+func NewScanner(st storage.Storage) *Scanner { return NewScannerWithStore(st, nil) }
+
+// NewScannerWithStore — сканер, который берёт прежние результаты из store и
+// сохраняет туда изменения каждого сканирования.
+func NewScannerWithStore(st storage.Storage, store ScanStore) *Scanner {
+	s := &Scanner{st: st, store: store, cache: map[string]cacheEntry{}}
+	if store == nil {
+		return s
+	}
+	stored, err := store.Load()
+	if err != nil {
+		log.Printf("каталог: результаты сканирования не загружены: %v", err)
+		return s
+	}
+	for rel, e := range stored {
+		s.cache[rel] = cacheEntry{size: e.Size, modTime: e.ModTime, gallery: e.Gallery, err: e.Err}
+	}
+	return s
+}
+
+// Cached — результаты из кэша без обхода папки (галереи — новые сверху,
+// ошибки — по пути): что было известно на момент последнего сканирования.
+func (s *Scanner) Cached() ScanResult {
+	var res ScanResult
+	for rel, e := range s.cache {
+		if e.transient {
+			continue
+		}
+		if e.err != nil {
+			res.Errors = append(res.Errors, ScanError{rel, e.size, e.modTime, e.err})
+		} else {
+			res.Galleries = append(res.Galleries, e.gallery)
+		}
+	}
+	sortGalleries(res.Galleries)
+	sort.Slice(res.Errors, func(i, j int) bool { return res.Errors[i].RelPath < res.Errors[j].RelPath })
+	return res
 }
 
 // Scan обходит папку библиотеки.
 func (s *Scanner) Scan(ctx context.Context) (ScanResult, error) {
 	var res ScanResult
 	seen := map[string]bool{}
+	delta := newDelta()
 
 	var entries []storage.Entry
 	paths := map[string]bool{}
@@ -95,7 +137,7 @@ func (s *Scanner) Scan(ctx context.Context) (ScanResult, error) {
 			continue // идёт загрузка: ни галерея, ни ошибка, в кэш не попадает
 		}
 		seen[e.RelPath] = true
-		s.scanFile(e, &res)
+		s.scanFile(e, &res, &delta)
 	}
 
 	for rel, e := range s.cache {
@@ -104,6 +146,13 @@ func (s *Scanner) Scan(ctx context.Context) (ScanResult, error) {
 				res.Removed = append(res.Removed, e.gallery.Key)
 			}
 			delete(s.cache, rel)
+			delete(delta.Put, rel)
+			delta.Delete = append(delta.Delete, rel)
+		}
+	}
+	if s.store != nil && !delta.Empty() {
+		if err := s.store.Save(delta); err != nil {
+			log.Printf("каталог: результаты сканирования не сохранены: %v", err)
 		}
 	}
 	for rel, e := range s.cache {
@@ -118,13 +167,17 @@ func (s *Scanner) Scan(ctx context.Context) (ScanResult, error) {
 	return res, nil
 }
 
-func (s *Scanner) scanFile(e storage.Entry, res *ScanResult) {
+func (s *Scanner) scanFile(e storage.Entry, res *ScanResult, delta *ScanDelta) {
 	rel := e.RelPath
 	prev, known := s.cache[rel]
 	if known && !prev.transient && prev.size == e.Size && prev.modTime.Equal(e.ModTime) {
 		return // не изменился
 	}
+	res.Opened++
 	g, warnings, err := readEntry(s.st, e)
+	if err == nil {
+		s.links(rel, &g, delta)
+	}
 	busy := errors.Is(err, storage.ErrBusy)
 	if busy {
 		res.Busy = append(res.Busy, rel)
@@ -142,6 +195,7 @@ func (s *Scanner) scanFile(e storage.Entry, res *ScanResult) {
 	}
 	entry := cacheEntry{size: e.Size, modTime: e.ModTime, gallery: g, err: err}
 	s.cache[rel] = entry
+	delta.Put[rel] = StoredEntry{Size: e.Size, ModTime: e.ModTime, Gallery: g, Err: err}
 	res.Warnings = append(res.Warnings, warnings...)
 	switch {
 	case err != nil:
@@ -153,6 +207,21 @@ func (s *Scanner) scanFile(e storage.Entry, res *ScanResult) {
 		res.Changed = append(res.Changed, g)
 	default:
 		res.Added = append(res.Added, g)
+	}
+}
+
+// links: ссылка скачанного файла от хранилища (links.json, метка загрузки)
+// сохраняется второй копией; если её там нет — берётся сохранённая копия.
+// Ссылка из meta.json главнее — её не трогаем.
+func (s *Scanner) links(rel string, g *model.Gallery, delta *ScanDelta) {
+	if src, ok := s.st.(sourcer); ok {
+		if u := model.WebURL(src.SourceURL(rel)); u != "" && g.SourceURL == u {
+			delta.Links[rel] = u
+			return
+		}
+	}
+	if g.SourceURL == "" && s.store != nil {
+		g.SourceURL = model.WebURL(s.store.StoredLink(rel))
 	}
 }
 

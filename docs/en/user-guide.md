@@ -26,13 +26,15 @@ Everything is kept in the application folder and nowhere else (not in `%APPDATA%
 MangaReader\
 ├── mangareader.exe
 ├── settings.json   ← settings, created after the first change
+├── library.db      ← library catalog (created automatically, safe to delete)
 ├── manga\          ← put your .zip archives here (created on first start)
 └── browser\
     ├── firefox\    ← built-in browser
     └── profile\    ← browser profile: bookmarks, cookies, extensions
 ```
 
-- You can move the whole application folder, for example to a USB stick.
+- You can move the whole application folder, for example to a USB stick. Move it while the app is closed.
+- `library.db` is the library catalog: parsed archives, errors, covers, search data and a copy of the page links of downloaded files. With it the app shows the library right away at startup and opens only new and changed archives. It is a cache: if you delete it, it is created again and the library is scanned from scratch. On Android the catalog lives in the app's private folder.
 - Don't put it where you can't write (for example, `Program Files`): the app will show an error with the path.
 - Archives may be arranged in subfolders inside `manga` — they are picked up too.
 
@@ -129,7 +131,7 @@ The panel has the title, page number "N / total", a slider to jump to a page, th
 
 ## Search
 
-The **Поиск** (Search) tab searches the whole library. Conditions separated by spaces are combined with AND. When the query runs depends on the mode chosen in **Настройки** (Settings):
+The **Поиск** (Search) tab searches the whole library. Conditions separated by spaces are combined with AND. Letter case, "ё"/"е" and character width don't matter: `елка` finds "Ёлка", `ＡＢＣ` finds "ABC". When the query runs depends on the mode chosen in **Настройки** (Settings):
 
 - **При вводе** (As you type, the default) — half a second after you stop typing; results appear even while the keyboard is open. There is no 🔍 button, and Enter only closes the keyboard.
 - **По кнопке** (On button) — only when you press 🔍 or Enter.

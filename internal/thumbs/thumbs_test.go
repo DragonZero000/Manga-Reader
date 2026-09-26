@@ -3,6 +3,7 @@ package thumbs
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -294,5 +295,72 @@ func TestLRUEvictionByBytes(t *testing.T) {
 	}
 	if _, _, ok := c.Cached(a); !ok {
 		t.Error("a должна остаться")
+	}
+}
+
+// memStore — хранилище миниатюр в памяти.
+type memStore struct {
+	mu    sync.Mutex
+	items map[string][]byte // key|w|h
+}
+
+func (m *memStore) Load(key string, w, h int) ([]byte, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	d, ok := m.items[fmt.Sprintf("%s|%d|%d", key, w, h)]
+	return d, ok
+}
+
+func (m *memStore) Save(key, _ string, w, h int, jpeg []byte) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.items[fmt.Sprintf("%s|%d|%d", key, w, h)] = jpeg
+}
+
+// Второй кэш над тем же хранилищем («перезапуск») не открывает архив;
+// другая область обложки — декодирование заново.
+func TestStoreSkipsArchive(t *testing.T) {
+	store := &memStore{items: map[string][]byte{}}
+	var calls atomic.Int32
+	open := fakeOpen(pngOf(t, 700, 1000), &calls, 0)
+	g := gallery("a.zip")
+
+	c1 := New(open, 1<<20, 1)
+	c1.SetStore(store)
+	c1.SetBox(200, 300)
+	first := load(c1, g)
+	if first.err != nil || calls.Load() != 1 || len(store.items) != 1 {
+		t.Fatalf("первая загрузка: err=%v, открытий %d, в хранилище %d", first.err, calls.Load(), len(store.items))
+	}
+
+	c2 := New(open, 1<<20, 1)
+	c2.SetStore(store)
+	c2.SetBox(200, 300)
+	r := load(c2, g)
+	if r.err != nil || calls.Load() != 1 || c2.storeHits.Load() != 1 || c2.decodes.Load() != 0 {
+		t.Fatalf("из хранилища: err=%v, открытий %d, попаданий %d", r.err, calls.Load(), c2.storeHits.Load())
+	}
+	if _, ok := r.img.(*image.RGBA); !ok || r.img.Bounds() != first.img.Bounds() {
+		t.Fatalf("миниатюра из хранилища: %T %v", r.img, r.img.Bounds())
+	}
+
+	c3 := New(open, 1<<20, 1)
+	c3.SetStore(store)
+	c3.SetBox(100, 150) // другой экран
+	if r := load(c3, g); r.err != nil || calls.Load() != 2 || r.img.Bounds().Dy() != 143 {
+		t.Fatalf("другая область: err=%v, открытий %d, %v", r.err, calls.Load(), r.img.Bounds())
+	}
+}
+
+func TestStoreBrokenNotSaved(t *testing.T) {
+	store := &memStore{items: map[string][]byte{}}
+	var calls atomic.Int32
+	c := New(fakeOpen([]byte("не картинка"), &calls, 0), 1<<20, 1)
+	c.SetStore(store)
+	if r := load(c, gallery("bad.zip")); r.err == nil || r.img != nil {
+		t.Fatalf("битая обложка: img=%v err=%v", r.img, r.err)
+	}
+	if len(store.items) != 0 {
+		t.Fatal("ошибки в хранилище не сохраняются")
 	}
 }

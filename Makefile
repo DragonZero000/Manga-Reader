@@ -10,7 +10,9 @@ override VERSION = $(shell go run ./tools/version)
 LDFLAGS  = -X main.version=$(VERSION)
 # Код мигрирован на fyne.Do: в релизных сборках отключаем проверки потоков.
 # В `make run` FyneApp.toml читается из корня и проверки остаются включены.
-TAGS     := migrated_fynedo
+# Теги, без которых код не собирается: FTS5 в SQLite (internal/catalog)
+CODE_TAGS := sqlite_fts5
+TAGS     := migrated_fynedo,$(CODE_TAGS)
 # Дополнительные теги сборки через запятую: make build-android EXTRA_TAGS=frameprobe
 EXTRA_TAGS ?=
 comma    := ,
@@ -43,11 +45,11 @@ endif
 .PHONY: run test build-windows build-android build-android-release browser package-windows clean
 
 run:
-	go run $(if $(EXTRA_TAGS),-tags $(EXTRA_TAGS)) $(MAIN)
+	go run -tags $(CODE_TAGS)$(if $(EXTRA_TAGS),$(comma)$(EXTRA_TAGS)) $(MAIN)
 
 test:
-	go vet ./...
-	go test ./...
+	go vet -tags $(CODE_TAGS) ./...
+	go test -tags $(CODE_TAGS) ./...
 
 build-windows:
 	$(if $(VERSION),,$(error не удалось прочитать версию из FyneApp.toml — см. сообщение выше))

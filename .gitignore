@@ -7,6 +7,9 @@ dist/
 # Данные запуска из корня проекта (make run): библиотека, настройки, браузер
 /manga/
 /settings.json
+/library.db
+/library.db-wal
+/library.db-shm
 /browser/
 
 # Android (Gradle): генерируется make build-android

@@ -43,6 +43,7 @@ FyneApp.toml         app metadata and the single source of the version
 | `internal/pages` | Prioritized page loading for the reader and display geometry |
 | `internal/browser` | Windows built-in browser: Firefox profile, bridge extension, launching, window attachment, registry cleanup |
 | `internal/mobilebrowser` | Bridge to the Android browser (JNI): open, clear data, receive download messages |
+| `internal/catalog` | Library catalog in SQLite (`library.db`, FTS5, `sqlite_fts5` tag): scan results across launches, the search index (`search.Index`), covers on disk, a copy of the page links of downloaded files; a recoverable cache |
 | `internal/display` | Refresh rate of the app window on Android (JNI, `DisplayRate.kt`): the 60 Hz limit; a stub on other platforms |
 | `internal/appversion` | The version from `FyneApp.toml` and the Android build number |
 | `internal/ui` | Shell: window, tabs, toast notifications, wiring screens to services |

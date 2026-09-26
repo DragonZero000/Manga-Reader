@@ -42,7 +42,7 @@
 2. Запустите `MangaReader\mangareader.exe`.
 3. Кладите `.zip`-архивы в папку `manga` рядом с приложением или скачивайте их кнопкой **Браузер**.
 
-Для обновления замените `mangareader.exe` и папку `browser\firefox` файлами из нового zip; `manga`, `settings.json` и `browser\profile` сохранятся.
+Для обновления замените `mangareader.exe` и папку `browser\firefox` файлами из нового zip; `manga`, `settings.json`, `library.db` и `browser\profile` сохранятся.
 
 ### Установка на Android
 

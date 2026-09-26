@@ -24,18 +24,55 @@ type Links struct {
 	links map[string]string
 }
 
+// LinkBackup — вторая копия ссылок (каталог библиотеки).
+type LinkBackup interface {
+	// Links — все сохранённые ссылки по пути файла.
+	Links() map[string]string
+}
+
 // LoadLinks читает ссылки из path; отсутствующий или повреждённый файл —
 // пустой набор.
-func LoadLinks(path string) *Links {
+func LoadLinks(path string) *Links { return LoadLinksWithBackup(path, nil) }
+
+// LoadLinksWithBackup читает ссылки из path; если файла нет или он
+// повреждён, ссылки берутся из backup и файл сразу записывается заново.
+func LoadLinksWithBackup(path string, backup LinkBackup) *Links {
 	l := &Links{path: path, links: map[string]string{}}
 	data, err := os.ReadFile(path)
-	if err == nil {
+	ok := err == nil
+	if ok {
 		if err := json.Unmarshal(data, &l.links); err != nil {
 			log.Printf("ссылки %s повреждены: %v", path, err)
-			l.links = map[string]string{}
+			l.links, ok = map[string]string{}, false
 		}
 	}
+	if ok || backup == nil {
+		return l
+	}
+	restored := backup.Links()
+	if len(restored) == 0 {
+		return l
+	}
+	for rel, url := range restored {
+		l.links[rel] = url
+	}
+	if err := l.save(); err != nil {
+		log.Printf("ссылки %s: восстановление из каталога: %v", path, err)
+	} else {
+		log.Printf("ссылки %s восстановлены из каталога: %d", path, len(restored))
+	}
 	return l
+}
+
+// All — копия всех ссылок (перенос в новый каталог).
+func (l *Links) All() map[string]string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	out := make(map[string]string, len(l.links))
+	for rel, url := range l.links {
+		out[rel] = url
+	}
+	return out
 }
 
 // Get — адрес страницы для файла rel («» — неизвестен).

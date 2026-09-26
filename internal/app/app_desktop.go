@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2"
 
 	"mangareader/internal/browser"
+	"mangareader/internal/catalog"
 	"mangareader/internal/library"
 	"mangareader/internal/paths"
 	"mangareader/internal/storage"
@@ -24,7 +25,9 @@ func New(version string, _ fyne.App) *Services {
 	}
 	lib := filepath.Join(dir, paths.LibraryDirName)
 	settings := storage.NewFileSettings(filepath.Join(dir, paths.SettingsFileName))
-	s := newServices(version, storage.NewFS(lib), settings, thumbsConfig{limit: 64 << 20})
+	// каталог — рядом с settings.json (портативно)
+	cat := openCatalog(filepath.Join(dir, catalog.FileName), lib)
+	s := newServices(version, storage.NewFS(lib), settings, thumbsConfig{limit: 64 << 20}, cat)
 	if err := paths.EnsureDir(lib); err != nil {
 		s.LibraryErr = err
 		log.Printf("папка библиотеки: %v", err)

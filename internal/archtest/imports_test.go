@@ -28,9 +28,11 @@ func TestServicePackagesHaveNoWidgets(t *testing.T) {
 		"mangareader/internal/browser",
 		"mangareader/internal/mobilebrowser",
 		"mangareader/internal/display",
+		"mangareader/internal/catalog",
+		"mangareader/internal/search/indextest",
 	} {
 		for _, goos := range []string{"windows", "android"} {
-			cmd := exec.Command("go", "list", "-deps", pkg)
+			cmd := exec.Command("go", "list", "-deps", "-tags", "sqlite_fts5", pkg)
 			cmd.Env = append(cmd.Environ(), "GOOS="+goos, "CGO_ENABLED=1")
 			out, err := cmd.CombinedOutput()
 			if err != nil {

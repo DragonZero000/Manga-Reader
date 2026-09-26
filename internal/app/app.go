@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"mangareader/internal/browser"
+	"mangareader/internal/catalog"
 	"mangareader/internal/library"
 	"mangareader/internal/mobilebrowser"
 	"mangareader/internal/problems"
@@ -32,9 +33,13 @@ type Services struct {
 	CanChooseFolder bool
 
 	Settings storage.Settings
-	Index    search.Index
-	Library  *library.Source
-	Thumbs   *thumbs.Cache
+	// Catalog — каталог библиотеки (library.db); nil — недоступен, всё в памяти.
+	Catalog *catalog.Catalog
+	// Cached — библиотека из каталога на момент запуска (до сканирования).
+	Cached  library.ScanResult
+	Index   search.Index
+	Library *library.Source
+	Thumbs  *thumbs.Cache
 	// Problems — ошибочные файлы библиотеки и их статус просмотра.
 	Problems *problems.Tracker
 	// Watcher — наблюдение за папкой библиотеки (ПК); nil — недоступно.
@@ -121,11 +126,45 @@ type thumbsConfig struct {
 	workers int
 }
 
-// newServices собирает общие сервисы вокруг хранилища (nil — папка не выбрана).
-func newServices(version string, st storage.Storage, settings storage.Settings, tc thumbsConfig) *Services {
-	s := &Services{Version: version, Settings: settings, Index: search.NewMemIndex(), Problems: problems.New(settings)}
-	s.Library = library.NewSource(st, s.Index)
+// openCatalog открывает каталог библиотеки path для папки root; nil — не
+// удалось (приложение работает без каталога, всё в памяти).
+func openCatalog(path, root string) *catalog.Catalog {
+	c, err := catalog.Open(path, root)
+	if err != nil {
+		log.Printf("каталог недоступен, библиотека — только в памяти: %v", err)
+		return nil
+	}
+	if c.Fresh() {
+		log.Printf("каталог %s создан, библиотека будет просканирована целиком", path)
+	}
+	return c
+}
+
+// linkBackup — каталог как вторая копия ссылок (nil — нет каталога).
+func linkBackup(c *catalog.Catalog) library.LinkBackup {
+	if c == nil {
+		return nil
+	}
+	return c
+}
+
+// newServices собирает общие сервисы вокруг хранилища (nil — папка не
+// выбрана) и каталога (nil — без каталога: индекс и результаты в памяти).
+func newServices(version string, st storage.Storage, settings storage.Settings, tc thumbsConfig, cat *catalog.Catalog) *Services {
+	s := &Services{Version: version, Settings: settings, Catalog: cat, Problems: problems.New(settings)}
+	if cat != nil {
+		s.Index = cat.Index()
+		s.Library = library.NewSourceWithStore(st, s.Index, cat.ScanStore())
+	} else {
+		s.Index = search.NewMemIndex()
+		s.Library = library.NewSource(st, s.Index)
+	}
 	s.Thumbs = thumbs.New(s.Library.OpenPage, tc.limit, tc.workers)
+	if cat != nil {
+		s.Thumbs.SetStore(cat.Covers())
+		// до окна и до первого сканирования: чтение каталога без открытия архивов
+		s.Cached = s.Library.LoadCatalog()
+	}
 	if root := s.Library.Root(); root != "" {
 		log.Printf("папка библиотеки: %s", root)
 	} else {
@@ -185,6 +224,15 @@ func (s *Services) PruneLinks() {
 	}
 	if err := s.Links.Prune(func(rel string) bool { return exists[rel] }); err != nil {
 		log.Printf("ссылки: %v", err)
+	}
+}
+
+// Close закрывает каталог (при выходе из приложения).
+func (s *Services) Close() {
+	if s.Catalog != nil {
+		if err := s.Catalog.Close(); err != nil {
+			log.Printf("каталог: %v", err)
+		}
 	}
 }
 

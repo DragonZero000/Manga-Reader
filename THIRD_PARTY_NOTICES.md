@@ -44,6 +44,7 @@ The Firefox ESR and GeckoView builds may themselves include third-party code. Th
 | [github.com/jeandeaual/go-locale](https://github.com/jeandeaual/go-locale) | 2025-06-12 | MIT |
 | [github.com/jsummers/gobmp](https://github.com/jsummers/gobmp) | 2023-06-14 | MIT |
 | [github.com/mattn/go-runewidth](https://github.com/mattn/go-runewidth) | v0.0.24 | MIT |
+| [github.com/mattn/go-sqlite3](https://github.com/mattn/go-sqlite3) (with bundled SQLite) | v1.14.52 | MIT (bindings), public domain (SQLite) |
 | [github.com/nicksnyder/go-i18n/v2](https://github.com/nicksnyder/go-i18n) | v2.5.1 | MIT |
 | [github.com/yuin/goldmark](https://github.com/yuin/goldmark) | v1.8.2 | MIT |
 | [github.com/nfnt/resize](https://github.com/nfnt/resize) | 2018-02-21 | ISC |

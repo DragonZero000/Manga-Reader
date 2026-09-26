@@ -92,10 +92,10 @@ func TestKnownABIs(t *testing.T) {
 
 func TestBuildTags(t *testing.T) {
 	for in, want := range map[string]string{
-		"":                            "migrated_fynedo",
-		"frameprobe":                  "migrated_fynedo,frameprobe",
-		"frameprobe, migrated_fynedo": "migrated_fynedo,frameprobe",
-		"a b;c":                       "migrated_fynedo,a,b,c",
+		"":                            "migrated_fynedo,sqlite_fts5",
+		"frameprobe":                  "migrated_fynedo,sqlite_fts5,frameprobe",
+		"frameprobe, migrated_fynedo": "migrated_fynedo,sqlite_fts5,frameprobe",
+		"a b;c":                       "migrated_fynedo,sqlite_fts5,a,b,c",
 	} {
 		if got := buildTags(in); got != want {
 			t.Errorf("buildTags(%q) = %q, want %q", in, got, want)
