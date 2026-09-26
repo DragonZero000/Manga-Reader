@@ -4,7 +4,7 @@ Website = "https://github.com/DragonZero000/Manga-Reader"
   Icon = "Icon.png"
   Name = "MangaReader"
   ID = "io.github.mangareader.app"
-  Version = "0.1.0"
+  Version = "0.1.1"
 
 [Migrations]
   fyneDo = true
