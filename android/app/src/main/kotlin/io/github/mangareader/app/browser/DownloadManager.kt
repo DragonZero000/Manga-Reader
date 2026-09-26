@@ -35,15 +35,26 @@ object DownloadManager {
 
     fun clearFinished() = synchronized(lock) { items.removeAll { it.state != State.RUNNING } }
 
-    /** Начать загрузку ответа движка; page — страница, где нажали «Скачать». */
-    fun start(ctx: Context, response: WebResponse, page: String, tree: String) {
+    /**
+     * Начать загрузку ответа движка; page — страница, где нажали «Скачать».
+     * onFinish вызывается ровно один раз по окончании (успех или ошибка) из
+     * потока загрузки.
+     */
+    fun start(ctx: Context, response: WebResponse, page: String, tree: String, onFinish: () -> Unit = {}) {
         val app = ctx.applicationContext
         if (tree.isBlank()) {
             BrowserEngine.toast("Папка библиотеки не выбрана")
             response.body?.close()
+            onFinish()
             return
         }
-        io.execute { run(app, response, page, Uri.parse(tree)) }
+        io.execute {
+            try {
+                run(app, response, page, Uri.parse(tree))
+            } finally {
+                onFinish()
+            }
+        }
     }
 
     private fun run(ctx: Context, response: WebResponse, page: String, tree: Uri) {

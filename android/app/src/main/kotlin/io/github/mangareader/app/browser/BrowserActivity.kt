@@ -18,6 +18,7 @@ import android.widget.PopupMenu
 import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
+import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
 import org.mozilla.geckoview.WebExtension
 import org.mozilla.geckoview.WebExtensionController
@@ -25,13 +26,14 @@ import org.mozilla.geckoview.WebExtensionController
 /**
  * Экран браузера поверх читалки (та же задача приложения). Показывает
  * активную вкладку BrowserEngine; «MangaReader» и «Назад» на первой странице
- * возвращают в читалку, вкладки при этом сохраняются.
+ * возвращают в читалку, вкладки при этом сохраняются (неактивные —
+ * выгружаются движком и восстанавливаются при показе).
  */
 class BrowserActivity : Activity(), BrowserEngine.Listener, BrowserToolbar.Actions {
     private lateinit var gecko: GeckoView
     private lateinit var toolbar: BrowserToolbar
     private var toolbarTop = false
-    private var attached: Tab? = null
+    private var attached: GeckoSession? = null // сессия, подключённая к виду
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,6 +89,7 @@ class BrowserActivity : Activity(), BrowserEngine.Listener, BrowserToolbar.Actio
         super.onStart()
         BrowserEngine.listener = this
         DownloadManager.onChange = null
+        BrowserEngine.setForeground(true)
         attach()
     }
 
@@ -94,20 +97,27 @@ class BrowserActivity : Activity(), BrowserEngine.Listener, BrowserToolbar.Actio
         BrowserEngine.listener = null
         gecko.releaseSession()
         attached = null
+        // «MangaReader», «Назад», сворачивание: активная — неактивна, остальные выгружаются
+        BrowserEngine.setForeground(false)
         super.onStop()
     }
 
-    /** Подключить активную вкладку к виду (сессию из onNewSession движок открывает сам). */
+    /**
+     * Подключить активную вкладку к виду: выгруженная сначала
+     * восстанавливается (сессию из onNewSession движок открывает сам).
+     */
     private fun attach() {
         val tab = BrowserEngine.activeTab() ?: return
-        if (tab !== attached) {
-            if (!tab.session.isOpen) {
+        val s = BrowserEngine.ensureLoaded(tab)
+        if (s !== attached) {
+            if (!s.isOpen) {
                 gecko.postDelayed({ attach() }, 50)
                 return
             }
             gecko.releaseSession()
-            gecko.setSession(tab.session)
-            attached = tab
+            gecko.setSession(s)
+            attached = s
+            BrowserEngine.enforce() // сессия открыта — активность и приоритет
         }
         refresh()
     }
@@ -150,19 +160,19 @@ class BrowserActivity : Activity(), BrowserEngine.Listener, BrowserToolbar.Actio
 
     override fun onAddress(text: String) {
         if (text.isBlank()) return
-        BrowserEngine.activeTab()?.session?.loadUri(BrowserEngine.settings.urlFor(text))
+        BrowserEngine.activeSession()?.loadUri(BrowserEngine.settings.urlFor(text))
     }
 
     override fun onReload() {
-        BrowserEngine.activeTab()?.session?.reload()
+        BrowserEngine.activeSession()?.reload()
     }
 
     override fun onBack() {
-        BrowserEngine.activeTab()?.session?.goBack()
+        BrowserEngine.activeSession()?.goBack()
     }
 
     override fun onForward() {
-        BrowserEngine.activeTab()?.session?.goForward()
+        BrowserEngine.activeSession()?.goForward()
     }
 
     override fun onReader() = showReader()
@@ -215,7 +225,7 @@ class BrowserActivity : Activity(), BrowserEngine.Listener, BrowserToolbar.Actio
         items.forEach { b ->
             list.addView(row(
                 b.title, b.url, false,
-                onOpen = { BrowserEngine.activeTab()?.session?.loadUri(b.url); dialog.dismiss() },
+                onOpen = { BrowserEngine.activeSession()?.loadUri(b.url); dialog.dismiss() },
                 onClose = { BrowserEngine.bookmarks.remove(b.url); dialog.dismiss(); showBookmarks(); refresh() },
             ))
         }
@@ -296,7 +306,7 @@ class BrowserActivity : Activity(), BrowserEngine.Listener, BrowserToolbar.Actio
     @Deprecated("системная «Назад»")
     override fun onBackPressed() {
         val tab = BrowserEngine.activeTab()
-        if (tab != null && tab.canGoBack) tab.session.goBack() else finish()
+        if (tab != null && tab.canGoBack) BrowserEngine.activeSession()?.goBack() else finish()
     }
 
     /** «MangaReader»: читалка — на передний план, браузер остаётся под ней. */

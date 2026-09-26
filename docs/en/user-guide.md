@@ -176,6 +176,7 @@ The **Браузер** (Browser) button on the library toolbar opens a Firefox-b
 - A Firefox engine (GeckoView) inside the app — a screen on top of the reader, with no separate icon.
 - Toolbar: address or search, back/forward, reload, **tabs** (the number shows how many are open), **MangaReader** (back to the reader), **☆** (bookmark), and a menu: new tab, bookmarks, downloads, extensions. The toolbar can be at the top or at the bottom.
 - "MangaReader" and the system Back on the first page of a tab return to the reader; tabs are kept until the system unloads the app.
+- To keep the browser's memory down, inactive tabs are unloaded: while you are in the browser the current and the previous tab stay loaded, after you return to the reader only the current one does. An unloaded tab stays in the list and reloads with the same history when you pick it (anything typed into forms is lost). A tab with a download in progress is not unloaded until the download finishes.
 - Downloads go to the root of the library folder: `name.part` while downloading, `name (1).zip` if the name is taken. Progress is shown in the notification shade (Android asks for permission on the first download); the download continues if you minimize the app.
 - Extensions come from addons.mozilla.org via "Add to Firefox" (for example, uBlock Origin); menu → "Extensions" to enable, disable or remove them.
 - The browser needs write access to the library folder. If the folder was granted read-only, the app asks you to pick it again the first time you open the browser.
