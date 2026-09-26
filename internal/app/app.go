@@ -59,6 +59,23 @@ const (
 	KeyBrowserClear = "browser.clear"
 )
 
+// Режим запуска поиска.
+const (
+	KeySearchMode = "search.mode"
+	// SearchModeDynamic — запрос через паузу после ввода (по умолчанию).
+	SearchModeDynamic = "dynamic"
+	// SearchModeSubmit — запрос только по кнопке или Enter.
+	SearchModeSubmit = "submit"
+)
+
+// SearchMode — режим поиска из Settings; неизвестное значение — SearchModeDynamic.
+func SearchMode(s storage.Settings) string {
+	if s.String(KeySearchMode, "") == SearchModeSubmit {
+		return SearchModeSubmit
+	}
+	return SearchModeDynamic
+}
+
 // BrowserPrefs — настройки браузера из Settings (для browser.Options.Prefs).
 // Поисковик выбирается в настройках самого Firefox и хранится в профиле.
 func BrowserPrefs(s storage.Settings) (home string, clear []string) {

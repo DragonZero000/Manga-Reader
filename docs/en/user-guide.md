@@ -129,7 +129,12 @@ The panel has the title, page number "N / total", a slider to jump to a page, th
 
 ## Search
 
-The **Поиск** (Search) tab searches the whole library. When the query is empty, a **Как искать** (How to search) cheat sheet is shown below it. Conditions separated by spaces are combined with AND.
+The **Поиск** (Search) tab searches the whole library. Conditions separated by spaces are combined with AND. When the query runs depends on the mode chosen in **Настройки** (Settings):
+
+- **При вводе** (As you type, the default) — half a second after you stop typing; results appear even while the keyboard is open. There is no 🔍 button, and Enter only closes the keyboard.
+- **По кнопке** (On button) — only when you press 🔍 or Enter.
+
+The **✕** button clears the box and keeps the results on screen. The **Как искать** (How to search) cheat sheet is shown until the first query of the session; after that the screen always shows the last result, even with an empty box — the table below covers the same syntax.
 
 ![Search by tag](../images/search.png)
 
@@ -148,7 +153,7 @@ The **Поиск** (Search) tab searches the whole library. When the query is em
 | `scanlator:name` | Scanlator |
 | `school pages:>20 -tag:yuri` | All together |
 
-Dates: `2024` is the whole year, `2024-06` a month, `2024-06-15` a day; `>period` means after its end, `<period` before its start. If a query has a mistake, "Ошибка в запросе: …" (Query error) appears below the search box with an explanation. Results refresh on their own when the library changes.
+Dates: `2024` is the whole year, `2024-06` a month, `2024-06-15` a day; `>period` means after its end, `<period` before its start. If a query has a mistake, "Ошибка в запросе: …" (Query error) appears below the search box with an explanation. Results refresh on their own when the library changes: the last query that ran is repeated.
 
 ## Built-in browser
 
@@ -194,6 +199,7 @@ The **Настройки** (Settings) tab:
 - **Папка библиотеки** (Library folder) — the folder path; on Windows the **Скопировать путь** (Copy path) button, on Android **Изменить папку** (Change folder).
 - **Браузер** (Browser, Windows) — **Домашняя страница** (Home page), **Поисковик** (Search engine — opens Firefox search settings), **Расширения** (Extensions), **Очистить cookies и данные сайтов** (Clear cookies and site data), **Очистить историю** (Clear history). Clearing happens the next time the browser opens; bookmarks are kept.
 - **Браузер** (Browser, Android) — **Домашняя страница** (Home page), **Поисковик** (Search engine), **Панель браузера** (Browser toolbar: **Снизу** / **Сверху**, bottom / top), clearing cookies and history (immediately; bookmarks and extensions are kept).
+- **Поиск** (Search) — when a query runs: **При вводе** (As you type) or **По кнопке** (On button); see [Search](#search).
 - **О приложении** (About) — the version.
 
 The reader mode is remembered automatically. On Windows, settings are stored in `settings.json` next to the app.

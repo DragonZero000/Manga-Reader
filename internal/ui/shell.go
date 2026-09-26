@@ -69,7 +69,7 @@ func NewShell(a fyne.App, svc *app.Services) *Shell {
 		s.updateErrors()
 		s.svc.PruneLinks()
 	}
-	s.settings = screens.NewSettings(a, s.Window, svc, s.Toast.Show, choose)
+	s.settings = screens.NewSettings(a, s.Window, svc, s.Toast.Show, choose, s.search.SetMode)
 	s.setupBrowser(a)
 
 	s.searchTab = container.NewTabItemWithIcon("Поиск", theme.SearchIcon(), s.search.Content())
@@ -287,6 +287,9 @@ func (s *Shell) SearchFor(text string) {
 
 // Search — экран поиска (для тестов).
 func (s *Shell) Search() *screens.Search { return s.search }
+
+// Settings — экран настроек (для тестов).
+func (s *Shell) Settings() *screens.Settings { return s.settings }
 
 // typedKey — клавиши без фокуса. Esc и «Назад» закрывают верхний слой:
 // читалку, затем страницу произведения; прочие клавиши уходят в читалку.
