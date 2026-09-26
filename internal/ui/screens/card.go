@@ -30,6 +30,8 @@ type galleryCard struct {
 	// thumbKey — миниатюра, которую карточка ждёт сейчас. Меняется только
 	// в UI-потоке; устаревшие результаты загрузки отбрасываются.
 	thumbKey string
+	// cancel отменяет загрузку обложки thumbKey (nil — не грузится).
+	cancel func()
 
 	content fyne.CanvasObject
 }
@@ -42,7 +44,7 @@ func newGalleryCard(coverSize fyne.Size) *galleryCard {
 		title: widget.NewLabel(""),
 	}
 	c.cover.FillMode = canvas.ImageFillContain
-	c.cover.ScaleMode = canvas.ImageScaleSmooth
+	c.cover.ScaleMode = canvas.ImageScaleFastest // миниатюра уже по размеру карточки
 	c.cover.SetMinSize(coverSize)
 	c.bg.CornerRadius = theme.InputRadiusSize()
 

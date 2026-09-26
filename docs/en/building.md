@@ -7,6 +7,7 @@
 - [Android build](#android-build)
 - [Version](#version)
 - [Built-in browser during development](#built-in-browser-during-development)
+- [Frame measurement](#frame-measurement)
 - [CI](#ci)
 - [Releasing](#releasing)
 - [APK signing key and GitHub secrets](#apk-signing-key-and-github-secrets)
@@ -61,6 +62,20 @@ The version is set **only** in `FyneApp.toml`, field `Version`, as `MAJOR.MINOR.
 `make browser` downloads Firefox ESR into `browser\firefox` once (the version and SHA-256 are pinned in `tools/fetch-firefox`); without it the **Браузер** (Browser) button shows "Браузер не найден" (Browser not found). The installer is cached in `browser\.cache`. Windows only.
 
 The browser integration test runs when `MANGAREADER_BROWSER_IT` is set to the Firefox folder; otherwise it is skipped.
+
+## Frame measurement
+
+A build with the `frameprobe` tag writes to the log every 5 seconds how evenly the render loop runs: the intervals between frames (median, p95, maximum) and the number of frames longer than 25 ms. Regular builds don't include it.
+
+```sh
+make build-android EXTRA_TAGS=frameprobe   # APK with the probe
+adb logcat | grep frameprobe               # frameprobe: n=300 p50=16.4ms p95=17.4ms max=18.1ms >25ms=0
+make run EXTRA_TAGS=frameprobe             # the same on the PC (to the console)
+```
+
+How to read it: Fyne draws on a 60 Hz timer, so normal is p50 and p95 around 16.7 ms and `n` around 300. A large `max` and frames longer than 25 ms mean the UI thread is busy (for example, preparing images), so look in the code. The probe shows the step of the UI loop, not the moment a frame reaches the screen: if the intervals are even but scrolling still stutters, the cause is how frames are presented. Check that visually or with a Perfetto trace.
+
+`EXTRA_TAGS` — extra comma-separated build tags for `run`, `build-windows` and `build-android` (`tools/android-build -tags`).
 
 ## CI
 

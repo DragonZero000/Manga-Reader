@@ -24,7 +24,7 @@ func New(version string, _ fyne.App) *Services {
 	}
 	lib := filepath.Join(dir, paths.LibraryDirName)
 	settings := storage.NewFileSettings(filepath.Join(dir, paths.SettingsFileName))
-	s := newServices(version, storage.NewFS(lib), settings)
+	s := newServices(version, storage.NewFS(lib), settings, thumbsConfig{limit: 64 << 20})
 	if err := paths.EnsureDir(lib); err != nil {
 		s.LibraryErr = err
 		log.Printf("папка библиотеки: %v", err)

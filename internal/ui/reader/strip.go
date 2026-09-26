@@ -43,6 +43,14 @@ type stripView struct {
 	spinner *widget.Activity
 	items   map[int]*stripItem
 	pool    []*stripItem
+
+	// Окно размещения [lastFrom, lastTo) и видимые страницы
+	// [lastScreenFrom, lastScreenTo) при последнем updateVisible: прокрутка
+	// внутри окна ничего не перестраивает. lastFrom < 0 — пересчитать заново.
+	lastFrom, lastTo             int
+	lastScreenFrom, lastScreenTo int
+	// windowUpdates — число перестроек окна (для тестов).
+	windowUpdates int
 }
 
 // stripItem — одна страница ленты: куски изображения и надпись состояния.
@@ -58,7 +66,7 @@ type stripItem struct {
 }
 
 func newStripView(r *Reader) *stripView {
-	v := &stripView{r: r, spinner: widget.NewActivity(), items: map[int]*stripItem{}}
+	v := &stripView{r: r, spinner: widget.NewActivity(), items: map[int]*stripItem{}, lastFrom: -1}
 	v.content = newStripContent(v)
 	v.scroll = container.NewVScroll(v.content)
 	v.scroll.OnScrolled = func(fyne.Position) { v.updateVisible() }
@@ -178,7 +186,9 @@ func (v *stripView) heightFor(_ int, w, h int) float32 {
 }
 
 // updateVisible размещает страницы окна [offset−H, offset+2H] и обновляет
-// номер текущей страницы.
+// номер текущей страницы. Вызывается на каждое событие прокрутки, поэтому
+// работает только при смене окна или видимых страниц: страницы внутри
+// содержимого сдвигает сам контейнер прокрутки.
 func (v *stripView) updateVisible() {
 	if !v.ready || !v.r.visible {
 		return
@@ -187,27 +197,39 @@ func (v *stripView) updateVisible() {
 	h := v.scroll.Size().Height
 	from, to := pages.Visible(v.prefix, off-h, off+2*h)
 	onScreenFrom, onScreenTo := pages.Visible(v.prefix, off, off+h)
+	windowChanged := from != v.lastFrom || to != v.lastTo
+	screenChanged := onScreenFrom != v.lastScreenFrom || onScreenTo != v.lastScreenTo
 
-	for page, it := range v.items {
-		if page < from || page >= to {
-			v.release(it)
-			delete(v.items, page)
+	if windowChanged || screenChanged {
+		v.windowUpdates++
+		v.lastFrom, v.lastTo = from, to
+		v.lastScreenFrom, v.lastScreenTo = onScreenFrom, onScreenTo
+		if windowChanged {
+			for page, it := range v.items {
+				if page < from || page >= to {
+					v.release(it)
+					delete(v.items, page)
+				}
+			}
+		}
+		// новые приоритеты: видимые страницы — раньше соседних
+		v.r.loader.NewGeneration()
+		for page := from; page < to; page++ {
+			it, ok := v.items[page]
+			if !ok {
+				it = v.acquire(page)
+				v.items[page] = it
+			}
+			prio := pages.PriorityNeighbor
+			if page >= onScreenFrom && page < onScreenTo {
+				prio = pages.PriorityCurrent
+			}
+			v.request(it, prio)
+		}
+		if windowChanged {
+			v.content.Refresh() // новые страницы — в дерево объектов
 		}
 	}
-	v.r.loader.NewGeneration()
-	for page := from; page < to; page++ {
-		it, ok := v.items[page]
-		if !ok {
-			it = v.acquire(page)
-			v.items[page] = it
-		}
-		prio := pages.PriorityNeighbor
-		if page >= onScreenFrom && page < onScreenTo {
-			prio = pages.PriorityCurrent
-		}
-		v.request(it, prio)
-	}
-	v.content.Refresh()
 
 	if top := pages.TopPage(v.prefix, off+1); top != v.top {
 		v.top = top
@@ -279,7 +301,7 @@ func (v *stripView) apply(it *stripItem, req pages.Request, res pages.Result) {
 	for len(it.parts) < len(res.Parts) {
 		img := canvas.NewImageFromImage(nil)
 		img.FillMode = canvas.ImageFillStretch
-		img.ScaleMode = canvas.ImageScaleSmooth
+		img.ScaleMode = canvas.ImageScaleFastest // кусок уже нужного размера: без пересчёта в UI-потоке
 		it.parts = append(it.parts, img)
 		it.box.Add(img)
 	}
@@ -309,6 +331,7 @@ func (v *stripView) setHeight(page int, h float32) {
 	}
 	v.heights[page] = h
 	v.prefix = pages.Prefix(v.heights)
+	v.lastFrom = -1 // границы страниц сдвинулись
 	v.scroll.Refresh()
 	if v.prefix[page] < v.scroll.Offset.Y && page != v.top {
 		v.scroll.ScrollToOffset(fyne.NewPos(0, max(0, v.scroll.Offset.Y+d)))
@@ -331,6 +354,7 @@ func (v *stripView) releaseAll() {
 		v.release(it)
 		delete(v.items, page)
 	}
+	v.lastFrom = -1 // окно пусто — следующий updateVisible строит его заново
 }
 
 // layoutItem размещает куски страницы по целым физическим пикселям.

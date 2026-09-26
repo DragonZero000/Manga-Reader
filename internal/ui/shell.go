@@ -3,6 +3,7 @@ package ui
 
 import (
 	"context"
+	"log"
 	"net/url"
 
 	"fyne.io/fyne/v2"
@@ -14,6 +15,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"mangareader/internal/app"
+	"mangareader/internal/display"
 	"mangareader/internal/mobilebrowser"
 	"mangareader/internal/ui/details"
 	"mangareader/internal/ui/reader"
@@ -110,10 +112,17 @@ func NewShell(a fyne.App, svc *app.Services) *Shell {
 			}
 			s.library.AutoRefresh()
 			s.attachBrowser()
+			s.applyDisplay()
+			startFrameProbe()
 		})
 		s.startWatcher(a)
 	})
-	a.Lifecycle().SetOnEnteredForeground(func() { fyne.Do(s.library.AutoRefresh) })
+	a.Lifecycle().SetOnEnteredForeground(func() {
+		fyne.Do(func() {
+			s.library.AutoRefresh()
+			s.applyDisplay() // повтор безвреден: после браузера окно снова наше
+		})
+	})
 
 	if svc.LibraryErr != nil {
 		s.Toast.ShowFor("Не удалось подготовить папку библиотеки: "+svc.LibraryErr.Error(), DefaultToastDuration*2)
@@ -283,6 +292,17 @@ func (s *Shell) SearchFor(text string) {
 	s.Details.Close()
 	s.Tabs.Select(s.searchTab)
 	s.search.SetQuery(text)
+}
+
+// applyDisplay применяет настройку частоты экрана (Android). Вызывать из
+// UI-потока.
+func (s *Shell) applyDisplay() {
+	if !display.Supported {
+		return
+	}
+	if err := display.SetMax60(app.DisplayMax60(s.svc.Settings)); err != nil {
+		log.Printf("частота экрана: %v", err)
+	}
 }
 
 // Search — экран поиска (для тестов).

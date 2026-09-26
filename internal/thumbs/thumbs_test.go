@@ -7,6 +7,7 @@ import (
 	"image/color"
 	"image/png"
 	"io"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -63,31 +64,39 @@ func load(c *Cache, g model.Gallery) result {
 }
 
 func TestDownscaleKeepsAspect(t *testing.T) {
-	cases := []struct{ w, h, ww, wh int }{
-		{1000, 1500, 213, 320},
-		{1500, 1000, 320, 213},
-		{200, 100, 200, 100}, // маленькое — без изменений
-		{5000, 10, 320, 1},
+	cases := []struct{ w, h, bw, bh, ww, wh int }{
+		{1000, 1500, 320, 320, 213, 320},
+		{1500, 1000, 320, 320, 320, 213},
+		{200, 100, 320, 320, 200, 100}, // маленькое — без изменений
+		{5000, 10, 320, 320, 320, 1},
+		{1400, 2000, 450, 512, 358, 512}, // карточка 450×640, сторона ≤ 512
+		{2000, 1400, 450, 512, 450, 315}, // горизонтальная — по ширине области
 	}
 	for _, c := range cases {
-		out := Downscale(image.NewNRGBA(image.Rect(0, 0, c.w, c.h)), 320)
+		out := Downscale(image.NewNRGBA(image.Rect(0, 0, c.w, c.h)), c.bw, c.bh)
 		if b := out.Bounds(); b.Dx() != c.ww || b.Dy() != c.wh {
-			t.Errorf("%dx%d → %dx%d, ожидалось %dx%d", c.w, c.h, b.Dx(), b.Dy(), c.ww, c.wh)
+			t.Errorf("%dx%d в %dx%d → %dx%d, ожидалось %dx%d", c.w, c.h, c.bw, c.bh, b.Dx(), b.Dy(), c.ww, c.wh)
+		}
+		if out.Rect.Min != (image.Point{}) {
+			t.Errorf("начало не в (0,0): %v", out.Rect)
 		}
 	}
 }
 
 func TestLoadUsesCache(t *testing.T) {
 	var calls atomic.Int32
-	c := New(fakeOpen(pngOf(t, 640, 960), &calls, 0), 10, 2)
+	c := New(fakeOpen(pngOf(t, 640, 960), &calls, 0), 1<<20, 2)
 	g := gallery("a.zip")
 
 	r := load(c, g)
 	if r.err != nil {
 		t.Fatal(r.err)
 	}
-	if b := r.img.Bounds(); b.Dy() != 320 {
+	if b := r.img.Bounds(); b.Dy() != MaxSide {
 		t.Fatalf("размер миниатюры %v", b)
+	}
+	if _, ok := r.img.(*image.RGBA); !ok {
+		t.Fatalf("миниатюра %T, нужна *image.RGBA", r.img)
 	}
 	if _, _, ok := c.Cached(g); !ok {
 		t.Fatal("миниатюры нет в кэше")
@@ -105,9 +114,31 @@ func TestLoadUsesCache(t *testing.T) {
 	}
 }
 
+func TestSetBox(t *testing.T) {
+	var calls atomic.Int32
+	c := New(fakeOpen(pngOf(t, 1400, 2000), &calls, 0), 8<<20, 1)
+	g := gallery("a.zip")
+	c.SetBox(450, 640) // область карточки; высота ограничена MaxSide
+	r := load(c, g)
+	if b := r.img.Bounds(); b.Dx() != 358 || b.Dy() != 512 {
+		t.Fatalf("миниатюра %v, ожидалось 358×512", b)
+	}
+	c.SetBox(450, 640) // тот же размер — кэш сохраняется
+	if _, _, ok := c.Cached(g); !ok {
+		t.Fatal("кэш очищен без смены размера")
+	}
+	c.SetBox(200, 300) // другой размер — кэш очищается
+	if _, _, ok := c.Cached(g); ok {
+		t.Fatal("после смены размера кэш должен очиститься")
+	}
+	if b := load(c, g).img.Bounds(); b.Dx() != 200 || b.Dy() != 286 {
+		t.Fatalf("после смены размера %v", b)
+	}
+}
+
 func TestConcurrentRequestsMerged(t *testing.T) {
 	var calls atomic.Int32
-	c := New(fakeOpen(pngOf(t, 10, 10), &calls, 50*time.Millisecond), 10, 4)
+	c := New(fakeOpen(pngOf(t, 10, 10), &calls, 50*time.Millisecond), 1<<20, 4)
 	g := gallery("a.zip")
 	var wg sync.WaitGroup
 	for i := 0; i < 8; i++ {
@@ -125,9 +156,114 @@ func TestConcurrentRequestsMerged(t *testing.T) {
 	}
 }
 
+// orderedOpen — первое открытие ждёт release (занимает единственный воркер),
+// порядок открытий записывается.
+type orderedOpen struct {
+	data    []byte
+	release chan struct{}
+	mu      sync.Mutex
+	order   []string
+}
+
+func (o *orderedOpen) open(k model.Key, _ string) (io.ReadCloser, error) {
+	o.mu.Lock()
+	o.order = append(o.order, k.ID)
+	first := len(o.order) == 1
+	o.mu.Unlock()
+	if first {
+		<-o.release
+	}
+	return io.NopCloser(bytes.NewReader(o.data)), nil
+}
+
+func (o *orderedOpen) opened() []string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return slices.Clone(o.order)
+}
+
+func waitOpened(t *testing.T, o *orderedOpen, n int) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for len(o.opened()) < n {
+		if time.Now().After(deadline) {
+			t.Fatalf("открыто %v, ждали %d", o.opened(), n)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+func TestNewestFirst(t *testing.T) {
+	o := &orderedOpen{data: pngOf(t, 8, 8), release: make(chan struct{})}
+	c := New(o.open, 1<<20, 1)
+	done := make(chan string, 4)
+	req := func(id string) { c.Load(gallery(id), func(image.Image, error) { done <- id }) }
+	req("busy.zip")
+	waitOpened(t, o, 1) // воркер занят
+	req("old.zip")
+	req("new.zip")
+	close(o.release)
+	for range 3 {
+		<-done
+	}
+	if got := o.opened(); !slices.Equal(got, []string{"busy.zip", "new.zip", "old.zip"}) {
+		t.Fatalf("порядок %v: новые запросы должны выполняться раньше", got)
+	}
+}
+
+func TestCancelBeforeDecode(t *testing.T) {
+	o := &orderedOpen{data: pngOf(t, 8, 8), release: make(chan struct{})}
+	c := New(o.open, 1<<20, 1)
+	called := make(chan string, 4)
+	c.Load(gallery("busy.zip"), func(image.Image, error) { called <- "busy" })
+	waitOpened(t, o, 1)
+	cancel := c.Load(gallery("gone.zip"), func(image.Image, error) { called <- "gone" })
+	cancel() // карточка ушла с экрана до начала декодирования
+	close(o.release)
+	if got := <-called; got != "busy" {
+		t.Fatalf("первым вызван %q", got)
+	}
+	// ещё один запрос проходит через тот же воркер — к этому времени
+	// отменённое задание уже снято со стека
+	if r := load(c, gallery("after.zip")); r.err != nil {
+		t.Fatal(r.err)
+	}
+	if got := o.opened(); slices.Contains(got, "gone.zip") {
+		t.Fatalf("отменённая обложка открыта: %v", got)
+	}
+	if c.decodes.Load() != 2 {
+		t.Fatalf("декодирований %d, ожидалось 2", c.decodes.Load())
+	}
+	select {
+	case id := <-called:
+		t.Fatalf("колбэк отменённого запроса вызван: %s", id)
+	default:
+	}
+}
+
+func TestCancelOneOfMerged(t *testing.T) {
+	o := &orderedOpen{data: pngOf(t, 8, 8), release: make(chan struct{})}
+	c := New(o.open, 1<<20, 1)
+	c.Load(gallery("busy.zip"), func(image.Image, error) {})
+	waitOpened(t, o, 1)
+	got := make(chan string, 2)
+	cancel := c.Load(gallery("x.zip"), func(image.Image, error) { got <- "first" })
+	c.Load(gallery("x.zip"), func(image.Image, error) { got <- "second" })
+	cancel() // вторая карточка всё ещё ждёт — декодирование нужно
+	close(o.release)
+	if id := <-got; id != "second" {
+		t.Fatalf("вызван %q", id)
+	}
+	select {
+	case id := <-got:
+		t.Fatalf("отменённый колбэк вызван: %s", id)
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
 func TestBrokenImage(t *testing.T) {
 	var calls atomic.Int32
-	c := New(fakeOpen([]byte("не картинка"), &calls, 0), 10, 1)
+	c := New(fakeOpen([]byte("не картинка"), &calls, 0), 1<<20, 1)
 	g := gallery("bad.zip")
 	if r := load(c, g); r.err == nil {
 		t.Fatal("ожидалась ошибка декодирования")
@@ -141,16 +277,17 @@ func TestBrokenImage(t *testing.T) {
 	}
 }
 
-func TestLRUEviction(t *testing.T) {
+func TestLRUEvictionByBytes(t *testing.T) {
 	var calls atomic.Int32
-	c := New(fakeOpen(pngOf(t, 4, 4), &calls, 0), 2, 1)
+	// миниатюра 4×4 = 64 байта; лимит — две миниатюры
+	c := New(fakeOpen(pngOf(t, 4, 4), &calls, 0), 128, 1)
 	a, b, d := gallery("a.zip"), gallery("b.zip"), gallery("d.zip")
 	load(c, a)
 	load(c, b)
 	c.Cached(a) // a — недавно использована
 	load(c, d)  // вытесняет b
-	if c.Len() != 2 {
-		t.Fatalf("размер кэша %d", c.Len())
+	if c.Len() != 2 || c.Bytes() > 128 {
+		t.Fatalf("кэш: %d записей, %d байт", c.Len(), c.Bytes())
 	}
 	if _, _, ok := c.Cached(b); ok {
 		t.Error("b должна быть вытеснена")

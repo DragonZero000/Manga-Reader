@@ -85,7 +85,20 @@ func TestFindJDK(t *testing.T) {
 }
 
 func TestKnownABIs(t *testing.T) {
-	if err := run([]string{"mips"}, false, "x.apk"); err == nil || !strings.Contains(err.Error(), "arm64-v8a") {
+	if err := run([]string{"mips"}, false, "x.apk", buildTags("")); err == nil || !strings.Contains(err.Error(), "arm64-v8a") {
 		t.Fatalf("неизвестная архитектура: %v", err)
+	}
+}
+
+func TestBuildTags(t *testing.T) {
+	for in, want := range map[string]string{
+		"":                            "migrated_fynedo",
+		"frameprobe":                  "migrated_fynedo,frameprobe",
+		"frameprobe, migrated_fynedo": "migrated_fynedo,frameprobe",
+		"a b;c":                       "migrated_fynedo,a,b,c",
+	} {
+		if got := buildTags(in); got != want {
+			t.Errorf("buildTags(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

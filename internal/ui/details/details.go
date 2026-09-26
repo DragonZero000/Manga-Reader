@@ -239,7 +239,7 @@ func newCover(d *Details) *cover {
 	c := &cover{d: d, img: canvas.NewImageFromImage(nil), icon: widget.NewIcon(theme.BrokenImageIcon()),
 		spinner: widget.NewActivity(), aspect: defaultAspect}
 	c.img.FillMode = canvas.ImageFillContain
-	c.img.ScaleMode = canvas.ImageScaleSmooth
+	c.img.ScaleMode = canvas.ImageScaleFastest // картинка уже нужного размера: без пересчёта в UI-потоке
 	c.icon.Hide()
 	c.spinner.Hide()
 	c.ExtendBaseWidget(c)

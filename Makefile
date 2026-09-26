@@ -11,6 +11,10 @@ LDFLAGS  = -X main.version=$(VERSION)
 # Код мигрирован на fyne.Do: в релизных сборках отключаем проверки потоков.
 # В `make run` FyneApp.toml читается из корня и проверки остаются включены.
 TAGS     := migrated_fynedo
+# Дополнительные теги сборки через запятую: make build-android EXTRA_TAGS=frameprobe
+EXTRA_TAGS ?=
+comma    := ,
+ALL_TAGS  = $(TAGS)$(if $(EXTRA_TAGS),$(comma)$(EXTRA_TAGS))
 
 # NDK: если ANDROID_NDK_HOME не задан, берём последнюю версию из $(ANDROID_HOME)/ndk.
 ANDROID_NDK_HOME ?= $(lastword $(sort $(wildcard $(subst \,/,$(ANDROID_HOME))/ndk/*)))
@@ -39,7 +43,7 @@ endif
 .PHONY: run test build-windows build-android build-android-release browser package-windows clean
 
 run:
-	go run $(MAIN)
+	go run $(if $(EXTRA_TAGS),-tags $(EXTRA_TAGS)) $(MAIN)
 
 test:
 	go vet ./...
@@ -48,14 +52,14 @@ test:
 build-windows:
 	$(if $(VERSION),,$(error не удалось прочитать версию из FyneApp.toml — см. сообщение выше))
 	$(MKDIR_DIST)
-	go build -tags $(TAGS) -ldflags "-H windowsgui $(LDFLAGS)" -o $(DIST)/$(APP_NAME).exe $(MAIN)
+	go build -tags $(ALL_TAGS) -ldflags "-H windowsgui $(LDFLAGS)" -o $(DIST)/$(APP_NAME).exe $(MAIN)
 
 # Android-пакет через Gradle (android/): Android Studio, SDK Platform 35,
 # NDK 27+. Архитектуры — ANDROID_ABIS (через запятую), версия — FyneApp.toml.
 ANDROID_ABIS ?= arm64-v8a
 
 build-android:
-	go run ./tools/android-build -abis "$(ANDROID_ABIS)"
+	go run ./tools/android-build -abis "$(ANDROID_ABIS)" -tags "$(EXTRA_TAGS)"
 
 # release-APK: подпись ключом из MANGAREADER_KEYSTORE, MANGAREADER_KEY_ALIAS,
 # MANGAREADER_KEY_PASSWORD (без них — неподписанный).

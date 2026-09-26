@@ -43,6 +43,7 @@ FyneApp.toml         app metadata and the single source of the version
 | `internal/pages` | Prioritized page loading for the reader and display geometry |
 | `internal/browser` | Windows built-in browser: Firefox profile, bridge extension, launching, window attachment, registry cleanup |
 | `internal/mobilebrowser` | Bridge to the Android browser (JNI): open, clear data, receive download messages |
+| `internal/display` | Refresh rate of the app window on Android (JNI, `DisplayRate.kt`): the 60 Hz limit; a stub on other platforms |
 | `internal/appversion` | The version from `FyneApp.toml` and the Android build number |
 | `internal/ui` | Shell: window, tabs, toast notifications, wiring screens to services |
 | `internal/ui/screens` | Screens: library, search, errors, settings |
@@ -66,7 +67,8 @@ Platform code is split by build tags and file suffixes:
 | Tag | Files | Example |
 |---|---|---|
 | `windows` / `!windows` | `*_windows.go`, `*_other.go` / `stub_other.go` | browser window and registry, NTFS streams |
-| `android` / `!android` | `*_android.go`, `other.go` | SAF, JNI bridge to GeckoView, app metadata |
+| `android` / `!android` | `*_android.go`, `other.go`, `*_other.go` | SAF, JNI bridge to GeckoView, refresh rate, app metadata |
+| `frameprobe` / `!frameprobe` | `frameprobe_on.go`, `frameprobe_off.go` | frame measurement for development (`make … EXTRA_TAGS=frameprobe`) |
 
 Where a feature doesn't exist, a stub takes over: for example, `internal/browser` on Android reports that the browser is unsupported, and the UI doesn't show the Windows browser settings. A new platform feature always comes with a stub for the other platforms.
 

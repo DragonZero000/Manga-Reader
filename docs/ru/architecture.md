@@ -43,6 +43,7 @@ FyneApp.toml         метаданные приложения и единств
 | `internal/pages` | Загрузка страниц для читалки с приоритетами и геометрия отображения |
 | `internal/browser` | Встроенный браузер Windows: профиль Firefox, расширение-мост, запуск, привязка окна, уборка реестра |
 | `internal/mobilebrowser` | Мост к браузеру Android (JNI): открыть, очистить данные, получить сообщения о загрузках |
+| `internal/display` | Частота экрана окна приложения на Android (JNI, `DisplayRate.kt`): ограничение 60 Гц; на других платформах — заглушка |
 | `internal/appversion` | Версия из `FyneApp.toml` и номер сборки Android |
 | `internal/ui` | Оболочка: окно, вкладки, toast-уведомления, связь экранов с сервисами |
 | `internal/ui/screens` | Экраны: библиотека, поиск, ошибки, настройки |
@@ -66,7 +67,8 @@ FyneApp.toml         метаданные приложения и единств
 | Тег | Файлы | Пример |
 |---|---|---|
 | `windows` / `!windows` | `*_windows.go`, `*_other.go` / `stub_other.go` | окно и реестр браузера, NTFS-потоки |
-| `android` / `!android` | `*_android.go`, `other.go` | SAF, JNI-мост к GeckoView, метаданные приложения |
+| `android` / `!android` | `*_android.go`, `other.go`, `*_other.go` | SAF, JNI-мост к GeckoView, частота экрана, метаданные приложения |
+| `frameprobe` / `!frameprobe` | `frameprobe_on.go`, `frameprobe_off.go` | замер кадров для разработки (`make … EXTRA_TAGS=frameprobe`) |
 
 На платформах, где функции нет, работает заглушка: например, `internal/browser` на Android сообщает, что браузер не поддерживается, а UI не показывает Windows-настройки браузера. Новая платформенная функция всегда сопровождается заглушкой для остальных платформ.
 

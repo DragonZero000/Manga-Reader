@@ -3,7 +3,7 @@
 // Java-классы Fyne — из модуля Fyne той версии, что в go.mod, затем
 // gradlew assembleDebug/assembleRelease в папке android/ и копия APK в dist/.
 //
-//	go run ./tools/android-build [-abis arm64-v8a,armeabi-v7a] [-release [-require-signing]]
+//	go run ./tools/android-build [-abis arm64-v8a,armeabi-v7a] [-release [-require-signing]] [-tags frameprobe]
 package main
 
 import (
@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -49,12 +50,13 @@ func main() {
 	release := flag.Bool("release", false, "release-сборка (ключ из MANGAREADER_KEYSTORE…)")
 	requireSigning := flag.Bool("require-signing", false, "с -release: ошибка, если ключ не задан (для релизов)")
 	out := flag.String("o", filepath.Join("dist", "mangareader.apk"), "куда положить APK")
+	extraTags := flag.String("tags", "", "дополнительные теги сборки через запятую (например, frameprobe)")
 	flag.Parse()
 	log.SetFlags(0)
 	if err := checkSigning(*release, *requireSigning, os.Getenv("MANGAREADER_KEYSTORE")); err != nil {
 		log.Fatal("android-build: ", err)
 	}
-	if err := run(splitABIs(*abiList), *release, *out); err != nil {
+	if err := run(splitABIs(*abiList), *release, *out, buildTags(*extraTags)); err != nil {
 		log.Fatal("android-build: ", err)
 	}
 }
@@ -71,7 +73,7 @@ func checkSigning(release, require bool, keystore string) error {
 	return nil
 }
 
-func run(list []string, release bool, out string) error {
+func run(list []string, release bool, out, tags string) error {
 	if len(list) == 0 {
 		return errors.New("не заданы архитектуры")
 	}
@@ -118,7 +120,7 @@ func run(list []string, release bool, out string) error {
 		return err
 	}
 	for _, a := range list {
-		if err := buildLib(ndk, a, filepath.Join(jni, a), version, build); err != nil {
+		if err := buildLib(ndk, a, filepath.Join(jni, a), version, build, tags); err != nil {
 			return err
 		}
 	}
@@ -159,6 +161,18 @@ func run(list []string, release bool, out string) error {
 	}
 	log.Printf("готово: %s", out)
 	return nil
+}
+
+// buildTags — теги сборки библиотеки: migrated_fynedo и дополнительные
+// (через запятую или пробел), без повторов.
+func buildTags(extra string) string {
+	tags := []string{"migrated_fynedo"}
+	for _, t := range splitABIs(extra) {
+		if !slices.Contains(tags, t) {
+			tags = append(tags, t)
+		}
+	}
+	return strings.Join(tags, ",")
 }
 
 func splitABIs(s string) []string {
@@ -333,7 +347,7 @@ func parseModuleDir(path string, data []byte) (string, error) {
 }
 
 // buildLib собирает libmangareader.so для архитектуры a в каталог dir.
-func buildLib(ndk, a, dir, version string, build int) error {
+func buildLib(ndk, a, dir, version string, build int, tags string) error {
 	cfg := abis[a]
 	cc, err := clangPath(ndk, cfg.clang)
 	if err != nil {
@@ -344,7 +358,7 @@ func buildLib(ndk, a, dir, version string, build int) error {
 	}
 	lib := filepath.Join(dir, "libmangareader.so")
 	ldflags := fmt.Sprintf("-s -w -X main.version=%s -X main.build=%d -extldflags=-Wl,-z,max-page-size=16384", version, build)
-	cmd := exec.Command("go", "build", "-buildmode=c-shared", "-tags", "migrated_fynedo", "-ldflags", ldflags, "-o", lib, "./cmd/mangareader")
+	cmd := exec.Command("go", "build", "-buildmode=c-shared", "-tags", tags, "-ldflags", ldflags, "-o", lib, "./cmd/mangareader")
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=1", "GOOS=android", "GOARCH="+cfg.goarch, "CC="+cc)
 	if cfg.goarm != "" {
 		cmd.Env = append(cmd.Env, "GOARM="+cfg.goarm)

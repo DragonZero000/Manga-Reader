@@ -22,7 +22,8 @@ func New(version string, a fyne.App) *Services {
 	if tree := settings.String(KeyLibraryTree, ""); tree != "" {
 		st = library.WithLinks(storage.NewSAF(tree), links)
 	}
-	s := newServices(version, st, settings)
+	// телефон: меньше памяти и ядер под миниатюры, чтобы не мешать UI
+	s := newServices(version, st, settings, thumbsConfig{limit: 48 << 20, workers: 2})
 	s.CanChooseFolder = true
 	s.MobileBrowser = true
 	s.Links = links

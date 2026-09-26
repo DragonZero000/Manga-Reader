@@ -200,6 +200,7 @@ The **Настройки** (Settings) tab:
 - **Браузер** (Browser, Windows) — **Домашняя страница** (Home page), **Поисковик** (Search engine — opens Firefox search settings), **Расширения** (Extensions), **Очистить cookies и данные сайтов** (Clear cookies and site data), **Очистить историю** (Clear history). Clearing happens the next time the browser opens; bookmarks are kept.
 - **Браузер** (Browser, Android) — **Домашняя страница** (Home page), **Поисковик** (Search engine), **Панель браузера** (Browser toolbar: **Снизу** / **Сверху**, bottom / top), clearing cookies and history (immediately; bookmarks and extensions are kept).
 - **Поиск** (Search) — when a query runs: **При вводе** (As you type) or **По кнопке** (On button); see [Search](#search).
+- **Экран** (Screen, Android) — **Ограничить 60 Гц** (Limit to 60 Hz, on by default): on 120 Hz screens the app asks the system for 60 Hz, which makes scrolling smoother. The built-in browser runs at whatever rate the system picks.
 - **О приложении** (About) — the version.
 
 The reader mode is remembered automatically. On Windows, settings are stored in `settings.json` next to the app.

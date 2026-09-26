@@ -27,6 +27,7 @@ func TestServicePackagesHaveNoWidgets(t *testing.T) {
 		"mangareader/internal/problems",
 		"mangareader/internal/browser",
 		"mangareader/internal/mobilebrowser",
+		"mangareader/internal/display",
 	} {
 		for _, goos := range []string{"windows", "android"} {
 			cmd := exec.Command("go", "list", "-deps", pkg)

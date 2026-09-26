@@ -105,11 +105,78 @@ func TestSlice(t *testing.T) {
 	if total != 20000 {
 		t.Errorf("суммарная высота %d", total)
 	}
-	if r, _, _, _ := parts[1].At(5, 0).RGBA(); r == 0 {
+	// куски — участки исходника: координаты сохраняются, читаем от Bounds().Min
+	if r, _, _, _ := parts[1].At(5, parts[1].Bounds().Min.Y).RGBA(); r == 0 {
 		t.Error("содержимое второго куска смещено")
 	}
-	small := image.NewNRGBA(image.Rect(0, 0, 10, 10))
+	small := image.NewRGBA(image.Rect(0, 0, 10, 10))
 	if got := Slice(small, MaxSliceHeight); len(got) != 1 || got[0] != image.Image(small) {
-		t.Error("маленькое изображение должно возвращаться без изменений")
+		t.Error("маленькое RGBA должно возвращаться без изменений")
+	}
+}
+
+// Куски — участки одного буфера RGBA: без копирования, строки подряд.
+func TestSliceSharesBuffer(t *testing.T) {
+	src := image.NewRGBA(image.Rect(0, 0, 300, 5000))
+	for y := 0; y < 5000; y += 97 {
+		src.Set(0, y, color.RGBA{uint8(y), uint8(y >> 8), 7, 255})
+	}
+	parts := Slice(src, MaxSliceHeight)
+	if len(parts) != 3 {
+		t.Fatalf("кусков %d", len(parts))
+	}
+	total := 0
+	for i, p := range parts {
+		r, ok := p.(*image.RGBA)
+		if !ok {
+			t.Fatalf("кусок %d: %T", i, p)
+		}
+		y := i * MaxSliceHeight
+		if &r.Pix[0] != &src.Pix[src.PixOffset(0, y)] {
+			t.Errorf("кусок %d скопирован, а не взят из буфера", i)
+		}
+		if r.Stride != 4*r.Rect.Dx() {
+			t.Errorf("кусок %d: строки не подряд (stride %d)", i, r.Stride)
+		}
+		// текстура читается с начала Pix: первые 4 байта — пиксель (0, y) исходника
+		want := src.Pix[src.PixOffset(0, y) : src.PixOffset(0, y)+4]
+		if string(r.Pix[:4]) != string(want) {
+			t.Errorf("кусок %d: начало Pix %v, ждали %v", i, r.Pix[:4], want)
+		}
+		total += r.Rect.Dx() * r.Rect.Dy()
+	}
+	if total != 300*5000 {
+		t.Errorf("сумма площадей кусков %d", total)
+	}
+}
+
+func TestToRGBA(t *testing.T) {
+	rgba := image.NewRGBA(image.Rect(0, 0, 4, 4))
+	if ToRGBA(rgba) != rgba {
+		t.Error("RGBA с началом в (0,0) должно возвращаться как есть")
+	}
+	// участок RGBA — копия с началом в (0,0)
+	sub := rgba.SubImage(image.Rect(1, 1, 3, 3))
+	if got := ToRGBA(sub); got.Rect.Min != (image.Point{}) || got.Rect.Dx() != 2 {
+		t.Errorf("участок: %v", got.Rect)
+	}
+	// JPEG-подобный YCbCr: те же пиксели
+	ycc := image.NewYCbCr(image.Rect(0, 0, 8, 8), image.YCbCrSubsampleRatio420)
+	for i := range ycc.Y {
+		ycc.Y[i] = uint8(i * 3)
+	}
+	got := ToRGBA(ycc)
+	for _, pt := range []image.Point{{0, 0}, {7, 7}, {3, 5}} {
+		wr, wg, wb, _ := ycc.At(pt.X, pt.Y).RGBA()
+		gr, gg, gb, _ := got.At(pt.X, pt.Y).RGBA()
+		if wr>>8 != gr>>8 || wg>>8 != gg>>8 || wb>>8 != gb>>8 {
+			t.Errorf("YCbCr %v: %v, ждали %v", pt, got.At(pt.X, pt.Y), ycc.At(pt.X, pt.Y))
+		}
+	}
+	// NRGBA с прозрачностью → премультиплицированный RGBA
+	n := image.NewNRGBA(image.Rect(0, 0, 1, 1))
+	n.SetNRGBA(0, 0, color.NRGBA{200, 100, 50, 128})
+	if c := ToRGBA(n).RGBAAt(0, 0); c.A != 128 || c.R != 100 || c.G != 50 || c.B != 25 {
+		t.Errorf("прозрачность: %v", c)
 	}
 }

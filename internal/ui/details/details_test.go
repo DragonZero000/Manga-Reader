@@ -73,7 +73,7 @@ func setup(t *testing.T, files map[string][]byte) *fixture {
 		t.Fatal(err)
 	}
 	f := &fixture{src: src, win: a.NewWindow("t")}
-	th := thumbs.New(src.OpenPage, 10, 1)
+	th := thumbs.New(src.OpenPage, 1<<20, 1)
 	f.d = New(f.win, src, th, func(g model.Gallery) { f.reads = append(f.reads, g) },
 		func(q string) { f.searches = append(f.searches, q) })
 	q := make(chan func(), 1024)

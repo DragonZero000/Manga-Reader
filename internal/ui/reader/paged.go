@@ -52,7 +52,7 @@ func newPagedView(r *Reader) *pagedView {
 		spinner: widget.NewActivity(),
 	}
 	v.img.FillMode = canvas.ImageFillStretch
-	v.img.ScaleMode = canvas.ImageScaleSmooth
+	v.img.ScaleMode = canvas.ImageScaleFastest // картинка уже нужного размера: без пересчёта в UI-потоке
 	v.status.Alignment = fyne.TextAlignCenter
 	v.status.Wrapping = fyne.TextWrapWord
 	v.ExtendBaseWidget(v)

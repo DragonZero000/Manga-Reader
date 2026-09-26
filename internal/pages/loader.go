@@ -259,8 +259,9 @@ func (l *Loader) decode(r Request) Result {
 }
 
 // scaleToBox уменьшает изображение, чтобы оно поместилось в w×h
-// (h <= 0 — только по ширине). Изображение не увеличивается.
-func scaleToBox(src image.Image, w, h int) image.Image {
+// (h <= 0 — только по ширине). Изображение не увеличивается. Результат —
+// всегда *image.RGBA: его текстура загружается без конвертации в UI-потоке.
+func scaleToBox(src image.Image, w, h int) *image.RGBA {
 	b := src.Bounds()
 	sw, sh := float32(b.Dx()), float32(b.Dy())
 	scale := FitWidth(sw, float32(w))
@@ -268,11 +269,24 @@ func scaleToBox(src image.Image, w, h int) image.Image {
 		scale = Fit(Sz{sw, sh}, Sz{float32(w), float32(h)})
 	}
 	if scale >= 1 {
-		return src
+		return ToRGBA(src)
 	}
 	dw, dh := max(1, int(sw*scale+0.5)), max(1, int(sh*scale+0.5))
-	dst := image.NewNRGBA(image.Rect(0, 0, dw, dh))
+	dst := image.NewRGBA(image.Rect(0, 0, dw, dh))
 	draw.ApproxBiLinear.Scale(dst, dst.Bounds(), src, b, draw.Src, nil)
+	return dst
+}
+
+// ToRGBA возвращает изображение как *image.RGBA с началом в (0, 0): такое
+// Fyne загружает в текстуру без копии. Готовое RGBA возвращается как есть,
+// остальное копируется (цвета с прозрачностью — премультиплицированные).
+func ToRGBA(src image.Image) *image.RGBA {
+	b := src.Bounds()
+	if r, ok := src.(*image.RGBA); ok && b.Min == (image.Point{}) && r.Stride == 4*b.Dx() {
+		return r
+	}
+	dst := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+	draw.Draw(dst, dst.Rect, src, b.Min, draw.Src)
 	return dst
 }
 

@@ -76,6 +76,23 @@ func SearchMode(s storage.Settings) string {
 	return SearchModeDynamic
 }
 
+// KeyDisplayMax60 — ограничить частоту экрана 60 Гц (Android): «1» или «0».
+const KeyDisplayMax60 = "display.max60"
+
+// DisplayMax60 — ограничивать ли частоту экрана 60 Гц (по умолчанию да).
+func DisplayMax60(s storage.Settings) bool {
+	return s.String(KeyDisplayMax60, "1") != "0"
+}
+
+// SetDisplayMax60 сохраняет настройку частоты экрана.
+func SetDisplayMax60(s storage.Settings, on bool) {
+	v := "0"
+	if on {
+		v = "1"
+	}
+	s.SetString(KeyDisplayMax60, v)
+}
+
 // BrowserPrefs — настройки браузера из Settings (для browser.Options.Prefs).
 // Поисковик выбирается в настройках самого Firefox и хранится в профиле.
 func BrowserPrefs(s storage.Settings) (home string, clear []string) {
@@ -98,11 +115,17 @@ func RequestBrowserClear(s storage.Settings, c string) {
 	s.SetString(KeyBrowserClear, strings.Join(append(clear, c), ","))
 }
 
+// thumbsConfig — объём кэша миниатюр и число декодеров (0 — по умолчанию).
+type thumbsConfig struct {
+	limit   int64
+	workers int
+}
+
 // newServices собирает общие сервисы вокруг хранилища (nil — папка не выбрана).
-func newServices(version string, st storage.Storage, settings storage.Settings) *Services {
+func newServices(version string, st storage.Storage, settings storage.Settings, tc thumbsConfig) *Services {
 	s := &Services{Version: version, Settings: settings, Index: search.NewMemIndex(), Problems: problems.New(settings)}
 	s.Library = library.NewSource(st, s.Index)
-	s.Thumbs = thumbs.New(s.Library.OpenPage, thumbs.DefaultCapacity, 0)
+	s.Thumbs = thumbs.New(s.Library.OpenPage, tc.limit, tc.workers)
 	if root := s.Library.Root(); root != "" {
 		log.Printf("папка библиотеки: %s", root)
 	} else {
@@ -114,7 +137,7 @@ func newServices(version string, st storage.Storage, settings storage.Settings) 
 // NewForTest — сервисы над готовым источником (для тестов UI).
 func NewForTest(src *library.Source, idx search.Index, settings storage.Settings) *Services {
 	return &Services{Version: "test", Settings: settings, Index: idx, Library: src,
-		Thumbs: thumbs.New(src.OpenPage, 10, 1), Problems: problems.New(settings)}
+		Thumbs: thumbs.New(src.OpenPage, 1<<20, 1), Problems: problems.New(settings)}
 }
 
 // MobileBrowserSettings — настройки браузера Android из Settings.

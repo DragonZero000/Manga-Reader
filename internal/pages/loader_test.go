@@ -99,6 +99,29 @@ func TestLoaderNoUpscaleAndSlices(t *testing.T) {
 	}
 }
 
+// Результат загрузчика готов для текстуры: только *image.RGBA, в том числе
+// без уменьшения, после уменьшения и для кусков ленты.
+func TestLoaderResultIsRGBA(t *testing.T) {
+	src := &fakeSource{pages: map[string][]byte{
+		"small.png": pngOf(t, 100, 100),
+		"big.png":   pngOf(t, 1200, 1700),
+		"tall.png":  pngOf(t, 400, 5000),
+	}}
+	l := NewLoader(src.open, 64<<20, 1)
+	for _, req := range []Request{
+		{Key: key, Page: "small.png", W: 1000, H: 1000},
+		{Key: key, Page: "big.png", W: 600, H: 600},
+		{Key: key, Page: "tall.png", W: 400, SliceH: 2048},
+	} {
+		r := wait(t, load(l, req, 0))
+		for i, p := range r.Parts {
+			if _, ok := p.(*image.RGBA); !ok {
+				t.Errorf("%s, кусок %d: %T", req.Page, i, p)
+			}
+		}
+	}
+}
+
 func TestLoaderEvictsByBytes(t *testing.T) {
 	src := &fakeSource{pages: map[string][]byte{
 		"1.png": pngOf(t, 64, 64), "2.png": pngOf(t, 64, 64), "3.png": pngOf(t, 64, 64),
