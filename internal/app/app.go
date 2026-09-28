@@ -5,6 +5,7 @@ package app
 import (
 	"errors"
 	"log"
+	"strconv"
 	"strings"
 
 	"mangareader/internal/browser"
@@ -79,6 +80,71 @@ func SearchMode(s storage.Settings) string {
 		return SearchModeSubmit
 	}
 	return SearchModeDynamic
+}
+
+// Режим кнопки «Случайное».
+const (
+	KeyRandomMode = "random.mode"
+	// RandomModeRepeat — каждый раз из всего набора (по умолчанию).
+	RandomModeRepeat = "repeat"
+	// RandomModeNoRepeat — без повторов, пока не выпадут все галереи набора.
+	RandomModeNoRepeat = "norepeat"
+)
+
+// RandomMode — режим случайного выбора из Settings; неизвестное значение —
+// RandomModeRepeat.
+func RandomMode(s storage.Settings) string {
+	if s.String(KeyRandomMode, "") == RandomModeNoRepeat {
+		return RandomModeNoRepeat
+	}
+	return RandomModeRepeat
+}
+
+// SetRandomMode сохраняет режим случайного выбора.
+func SetRandomMode(s storage.Settings, mode string) {
+	s.SetString(KeyRandomMode, mode)
+}
+
+// Плотность сетки карточек.
+const (
+	// KeyGridColumns — карточек в ряду на телефоне: «2», «3» или «4».
+	KeyGridColumns = "grid.columns"
+	// KeyGridSize — размер карточек на ПК: GridSizeSmall, GridSizeMedium, GridSizeLarge.
+	KeyGridSize = "grid.size"
+
+	GridSizeSmall  = "s"
+	GridSizeMedium = "m" // по умолчанию
+	GridSizeLarge  = "l"
+)
+
+// GridColumns — карточек в ряду на телефоне (2–4); неизвестное значение — 3.
+func GridColumns(s storage.Settings) int {
+	switch s.String(KeyGridColumns, "") {
+	case "2":
+		return 2
+	case "4":
+		return 4
+	}
+	return 3
+}
+
+// SetGridColumns сохраняет число карточек в ряду.
+func SetGridColumns(s storage.Settings, n int) {
+	s.SetString(KeyGridColumns, strconv.Itoa(n))
+}
+
+// GridSize — размер карточек на ПК; неизвестное значение — GridSizeMedium.
+func GridSize(s storage.Settings) string {
+	switch v := s.String(KeyGridSize, ""); v {
+	case GridSizeSmall, GridSizeLarge:
+		return v
+	}
+	return GridSizeMedium
+}
+
+// SetGridSize сохраняет размер карточек.
+func SetGridSize(s storage.Settings, size string) {
+	s.SetString(KeyGridSize, size)
 }
 
 // KeyDisplayMax60 — ограничить частоту экрана 60 Гц (Android): «1» или «0».

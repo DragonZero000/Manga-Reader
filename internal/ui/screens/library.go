@@ -53,6 +53,7 @@ type Library struct {
 
 	count    *widget.Label
 	refresh  *widget.Button
+	random   *randomButton
 	tools    *fyne.Container // кнопки панели справа
 	activity *widget.Activity
 	grid     *galleryGrid
@@ -62,19 +63,20 @@ type Library struct {
 	content  fyne.CanvasObject
 }
 
-// NewLibrary создаёт экран; open вызывается при нажатии на карточку,
-// chooseFolder открывает выбор папки (Android; на ПК — nil).
-func NewLibrary(svc *app.Services, notify func(string), open func(model.Gallery), chooseFolder func()) *Library {
+// NewLibrary создаёт экран; metrics — размер карточек, общий с поиском;
+// open вызывается при нажатии на карточку, chooseFolder открывает выбор
+// папки (Android; на ПК — nil).
+func NewLibrary(svc *app.Services, metrics *GridMetrics, notify func(string), open func(model.Gallery), chooseFolder func()) *Library {
 	l := &Library{src: svc.Library, problems: svc.Problems, notify: notify, do: fyne.Do, busyDelay: busyRetryDelay}
 
 	l.count = widget.NewLabel("")
 	l.activity = widget.NewActivity()
 	l.activity.Hide()
 	l.refresh = widget.NewButtonWithIcon("Обновить", theme.ViewRefreshIcon(), l.Refresh)
-	l.tools = container.NewHBox(l.activity, l.refresh)
+	l.grid = newGalleryGrid(svc.Thumbs, metrics, open)
+	l.random = newRandomButton(app.RandomMode(svc.Settings), l.grid.Items, open)
+	l.tools = container.NewHBox(l.random.btn, l.activity, l.refresh)
 	toolbar := container.NewBorder(nil, nil, l.count, l.tools)
-
-	l.grid = newGalleryGrid(svc.Thumbs, open)
 
 	l.empty, l.emptyDir = newEmptyState()
 	l.grid.Widget().Hide()
@@ -95,11 +97,20 @@ func (l *Library) Content() fyne.CanvasObject { return l.content }
 // SetDispatcher задаёт функцию выполнения в UI-потоке (для тестов).
 func (l *Library) SetDispatcher(do func(func())) { l.do = do }
 
-// AddTool добавляет кнопку на панель библиотеки (перед «Обновить»).
+// AddTool добавляет кнопку на панель библиотеки (после 🎲, перед «Обновить»).
 func (l *Library) AddTool(o fyne.CanvasObject) {
-	l.tools.Objects = append([]fyne.CanvasObject{o}, l.tools.Objects...)
+	l.tools.Objects = append([]fyne.CanvasObject{l.tools.Objects[0], o}, l.tools.Objects[1:]...)
 	l.tools.Refresh()
 }
+
+// SetRandomMode задаёт режим кнопки 🎲 и начинает круг заново.
+func (l *Library) SetRandomMode(mode string) { l.random.picker.SetMode(mode) }
+
+// GridColumns — число колонок сетки (для тестов).
+func (l *Library) GridColumns() int { return l.grid.grid.ColumnCount() }
+
+// RandomMode — режим кнопки 🎲 (для тестов).
+func (l *Library) RandomMode() string { return l.random.picker.mode }
 
 // Refresh запускает сканирование в фоне. Вызывать из UI-потока.
 // Повторный вызов во время сканирования игнорируется.
@@ -251,8 +262,11 @@ func (l *Library) updateEmptyDir() {
 	l.emptyDir.SetText(dir)
 }
 
+// updateCount показывает число галерей; 🎲 активна, если они есть.
 func (l *Library) updateCount() {
-	l.count.SetText(fmt.Sprintf("Галерей: %d", len(l.grid.Items())))
+	n := len(l.grid.Items())
+	l.count.SetText(fmt.Sprintf("Галерей: %d", n))
+	l.random.update(n)
 }
 
 // newEmptyState — пустое состояние с папкой библиотеки.

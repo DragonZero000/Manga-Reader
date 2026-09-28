@@ -48,6 +48,7 @@ type Search struct {
 	entry    *widget.Entry
 	clearBtn *widget.Button
 	runBtn   *widget.Button
+	random   *randomButton
 	status   *widget.Label
 	grid     *galleryGrid
 	help     fyne.CanvasObject
@@ -68,8 +69,9 @@ type Search struct {
 	timerGen int         // номер ожидания; устаревшие срабатывания таймера отбрасываются
 }
 
-// NewSearch создаёт экран; open вызывается при нажатии на результат.
-func NewSearch(svc *app.Services, open func(model.Gallery)) *Search {
+// NewSearch создаёт экран; metrics — размер карточек, общий с библиотекой;
+// open вызывается при нажатии на результат.
+func NewSearch(svc *app.Services, metrics *GridMetrics, open func(model.Gallery)) *Search {
 	s := &Search{index: svc.Index, src: svc.Library, do: fyne.Do, delay: searchDelay}
 
 	s.entry = widget.NewEntry()
@@ -79,12 +81,14 @@ func NewSearch(svc *app.Services, open func(model.Gallery)) *Search {
 
 	s.status = widget.NewLabel("")
 	s.status.Wrapping = fyne.TextWrapWord
-	s.grid = newGalleryGrid(svc.Thumbs, open)
+	s.grid = newGalleryGrid(svc.Thumbs, metrics, open)
 	s.help = newSearchHelp()
 
 	s.clearBtn = widget.NewButtonWithIcon("", theme.ContentClearIcon(), s.Clear)
 	s.runBtn = widget.NewButtonWithIcon("", theme.SearchIcon(), func() { s.execute(s.entry.Text) })
-	buttons := container.NewHBox(s.clearBtn, s.runBtn)
+	// 🎲 — из результата в сетке; ошибка разбора сетку не меняет
+	s.random = newRandomButton(app.RandomMode(svc.Settings), s.grid.Items, open)
+	buttons := container.NewHBox(s.clearBtn, s.runBtn, s.random.btn)
 	top := container.NewVBox(container.NewBorder(nil, nil, nil, buttons, s.entry), s.status)
 	s.content = container.NewBorder(top, nil, nil, nil, container.NewStack(s.help, s.grid.Widget()))
 	s.setStatus("", false)
@@ -115,6 +119,9 @@ func (s *Search) SetMode(mode string) {
 		s.runBtn.Hide()
 	}
 }
+
+// SetRandomMode задаёт режим кнопки 🎲 и начинает круг заново.
+func (s *Search) SetRandomMode(mode string) { s.random.picker.SetMode(mode) }
 
 // SetQuery заполняет поле и сразу выполняет поиск в любом режиме.
 func (s *Search) SetQuery(text string) {
@@ -225,6 +232,7 @@ func (s *Search) apply(items []model.Gallery, total int, err error) {
 		return
 	}
 	s.grid.SetItems(items)
+	s.random.update(len(items))
 	if total == 0 {
 		s.setStatus("Ничего не найдено", false)
 	} else {
@@ -270,6 +278,9 @@ func (s *Search) HelpVisible() bool { return s.help.Visible() }
 // Results — галереи в сетке результатов.
 func (s *Search) Results() []model.Gallery { return s.grid.Items() }
 
+// GridColumns — число колонок сетки результатов (для тестов).
+func (s *Search) GridColumns() int { return s.grid.grid.ColumnCount() }
+
 // Query — текст поля запроса.
 func (s *Search) Query() string { return s.entry.Text }
 
@@ -287,3 +298,9 @@ func (s *Search) Seq() int { return s.seq }
 
 // SearchButtonVisible сообщает, показана ли кнопка поиска.
 func (s *Search) SearchButtonVisible() bool { return s.runBtn.Visible() }
+
+// RandomButton — кнопка 🎲.
+func (s *Search) RandomButton() *widget.Button { return s.random.btn }
+
+// RandomMode — режим кнопки 🎲.
+func (s *Search) RandomMode() string { return s.random.picker.mode }

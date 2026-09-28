@@ -15,6 +15,7 @@ import (
 	"fyne.io/fyne/v2/test"
 
 	"mangareader/internal/model"
+	"mangareader/internal/storage"
 	"mangareader/internal/thumbs"
 )
 
@@ -58,7 +59,7 @@ func TestGridCardReuseCancels(t *testing.T) {
 	}
 	o := &blockingOpen{data: buf.Bytes(), release: make(chan struct{})}
 	th := thumbs.New(o.open, 1<<20, 1)
-	g := newGalleryGrid(th, func(model.Gallery) {})
+	g := newGalleryGrid(th, NewGridMetrics(storage.NewMemSettings()), func(model.Gallery) {})
 	q := make(chan func(), 64)
 	g.do = func(f func()) { q <- f }
 	w := a.NewWindow("t")
@@ -66,14 +67,14 @@ func TestGridCardReuseCancels(t *testing.T) {
 	w.Resize(fyne.NewSize(400, 400))
 	g.items = []model.Gallery{galleryOf("busy.zip"), galleryOf("gone.zip"), galleryOf("shown.zip")}
 
-	busy := newGalleryCard(g.coverSize)
+	busy := newGalleryCard(g.metrics)
 	g.updateCard(0, busy) // занимает единственный декодер
 	deadline := time.Now().Add(3 * time.Second)
 	for len(o.list()) == 0 && time.Now().Before(deadline) {
 		time.Sleep(5 * time.Millisecond)
 	}
 
-	card := newGalleryCard(g.coverSize)
+	card := newGalleryCard(g.metrics)
 	g.updateCard(1, card) // ждёт в очереди
 	g.updateCard(2, card) // та же карточка — уже для другой галереи
 	close(o.release)

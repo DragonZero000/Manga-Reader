@@ -327,3 +327,101 @@ func TestTagToSearch(t *testing.T) {
 		t.Fatal("поиск по тегу выполнен повторно по таймеру")
 	}
 }
+
+// Кнопка 🎲 в поиске: видна всегда, активна только при непустом результате,
+// ошибка разбора сохраняет прежний результат.
+func TestSearchRandom(t *testing.T) {
+	s, _, pump := newTestShell(t)
+	sc := s.Search()
+	btn := sc.RandomButton()
+	if !btn.Visible() || !btn.Disabled() {
+		t.Fatalf("до первого запроса: видна %v, неактивна %v", btn.Visible(), btn.Disabled())
+	}
+
+	sc.SetQuery("japan")
+	waitUI(t, pump, "результаты", func() bool { return sc.StatusText() == "Найдено: 1" })
+	if btn.Disabled() {
+		t.Fatal("с результатом 🎲 должна быть активна")
+	}
+	test.Tap(btn)
+	if !s.Details.Visible() || s.Details.Gallery().Key != model.LocalKey("example.zip") {
+		t.Fatalf("открыта %v", s.Details.Gallery().Key)
+	}
+	s.Details.Close()
+
+	sc.SetQuery("pages:")
+	pump()
+	if !strings.HasPrefix(sc.StatusText(), "Ошибка в запросе") || len(sc.Results()) != 1 || btn.Disabled() {
+		t.Fatal("ошибка разбора не должна менять 🎲")
+	}
+
+	sc.SetQuery("zzzz")
+	waitUI(t, pump, "нет результатов", func() bool { return sc.StatusText() == "Ничего не найдено" })
+	if !btn.Disabled() {
+		t.Fatal("без результатов 🎲 должна быть неактивна")
+	}
+
+	// видна и в режиме «По кнопке»
+	s.Settings().SelectSearchMode(app.SearchModeSubmit)
+	if !btn.Visible() {
+		t.Fatal("в режиме «По кнопке» 🎲 должна быть видна")
+	}
+}
+
+// Режим 🎲: по умолчанию «С повторами», выбор сохраняется и сразу
+// применяется в библиотеке и поиске, восстанавливается при новом запуске.
+func TestRandomModeSetting(t *testing.T) {
+	st := storage.NewMemSettings()
+	s, _, _ := newTestShellSettings(t, st)
+	if got := s.Settings().RandomModeLabel(); got != "С повторами" {
+		t.Fatalf("режим по умолчанию %q", got)
+	}
+	s.Settings().SelectRandomMode(app.RandomModeNoRepeat)
+	if v := st.String(app.KeyRandomMode, ""); v != app.RandomModeNoRepeat {
+		t.Fatalf("сохранено %q", v)
+	}
+	if s.Library().RandomMode() != app.RandomModeNoRepeat || s.Search().RandomMode() != app.RandomModeNoRepeat {
+		t.Fatalf("без перезапуска: библиотека %q, поиск %q", s.Library().RandomMode(), s.Search().RandomMode())
+	}
+
+	s2, _, _ := newTestShellSettings(t, st)
+	if got := s2.Settings().RandomModeLabel(); got != "Без повторов" {
+		t.Fatalf("восстановлен режим %q", got)
+	}
+	if s2.Library().RandomMode() != app.RandomModeNoRepeat || s2.Search().RandomMode() != app.RandomModeNoRepeat {
+		t.Fatal("после перезапуска экраны должны получить режим из настроек")
+	}
+}
+
+// «Размер карточек» применяется сразу к библиотеке и поиску и сохраняется.
+func TestGridSizeSetting(t *testing.T) {
+	st := storage.NewMemSettings()
+	s, _, pump := newTestShellSettings(t, st)
+	s.Library().ShowCached(library.ScanResult{Galleries: s.svc.Library.Galleries()})
+	s.SearchFor("english")
+	settle(pump)
+	if got := s.Settings().GridLabel(); got != "Средние" {
+		t.Fatalf("по умолчанию %q", got)
+	}
+	libCols, searchCols := s.Library().GridColumns(), s.Search().GridColumns()
+	if libCols < 2 || searchCols < 2 {
+		t.Fatalf("колонок до смены: библиотека %d, поиск %d", libCols, searchCols)
+	}
+
+	s.Settings().SelectGrid("Крупные")
+	if v := st.String(app.KeyGridSize, ""); v != app.GridSizeLarge {
+		t.Fatalf("сохранено %q", v)
+	}
+	if s.grid.Cover().Width != 200 {
+		t.Fatalf("карточка %v", s.grid.Cover())
+	}
+	if s.Library().GridColumns() >= libCols || s.Search().GridColumns() >= searchCols {
+		t.Fatalf("без перезапуска: библиотека %d (было %d), поиск %d (было %d)",
+			s.Library().GridColumns(), libCols, s.Search().GridColumns(), searchCols)
+	}
+
+	s2, _, _ := newTestShellSettings(t, st)
+	if got := s2.Settings().GridLabel(); got != "Крупные" || s2.grid.Cover().Width != 200 {
+		t.Fatalf("после перезапуска %q, карточка %v", got, s2.grid.Cover())
+	}
+}

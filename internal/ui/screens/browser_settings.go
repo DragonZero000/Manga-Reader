@@ -60,7 +60,8 @@ func newBrowserCard(svc *app.Services, win fyne.Window, notify func(string)) *br
 	form := widget.NewForm(
 		widget.NewFormItem("Домашняя страница", container.NewVBox(c.home, c.homeErr)),
 	)
-	c.card = widget.NewCard("Браузер", "Встроенный Firefox; загрузки сохраняются в папку библиотеки", container.NewVBox(
+	c.card = widget.NewCard("Браузер", "", container.NewVBox(
+		cardNote("Встроенный Firefox; загрузки сохраняются в папку библиотеки"),
 		form, c.restart, container.NewGridWithColumns(2, search, addons),
 		c.clearBtn[browser.ClearCookies], c.clearBtn[browser.ClearHistory],
 	))

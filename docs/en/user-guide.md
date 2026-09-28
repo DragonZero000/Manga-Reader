@@ -85,11 +85,11 @@ Example: [`testdata/example.zip`](../../testdata/example.zip).
 
 ## Library
 
-The **Библиотека** (Library) tab shows galleries as a grid of cards: cover and title. Newest files come first (by file modification time). At the top are the gallery count and the **Обновить** (Refresh) button — usually not needed, since the folder is watched automatically.
+The **Библиотека** (Library) tab shows galleries as a grid of cards: cover and title. Card size is set in **Настройки** (Settings), in the **Сетка** (Grid) section. Newest files come first (by file modification time). At the top are the gallery count and the **Обновить** (Refresh) button — usually not needed, since the folder is watched automatically.
 
 ![Library on Windows](../images/library.png)
 
-Tapping a card opens its gallery page. If the library is empty, the app shows the path of the folder to put archives into; you can copy the path in **Настройки** (Settings).
+Tapping a card opens its gallery page. The 🎲 button on the panel opens the page of a random gallery from the library; it is inactive while the library is empty. If the library is empty, the app shows the path of the folder to put archives into; you can copy the path in **Настройки** (Settings).
 
 <img src="../images/mobile-library.png" alt="Empty library on Android" width="280">
 
@@ -136,7 +136,7 @@ The **Поиск** (Search) tab searches the whole library. Conditions separated
 - **При вводе** (As you type, the default) — half a second after you stop typing; results appear even while the keyboard is open. There is no 🔍 button, and Enter only closes the keyboard.
 - **По кнопке** (On button) — only when you press 🔍 or Enter.
 
-The **✕** button clears the box and keeps the results on screen. The **Как искать** (How to search) cheat sheet is shown until the first query of the session; after that the screen always shows the last result, even with an empty box — the table below covers the same syntax.
+The **✕** button clears the box and keeps the results on screen. The 🎲 button next to it opens the page of a random gallery from the current results; it is always visible but inactive until a query has found something. A query with a mistake keeps the previous results, so 🎲 keeps picking from them. The **Как искать** (How to search) cheat sheet is shown until the first query of the session; after that the screen always shows the last result, even with an empty box — the table below covers the same syntax.
 
 ![Search by tag](../images/search.png)
 
@@ -203,6 +203,8 @@ The **Настройки** (Settings) tab:
 - **Браузер** (Browser, Windows) — **Домашняя страница** (Home page), **Поисковик** (Search engine — opens Firefox search settings), **Расширения** (Extensions), **Очистить cookies и данные сайтов** (Clear cookies and site data), **Очистить историю** (Clear history). Clearing happens the next time the browser opens; bookmarks are kept.
 - **Браузер** (Browser, Android) — **Домашняя страница** (Home page), **Поисковик** (Search engine), **Панель браузера** (Browser toolbar: **Снизу** / **Сверху**, bottom / top), clearing cookies and history (immediately; bookmarks and extensions are kept).
 - **Поиск** (Search) — when a query runs: **При вводе** (As you type) or **По кнопке** (On button); see [Search](#search).
+- **Случайный выбор** (Random pick) — how the 🎲 button picks: **С повторами** (With repeats, the default) — every press picks from the whole set, so the same gallery can come up again; **Без повторов** (No repeats) — a gallery doesn't come up again until every gallery in the set has, and the next round never starts with the one shown last. The library and search keep separate rounds; a round starts over when the set changes (different search results, library contents changed after a rescan) and isn't kept between launches.
+- **Сетка** (Grid) — how dense the card grid is in the library and search; applies immediately, no restart needed. On Android — **Карточек в ряду** (Cards per row): **2**, **3** (the default) or **4**; in portrait the cards split the screen width evenly, in landscape they keep the same size and more fit in a row. On Windows — **Размер карточек** (Card size): **Маленькие** (Small), **Средние** (Medium, the default) or **Крупные** (Large); the number of columns follows the window width. After a change, covers are reloaded for the new size.
 - **Экран** (Screen, Android) — **Ограничить 60 Гц** (Limit to 60 Hz, on by default): on 120 Hz screens the app asks the system for 60 Hz, which makes scrolling smoother. The built-in browser runs at whatever rate the system picks.
 - **О приложении** (About) — the version.
 

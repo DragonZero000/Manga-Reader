@@ -37,9 +37,11 @@ type Shell struct {
 	watching  bool     // наблюдение за папкой запущено
 	onStopped []func() // действия при выходе
 
-	library  *screens.Library
-	search   *screens.Search
-	errors   *screens.Errors
+	library *screens.Library
+	search  *screens.Search
+	errors  *screens.Errors
+	// grid — размер карточек, общий для библиотеки и поиска
+	grid     *screens.GridMetrics
 	settings *screens.Settings
 }
 
@@ -62,8 +64,9 @@ func NewShell(a fyne.App, svc *app.Services) *Shell {
 	}
 	s.Reader = reader.New(a, s.Window, svc.Library, svc.Settings, s.Toast.Show)
 	s.Details = details.New(s.Window, svc.Library, svc.Thumbs, s.Reader.Open, s.SearchFor)
-	s.library = screens.NewLibrary(svc, s.Toast.Show, s.Details.Open, choose)
-	s.search = screens.NewSearch(svc, s.Details.Open)
+	s.grid = screens.NewGridMetrics(svc.Settings)
+	s.library = screens.NewLibrary(svc, s.grid, s.Toast.Show, s.Details.Open, choose)
+	s.search = screens.NewSearch(svc, s.grid, s.Details.Open)
 	s.errors = screens.NewErrors(svc.Problems)
 	// поиск и ошибки отражают содержимое папки после каждого сканирования
 	s.library.OnScanned = func() {
@@ -71,7 +74,10 @@ func NewShell(a fyne.App, svc *app.Services) *Shell {
 		s.updateErrors()
 		s.svc.PruneLinks()
 	}
-	s.settings = screens.NewSettings(a, s.Window, svc, s.Toast.Show, choose, s.search.SetMode)
+	s.settings = screens.NewSettings(a, s.Window, svc, s.Toast.Show, choose, s.search.SetMode, func(mode string) {
+		s.library.SetRandomMode(mode)
+		s.search.SetRandomMode(mode)
+	}, s.grid.Reload) // плотность сетки — сразу в библиотеке и поиске
 	s.setupBrowser(a)
 
 	s.searchTab = container.NewTabItemWithIcon("Поиск", theme.SearchIcon(), s.search.Content())
@@ -308,6 +314,9 @@ func (s *Shell) applyDisplay() {
 		log.Printf("частота экрана: %v", err)
 	}
 }
+
+// Library — экран библиотеки (для тестов).
+func (s *Shell) Library() *screens.Library { return s.library }
 
 // Search — экран поиска (для тестов).
 func (s *Shell) Search() *screens.Search { return s.search }

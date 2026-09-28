@@ -15,7 +15,26 @@ func newTestSettings(t *testing.T, st storage.Settings) *Settings {
 	t.Helper()
 	a := test.NewTempApp(t)
 	svc := app.NewForTest(library.NewDirSource(t.TempDir(), nil), nil, st)
-	return NewSettings(a, a.NewWindow("t"), svc, func(string) {}, nil, nil)
+	return NewSettings(a, a.NewWindow("t"), svc, func(string) {}, nil, nil, nil, nil)
+}
+
+// phoneWidth — ширина узкого телефона: экран настроек не должен быть шире,
+// иначе текст справа обрезается.
+const phoneWidth = 320
+
+// Экран настроек на телефоне (со всеми разделами Android) не шире узкого
+// телефона: заголовки и подзаголовки разделов не переносятся.
+func TestSettingsFitPhoneWidth(t *testing.T) {
+	oldMobile, oldDisplay := isMobile, displaySupported
+	isMobile, displaySupported = func() bool { return true }, true
+	t.Cleanup(func() { isMobile, displaySupported = oldMobile, oldDisplay })
+	a := test.NewTempApp(t)
+	svc := app.NewForTest(library.NewDirSource(t.TempDir(), nil), nil, storage.NewMemSettings())
+	svc.CanChooseFolder, svc.MobileBrowser = true, true
+	s := NewSettings(a, a.NewWindow("t"), svc, func(string) {}, func() {}, nil, nil, nil)
+	if w := s.Content().MinSize().Width; w > phoneWidth {
+		t.Fatalf("минимальная ширина экрана настроек %.0f > %d", w, phoneWidth)
+	}
 }
 
 func TestDisplayCardAbsentWithoutSupport(t *testing.T) {
@@ -56,7 +75,7 @@ func TestLibraryShowCached(t *testing.T) {
 	a := test.NewTempApp(t)
 	svc := app.NewForTest(library.NewDirSource(t.TempDir(), nil), nil, storage.NewMemSettings())
 	var notes []string
-	l := NewLibrary(svc, func(s string) { notes = append(notes, s) }, func(model.Gallery) {}, nil)
+	l := NewLibrary(svc, NewGridMetrics(svc.Settings), func(s string) { notes = append(notes, s) }, func(model.Gallery) {}, nil)
 	w := a.NewWindow("t")
 	w.SetContent(l.Content())
 
@@ -82,11 +101,32 @@ func TestLibraryShowCached(t *testing.T) {
 func TestLibraryShowCachedAfterScan(t *testing.T) {
 	a := test.NewTempApp(t)
 	svc := app.NewForTest(library.NewDirSource(t.TempDir(), nil), nil, storage.NewMemSettings())
-	l := NewLibrary(svc, func(string) {}, func(model.Gallery) {}, nil)
+	l := NewLibrary(svc, NewGridMetrics(svc.Settings), func(string) {}, func(model.Gallery) {}, nil)
 	a.NewWindow("t").SetContent(l.Content())
 	l.applyScan(library.ScanResult{Galleries: []model.Gallery{galleryOf("fresh.zip")}}, nil)
 	l.ShowCached(library.ScanResult{Galleries: []model.Gallery{galleryOf("old1.zip"), galleryOf("old2.zip")}})
 	if items := l.grid.Items(); len(items) != 1 || items[0].Key.ID != "fresh.zip" {
 		t.Fatalf("каталог перезаписал результат сканирования: %v", items)
+	}
+}
+
+// На телефоне раздел «Сетка» — «Карточек в ряду»: 3 по умолчанию, выбор
+// сохраняется и сообщается колбэком.
+func TestGridCardMobile(t *testing.T) {
+	setMobile(t, true)
+	a := test.NewTempApp(t)
+	st := storage.NewMemSettings()
+	svc := app.NewForTest(library.NewDirSource(t.TempDir(), nil), nil, st)
+	changed := 0
+	s := NewSettings(a, a.NewWindow("t"), svc, func(string) {}, nil, nil, nil, func() { changed++ })
+	if got := s.GridLabel(); got != "3" {
+		t.Fatalf("по умолчанию %q", got)
+	}
+	s.SelectGrid("4")
+	if app.GridColumns(st) != 4 || changed != 1 {
+		t.Fatalf("сохранено %d, колбэков %d", app.GridColumns(st), changed)
+	}
+	if got := NewSettings(a, a.NewWindow("t"), svc, func(string) {}, nil, nil, nil, nil).GridLabel(); got != "4" {
+		t.Fatalf("после перезапуска %q", got)
 	}
 }

@@ -21,6 +21,21 @@ func TestSearchMode(t *testing.T) {
 	}
 }
 
+func TestRandomMode(t *testing.T) {
+	s := storage.NewMemSettings()
+	if m := RandomMode(s); m != RandomModeRepeat {
+		t.Fatalf("по умолчанию %q", m)
+	}
+	SetRandomMode(s, RandomModeNoRepeat)
+	if m := RandomMode(s); m != RandomModeNoRepeat || s.String(KeyRandomMode, "") != RandomModeNoRepeat {
+		t.Fatalf("после выбора %q", m)
+	}
+	s.SetString(KeyRandomMode, "что-то")
+	if m := RandomMode(s); m != RandomModeRepeat {
+		t.Fatalf("неизвестное значение %q", m)
+	}
+}
+
 func TestDisplayMax60(t *testing.T) {
 	s := storage.NewMemSettings()
 	if !DisplayMax60(s) {
@@ -33,5 +48,41 @@ func TestDisplayMax60(t *testing.T) {
 	SetDisplayMax60(s, true)
 	if !DisplayMax60(s) {
 		t.Fatal("включение не сохранилось")
+	}
+}
+
+func TestGridColumns(t *testing.T) {
+	s := storage.NewMemSettings()
+	if n := GridColumns(s); n != 3 {
+		t.Fatalf("по умолчанию %d", n)
+	}
+	for _, n := range []int{2, 4, 3} {
+		SetGridColumns(s, n)
+		if got := GridColumns(s); got != n {
+			t.Fatalf("после выбора %d: %d", n, got)
+		}
+	}
+	for _, v := range []string{"1", "5", "0", "что-то"} {
+		s.SetString(KeyGridColumns, v)
+		if n := GridColumns(s); n != 3 {
+			t.Fatalf("неизвестное значение %q: %d", v, n)
+		}
+	}
+}
+
+func TestGridSize(t *testing.T) {
+	s := storage.NewMemSettings()
+	if v := GridSize(s); v != GridSizeMedium {
+		t.Fatalf("по умолчанию %q", v)
+	}
+	for _, v := range []string{GridSizeSmall, GridSizeLarge, GridSizeMedium} {
+		SetGridSize(s, v)
+		if got := GridSize(s); got != v {
+			t.Fatalf("после выбора %q: %q", v, got)
+		}
+	}
+	s.SetString(KeyGridSize, "xl")
+	if v := GridSize(s); v != GridSizeMedium {
+		t.Fatalf("неизвестное значение %q", v)
 	}
 }

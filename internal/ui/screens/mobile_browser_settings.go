@@ -80,6 +80,6 @@ func newMobileBrowserCard(svc *app.Services, win fyne.Window, notify func(string
 		widget.NewFormItem("Поисковик", search),
 		widget.NewFormItem("Панель браузера", toolbar),
 	)
-	return widget.NewCard("Браузер", "Встроенный Firefox; загрузки сохраняются в папку библиотеки",
-		container.NewVBox(form, clearCookies, clearHistory))
+	return widget.NewCard("Браузер", "", container.NewVBox(
+		cardNote("Встроенный Firefox; загрузки сохраняются в папку библиотеки"), form, clearCookies, clearHistory))
 }
