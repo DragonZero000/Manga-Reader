@@ -1,0 +1,5 @@
+{
+  "extName": { "message": "MangaReader" },
+  "extDescription": { "message": "Built-in MangaReader extension: a button to return to the app and the link to the download page." },
+  "actionTitle": { "message": "MangaReader — show the app" }
+}

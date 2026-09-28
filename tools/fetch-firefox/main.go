@@ -1,7 +1,8 @@
 // Команда fetch-firefox готовит портативный Firefox ESR для встроенного
-// браузера: скачивает закреплённую версию установщика с archive.mozilla.org,
-// сверяет SHA-256 и распаковывает его без установки (/ExtractDir) в папку
-// назначения. Работает только на Windows.
+// браузера: скачивает закреплённую версию установщика (en-US) и языковые
+// пакеты с archive.mozilla.org, сверяет SHA-256, распаковывает установщик без
+// установки (/ExtractDir) в папку назначения и кладёт пакеты в её папку
+// langpacks. Работает только на Windows.
 //
 //	go run ./tools/fetch-firefox -dst browser/firefox
 package main
@@ -18,21 +19,34 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
+
+	"mangareader/internal/browser"
 )
 
-// Закреплённая версия: обновляется вручную вместе с контрольной суммой из
-// https://archive.mozilla.org/pub/firefox/releases/<версия>/SHA256SUMS
-// (строка win64/ru/Firefox Setup <версия>.exe).
+// Закреплённая версия: обновляется вручную вместе со всеми контрольными
+// суммами из https://archive.mozilla.org/pub/firefox/releases/<версия>/SHA256SUMS
+// (строки win64/en-US/Firefox Setup <версия>.exe и win64/xpi/<язык>.xpi).
+// Языковые пакеты работают только с той же версией ESR: их суммы обновляются
+// вместе с версией, иначе Firefox отключит пакет и покажет English.
 // При обновлении версии обновите THIRD_PARTY_NOTICES.md (версия и ссылка на исходники).
 const (
 	version = "153.3.0esr"
-	locale  = "ru"
-	sha     = "4b9396459525e19ff5280a1f4f13223d6d08c0e27efe05527dada1572e734b8c"
+	locale  = browser.BaseLocale
+	sha     = "be79723a8fb9f976c7434a5f7dfee0a868a04a7148bf169fb3dab1fef932ad59"
 )
+
+// langpacks — языковые пакеты для всех языков приложения, кроме English
+// (код языка приложения совпадает с именем пакета win64/xpi/<язык>.xpi).
+var langpacks = []struct{ lang, sha string }{
+	{"ru", "8e99dc049f170b55b8e6f830ea70c55173b1b49845459048df834b5a5d60d49d"},
+}
+
+const baseURL = "https://archive.mozilla.org/pub/firefox/releases/" + version + "/win64/"
 
 func main() {
 	dst := flag.String("dst", filepath.Join("browser", "firefox"), "папка для firefox.exe")
-	cache := flag.String("cache", filepath.Join("browser", ".cache"), "папка для скачанного установщика")
+	cache := flag.String("cache", filepath.Join("browser", ".cache"), "папка для скачанных файлов")
 	flag.Parse()
 	if runtime.GOOS != "windows" {
 		log.Fatal("fetch-firefox работает только на Windows")
@@ -42,16 +56,35 @@ func main() {
 	}
 }
 
+// stamp — содержимое .version: версия, язык сборки и языковые пакеты; при
+// любом их изменении папка собирается заново.
+func stamp() string {
+	s := []string{version, locale}
+	for _, lp := range langpacks {
+		s = append(s, lp.lang+":"+lp.sha)
+	}
+	return strings.Join(s, " ")
+}
+
 func run(dst, cache string) error {
 	if _, err := os.Stat(filepath.Join(dst, "firefox.exe")); err == nil {
-		if v, _ := os.ReadFile(filepath.Join(dst, ".version")); string(v) == version {
+		if v, _ := os.ReadFile(filepath.Join(dst, ".version")); string(v) == stamp() {
 			log.Printf("Firefox %s уже в %s", version, dst)
 			return nil
 		}
 	}
-	setup, err := download(cache)
+	setup, err := download(cache, fmt.Sprintf("Firefox Setup %s.exe", version),
+		baseURL+locale+"/Firefox%20Setup%20"+version+".exe", sha)
 	if err != nil {
 		return err
+	}
+	packs := make(map[string]string, len(langpacks)) // язык → проверенный файл
+	for _, lp := range langpacks {
+		p, err := download(cache, fmt.Sprintf("langpack-%s-%s.xpi", lp.lang, version), baseURL+"xpi/"+lp.lang+".xpi", lp.sha)
+		if err != nil {
+			return fmt.Errorf("языковой пакет %s: %w", lp.lang, err)
+		}
+		packs[lp.lang] = p
 	}
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return err
@@ -72,7 +105,10 @@ func run(dst, cache string) error {
 	if _, err := os.Stat(filepath.Join(core, "firefox.exe")); err != nil {
 		return fmt.Errorf("после распаковки нет core/firefox.exe: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(core, ".version"), []byte(version), 0o644); err != nil {
+	if err := copyLangpacks(packs, browser.LangpacksDir(core)); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(core, ".version"), []byte(stamp()), 0o644); err != nil {
 		return err
 	}
 	if err := os.RemoveAll(dst); err != nil {
@@ -81,21 +117,46 @@ func run(dst, cache string) error {
 	if err := os.Rename(core, dst); err != nil {
 		return err
 	}
-	log.Printf("Firefox %s готов: %s", version, dst)
+	log.Printf("Firefox %s (%s, пакеты: %d) готов: %s", version, locale, len(langpacks), dst)
 	return nil
 }
 
-// download возвращает путь к проверенному установщику (скачивает, если в
-// кэше нет файла с верной контрольной суммой).
-func download(cache string) (string, error) {
+// copyLangpacks проверяет manifest.json каждого пакета (id — имя файла в
+// профиле, язык — код пакета) и копирует его в dir как <язык>.xpi.
+func copyLangpacks(packs map[string]string, dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	for lang, p := range packs {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		lp, err := browser.ReadLangpack(data)
+		if err != nil {
+			return fmt.Errorf("языковой пакет %s: %w", lang, err)
+		}
+		if lp.Locale != lang {
+			return fmt.Errorf("языковой пакет %s: в manifest.json язык %q", lang, lp.Locale)
+		}
+		log.Printf("языковой пакет %s: %s", lang, lp.ID)
+		if err := os.WriteFile(filepath.Join(dir, lang+".xpi"), data, 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// download возвращает путь к проверенному файлу name в cache (скачивает url,
+// если в кэше нет файла с верной контрольной суммой want).
+func download(cache, name, url, want string) (string, error) {
 	if err := os.MkdirAll(cache, 0o755); err != nil {
 		return "", err
 	}
-	p := filepath.Join(cache, fmt.Sprintf("Firefox Setup %s.exe", version))
-	if ok, _ := verify(p); ok {
+	p := filepath.Join(cache, name)
+	if got := sum(p); got == want {
 		return p, nil
 	}
-	url := fmt.Sprintf("https://archive.mozilla.org/pub/firefox/releases/%[1]s/win64/%[2]s/Firefox%%20Setup%%20%[1]s.exe", version, locale)
 	log.Printf("скачивание %s", url)
 	resp, err := http.Get(url)
 	if err != nil {
@@ -117,23 +178,23 @@ func download(cache string) (string, error) {
 	if err := f.Close(); err != nil {
 		return "", err
 	}
-	if ok, got := verify(tmp); !ok {
+	if got := sum(tmp); got != want {
 		os.Remove(tmp)
-		return "", fmt.Errorf("контрольная сумма не совпала: %s, ожидалась %s", got, sha)
+		return "", fmt.Errorf("контрольная сумма %s не совпала: %s, ожидалась %s", name, got, want)
 	}
 	return p, os.Rename(tmp, p)
 }
 
-func verify(p string) (bool, string) {
+// sum — SHA-256 файла в hex ("" — файла нет или он не читается).
+func sum(p string) string {
 	f, err := os.Open(p)
 	if err != nil {
-		return false, ""
+		return ""
 	}
 	defer f.Close()
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
-		return false, ""
+		return ""
 	}
-	got := hex.EncodeToString(h.Sum(nil))
-	return got == sha, got
+	return hex.EncodeToString(h.Sum(nil))
 }

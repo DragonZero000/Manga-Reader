@@ -17,7 +17,9 @@ const ExtensionID = "bridge@mangareader.app"
 // в котором всё, кроме букв и цифр, заменено на «_», + «-browser-action»).
 const extensionWidget = "bridge_mangareader_app-browser-action"
 
-//go:embed ext
+// _locales называется явно: каталоги на «_» go:embed иначе пропускает.
+//
+//go:embed ext ext/_locales
 var extFiles embed.FS
 
 // ExtensionPath — файл расширения в профиле: Firefox устанавливает его

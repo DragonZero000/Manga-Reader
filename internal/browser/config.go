@@ -30,6 +30,7 @@ type Config struct {
 	ProfileDir  string // профиль
 	DownloadDir string // папка загрузок (папка библиотеки)
 	Home        string // домашняя страница; «» — стартовая страница Firefox
+	Locale      string // язык интерфейса Firefox (см. InstallLangpack); «» — BaseLocale
 	Clear       []string
 }
 
@@ -57,7 +58,15 @@ type pref struct {
 // UserJS — содержимое user.js: применяется при каждом запуске браузера.
 // Корпоративные политики не используются (см. LegacyPoliciesPath).
 func UserJS(c Config) []byte {
+	locale := c.Locale
+	if locale == "" {
+		locale = BaseLocale
+	}
 	prefs := []pref{
+		// язык интерфейса — язык приложения; intl.accept_languages не пишется:
+		// по умолчанию он следует языку интерфейса, выбор в настройках Firefox
+		// хранится в prefs.js и не должен затираться
+		{"intl.locale.requested", locale},
 		// userChrome.css, шапка, системный заголовок окна (полоса вкладок скрыта)
 		{"toolkit.legacyUserProfileCustomizations.stylesheets", true},
 		{"browser.uiCustomization.state", uiState},
@@ -79,6 +88,10 @@ func UserJS(c Config) []byte {
 		{"xpinstall.signatures.required", false},
 		{"extensions.autoDisableScopes", 0},
 		{"extensions.enabledScopes", 15},
+		// папка профиля проверяется при запуске: иначе новый языковой пакет в
+		// существующем профиле подхватывается уже после старта (интерфейс на
+		// English до следующего запуска)
+		{"extensions.startupScanScopes", 1},
 		// без обновлений, телеметрии, исследований и браузера по умолчанию
 		{"app.update.disabledForTesting", true},
 		{"app.update.auto", false},

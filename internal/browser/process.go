@@ -37,6 +37,10 @@ type Options struct {
 	FirefoxDir  string
 	ProfileDir  string
 	DownloadDir string
+	// Lang возвращает язык приложения ("ru"); вызывается перед каждым
+	// запуском. Интерфейс Firefox — на нём, если есть языковой пакет, иначе
+	// English. nil — English.
+	Lang func() string
 	// Prefs возвращает текущие настройки (домашняя страница, запрошенные
 	// очистки); вызывается перед каждым запуском.
 	Prefs func() (home string, clear []string)
@@ -221,13 +225,18 @@ func (b *Browser) stopBridge() {
 	}
 }
 
-// writeConfig записывает user.js, userChrome.css и расширение перед
-// запуском и удаляет policies.json прежних версий.
+// writeConfig записывает user.js, userChrome.css, расширение и языковой
+// пакет перед запуском и удаляет policies.json прежних версий.
 func (b *Browser) writeConfig() error {
 	cfg := Config{FirefoxDir: b.opt.FirefoxDir, ProfileDir: b.opt.ProfileDir, DownloadDir: b.opt.DownloadDir}
 	if b.opt.Prefs != nil {
 		cfg.Home, cfg.Clear = b.opt.Prefs()
 	}
+	var lang string
+	if b.opt.Lang != nil {
+		lang = b.opt.Lang()
+	}
+	cfg.Locale = InstallLangpack(cfg.FirefoxDir, cfg.ProfileDir, lang)
 	if err := os.Remove(cfg.LegacyPoliciesPath()); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("browser settings: %w", err)
 	}

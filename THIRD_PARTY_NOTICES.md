@@ -8,7 +8,7 @@ MangaReader includes unmodified builds of Mozilla software. They are licensed un
 
 | Component | Distributed in | Version (pinned in) | License | Source code |
 |---|---|---|---|---|
-| Firefox ESR | Windows package (`browser\firefox`) | `153.3.0esr` ([`tools/fetch-firefox/main.go`](tools/fetch-firefox/main.go)) | MPL-2.0 | [archive.mozilla.org/pub/firefox/releases/153.3.0esr/source/](https://archive.mozilla.org/pub/firefox/releases/153.3.0esr/source/) |
+| Firefox ESR | Windows package (`browser\firefox`): `en-US` build and language packs (`langpacks\ru.xpi`) of the same version | `153.3.0esr` ([`tools/fetch-firefox/main.go`](tools/fetch-firefox/main.go)) | MPL-2.0 | [archive.mozilla.org/pub/firefox/releases/153.3.0esr/source/](https://archive.mozilla.org/pub/firefox/releases/153.3.0esr/source/) |
 | GeckoView | Android APK | `156.0.20260921121718` ([`android/app/build.gradle.kts`](android/app/build.gradle.kts)) | MPL-2.0 | [hg.mozilla.org/releases/mozilla-release/rev/6f2c158dfc7e](https://hg.mozilla.org/releases/mozilla-release/rev/6f2c158dfc7e9693f880fad2510ceb51a158c069) (revision from the Maven POM), release archive [archive.mozilla.org/pub/firefox/releases/156.0/source/](https://archive.mozilla.org/pub/firefox/releases/156.0/source/) |
 
 The Firefox ESR and GeckoView builds may themselves include third-party code. Their licenses are listed in `about:license` inside the browser and in the source archives above.

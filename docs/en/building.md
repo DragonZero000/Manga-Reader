@@ -63,7 +63,9 @@ The version is set **only** in `FyneApp.toml`, field `Version`, as `MAJOR.MINOR.
 
 `make browser` downloads Firefox ESR into `browser\firefox` once (the version and SHA-256 are pinned in `tools/fetch-firefox`); without it the **Браузер** (Browser) button shows "Браузер не найден" (Browser not found). The installer is cached in `browser\.cache`. Windows only.
 
-The browser integration test runs when `MANGAREADER_BROWSER_IT` is set to the Firefox folder; otherwise it is skipped.
+The base build is `en-US`; for every other app language `fetch-firefox` adds a Firefox language pack (`win64/xpi/<language>.xpi`, checked against SHA-256) to `browser\firefox\langpacks\`. At browser start the pack for the app language is copied into the profile. A language pack only works with the same ESR version: when you update `version`, update the installer checksum and every language pack checksum from the release `SHA256SUMS` at the same time. Adding an app language means a line in the `langpacks` list and `internal/browser/ext/_locales/<language>/messages.json`.
+
+The browser integration tests run when `MANGAREADER_BROWSER_IT` is set to the Firefox folder; otherwise they are skipped. `TestIntegrationLocale` checks the Firefox language and `Accept-Language`; `MANGAREADER_BROWSER_PROFILE` points it at a profile (for example, a copy of an existing one).
 
 ## Frame measurement
 

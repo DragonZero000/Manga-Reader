@@ -11,6 +11,7 @@ import (
 
 	"mangareader/internal/browser"
 	"mangareader/internal/catalog"
+	"mangareader/internal/i18n"
 	"mangareader/internal/library"
 	"mangareader/internal/paths"
 	"mangareader/internal/storage"
@@ -53,6 +54,7 @@ func newBrowser(dir, lib string, settings storage.Settings) *browser.Browser {
 		FirefoxDir:   ff,
 		ProfileDir:   filepath.Join(dir, "browser", "profile"),
 		DownloadDir:  lib,
+		Lang:         i18n.Lang, // язык задаётся после создания сервисов
 		Prefs:        func() (string, []string) { return BrowserPrefs(settings) },
 		ClearApplied: func() { settings.SetString(KeyBrowserClear, "") },
 	})

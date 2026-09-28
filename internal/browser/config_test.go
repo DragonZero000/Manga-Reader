@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -48,6 +49,7 @@ func TestUserJS(t *testing.T) {
 		`user_pref("browser.download.folderList", 2);`,
 		`user_pref("xpinstall.signatures.required", false);`,
 		`user_pref("app.update.disabledForTesting", true);`,
+		`user_pref("intl.locale.requested", "en-US");`,
 	} {
 		if !strings.Contains(js, want) {
 			t.Errorf("нет %s", want)
@@ -56,13 +58,21 @@ func TestUserJS(t *testing.T) {
 	if strings.Contains(js, "browser.startup.homepage\"") || strings.Contains(js, "sanitize.pending") {
 		t.Error("без домашней страницы и очистки эти настройки не пишутся")
 	}
+	if strings.Contains(js, "intl.accept_languages") {
+		t.Error("язык страниц не пишется: выбор пользователя в Firefox сохраняется")
+	}
 
 	c := cfg
 	c.Home = "https://example.org"
 	c.Clear = []string{ClearHistory, ClearCookies}
+	c.Locale = "ru"
 	js = string(UserJS(c))
 	golden(t, "user-custom", []byte(js))
+	if strings.Contains(js, "intl.accept_languages") {
+		t.Error("язык страниц не пишется")
+	}
 	for _, want := range []string{
+		`user_pref("intl.locale.requested", "ru");`,
 		`user_pref("browser.startup.homepage", "https://example.org");`,
 		`user_pref("browser.startup.page", 1);`,
 		`user_pref("privacy.sanitize.pending", "[{\"id\":\"mangareader\",\"itemsToClear\":[\"cache\",\"cookies\",\"downloads\",\"formdata\",\"history\",\"offlineApps\"],\"options\":{}}]");`,
@@ -112,7 +122,7 @@ func TestExtension(t *testing.T) {
 		rc.Close()
 		files[f.Name] = string(b)
 	}
-	for _, name := range []string{"manifest.json", "bg.js", "icon.svg", "config.js"} {
+	for _, name := range []string{"manifest.json", "bg.js", "icon.svg", "config.js", "_locales/en/messages.json", "_locales/ru/messages.json"} {
 		if _, ok := files[name]; !ok {
 			t.Errorf("в архиве нет %s", name)
 		}
@@ -130,5 +140,61 @@ func TestExtension(t *testing.T) {
 	}
 	if got := filepath.Base(ExtensionPath(`C:\p`)); got != "bridge@mangareader.app.xpi" {
 		t.Errorf("имя файла расширения: %s", got)
+	}
+}
+
+// TestExtensionLocales — во всех _locales одинаковый набор ключей, и все
+// __MSG_…__ из manifest.json есть в языке по умолчанию.
+func TestExtensionLocales(t *testing.T) {
+	dirs, err := extFiles.ReadDir("ext/_locales")
+	if err != nil || len(dirs) == 0 {
+		t.Fatalf("нет ext/_locales: %v", err)
+	}
+	keys := map[string]map[string]bool{}
+	for _, d := range dirs {
+		data, err := extFiles.ReadFile("ext/_locales/" + d.Name() + "/messages.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var m map[string]struct{ Message string }
+		if err := json.Unmarshal(data, &m); err != nil {
+			t.Fatalf("%s: %v", d.Name(), err)
+		}
+		keys[d.Name()] = map[string]bool{}
+		for k, v := range m {
+			if v.Message == "" {
+				t.Errorf("%s: пустое сообщение %s", d.Name(), k)
+			}
+			keys[d.Name()][k] = true
+		}
+	}
+
+	manifest, _ := extFiles.ReadFile("ext/manifest.json")
+	var m struct {
+		DefaultLocale string `json:"default_locale"`
+	}
+	if err := json.Unmarshal(manifest, &m); err != nil {
+		t.Fatal(err)
+	}
+	base, ok := keys[m.DefaultLocale]
+	if !ok {
+		t.Fatalf("нет _locales/%s (default_locale)", m.DefaultLocale)
+	}
+	for _, match := range regexp.MustCompile(`__MSG_(\w+)__`).FindAllStringSubmatch(string(manifest), -1) {
+		if !base[match[1]] {
+			t.Errorf("manifest.json: нет ключа %s в _locales/%s", match[1], m.DefaultLocale)
+		}
+	}
+	for lang, ks := range keys {
+		for k := range base {
+			if !ks[k] {
+				t.Errorf("_locales/%s: нет ключа %s", lang, k)
+			}
+		}
+		for k := range ks {
+			if !base[k] {
+				t.Errorf("_locales/%s: лишний ключ %s", lang, k)
+			}
+		}
 	}
 }

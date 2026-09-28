@@ -190,7 +190,7 @@ The **Browser** button on the library toolbar opens a Firefox-based browser. Eve
 - Tabs are switched with the "all tabs" button in the header (next to "new tab"). The "MangaReader" button (book icon) minimizes the browser and shows the app.
 - Extensions are installed from addons.mozilla.org and kept in the profile. The browser theme is always dark.
 - Firefox updates, telemetry, ads and welcome screens are disabled. The Firefox version is updated together with the app.
-- Firefox itself is currently in Russian regardless of the app language.
+- Firefox menus, settings and dialogs follow the app language (it applies the next time the browser opens after the app restarts); strings missing from a translation are shown in English. Sites are asked for pages in that language too, as in regular Firefox; if you change the page languages in Firefox settings, your choice is kept.
 - The source page address is stored in the file itself (an NTFS stream) and survives renaming; it is lost when copying to a FAT/exFAT USB stick. For files downloaded by other browsers, the Windows download mark is used — sites often trim it to the home page.
 - While open, Firefox keeps a few values in the registry (`HKCU\Software\Mozilla\Firefox`); after the browser closes, the app removes them. Values of other Firefox installations are left alone.
 

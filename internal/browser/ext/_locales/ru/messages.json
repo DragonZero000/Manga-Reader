@@ -1,0 +1,5 @@
+{
+  "extName": { "message": "MangaReader" },
+  "extDescription": { "message": "Встроенное расширение MangaReader: кнопка возврата в приложение и ссылка на страницу загрузки." },
+  "actionTitle": { "message": "MangaReader — показать приложение" }
+}
