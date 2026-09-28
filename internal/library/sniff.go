@@ -9,7 +9,7 @@ import (
 )
 
 // ErrEmpty — файл нулевого размера.
-var ErrEmpty = errors.New("Пустой файл")
+var ErrEmpty = errors.New("empty file")
 
 // Kind — тип файла, определённый по содержимому.
 type Kind int
@@ -32,28 +32,30 @@ type UnsupportedError struct {
 	Ext  string // расширение файла (для KindZip)
 }
 
-const onlyZip = " — поддерживаются только zip-архивы"
+const onlyZip = " - only zip archives are supported"
 
+// Error — технический текст на английском; текст на языке интерфейса UI
+// строит по Kind и Ext.
 func (e *UnsupportedError) Error() string {
 	switch e.Kind {
 	case KindImage:
-		return "Изображение" + onlyZip
+		return "image" + onlyZip
 	case KindVideo:
-		return "Видео" + onlyZip
+		return "video" + onlyZip
 	case KindAudio:
-		return "Аудио" + onlyZip
+		return "audio" + onlyZip
 	case KindPDF:
 		return "PDF" + onlyZip
 	case KindOtherArchive:
-		return "Архив RAR/7z" + onlyZip
+		return "RAR/7z archive" + onlyZip
 	case KindText:
-		return "Текстовый файл" + onlyZip
+		return "text file" + onlyZip
 	case KindHTML:
-		return "Веб-страница (HTML) вместо архива — вероятно, сайт вернул страницу с ошибкой или проверкой"
+		return "web page (HTML) instead of an archive - the site probably returned an error or a check page"
 	case KindZip:
-		return "Zip-архив с расширением «" + e.Ext + "» — поддерживаются только файлы .zip"
+		return "zip archive with extension \"" + e.Ext + "\" - only .zip files are supported"
 	}
-	return "Неподдерживаемый формат"
+	return "unsupported format"
 }
 
 // sniffLen — сколько первых байт читается для определения типа.

@@ -15,6 +15,7 @@ import (
 	"mangareader/internal/library"
 	"mangareader/internal/search"
 	"mangareader/internal/storage"
+	"mangareader/internal/ui/screens"
 )
 
 // findButton ищет кнопку с текстом в дереве объектов.
@@ -53,7 +54,7 @@ func TestBrowserUIWithoutFirefox(t *testing.T) {
 	}
 	// Firefox не найден: ошибка с путём (Open в горутине → toast)
 	err := svc.Browser.Open("")
-	if err == nil || !strings.Contains(err.Error(), "Браузер не найден") || !strings.Contains(err.Error(), "firefox.exe") {
+	if err == nil || !strings.Contains(screens.ErrorText(err), "Браузер не найден: ") || !strings.Contains(screens.ErrorText(err), "firefox.exe") {
 		t.Fatalf("ошибка: %v", err)
 	}
 }

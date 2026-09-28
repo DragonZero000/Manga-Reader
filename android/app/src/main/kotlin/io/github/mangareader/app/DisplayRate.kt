@@ -18,7 +18,7 @@ object DisplayRate {
     fun apply(ctx: Context, max60: Boolean) {
         val activity = ctx as? Activity
         if (activity == null) {
-            Log.w(TAG, "частота экрана: нет Activity ($ctx)")
+            Log.w(TAG, "display refresh rate: no Activity ($ctx)")
             return
         }
         activity.runOnUiThread {
@@ -41,9 +41,9 @@ object DisplayRate {
                     }
                 }
                 window.attributes = lp
-                Log.i(TAG, "частота экрана: max60=$max60 mode=${lp.preferredDisplayModeId} rate=${lp.preferredRefreshRate}")
+                Log.i(TAG, "display refresh rate: max60=$max60 mode=${lp.preferredDisplayModeId} rate=${lp.preferredRefreshRate}")
             } catch (e: Exception) {
-                Log.w(TAG, "частота экрана", e)
+                Log.w(TAG, "display refresh rate", e)
             }
         }
     }

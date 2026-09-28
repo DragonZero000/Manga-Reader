@@ -28,7 +28,7 @@ func SetMax60(on bool) error {
 	return driver.RunNative(func(c any) error {
 		ac, ok := c.(*driver.AndroidContext)
 		if !ok {
-			return errors.New("нет контекста Android")
+			return errors.New("no Android context")
 		}
 		v := C.int(0)
 		if on {

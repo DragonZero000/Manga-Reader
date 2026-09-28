@@ -3,9 +3,12 @@
 package catalog
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"mangareader/internal/search"
 )
 
 func openTest(t *testing.T, path, root string) *Catalog {
@@ -71,6 +74,20 @@ func TestOpenOldVersionRecreates(t *testing.T) {
 	c2 := openTest(t, path, "root")
 	if !c2.Fresh() || count(t, c2, "links") != 0 {
 		t.Fatalf("старая версия: fresh=%v, links=%d", c2.Fresh(), count(t, c2, "links"))
+	}
+}
+
+// Каталог предыдущей версии схемы (тексты ошибок на русском) пересоздаётся.
+func TestOpenPreviousSchemaRecreates(t *testing.T) {
+	path := filepath.Join(t.TempDir(), FileName)
+	c := openTest(t, path, "root")
+	c.db.Exec(`INSERT INTO files(rel, size, mtime, err_kind, err_text) VALUES('a.txt', 1, 1, '', 'не удалось открыть')`)
+	c.db.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, (schemaVersion-1)*100+search.NormVersion))
+	c.Close()
+
+	c2 := openTest(t, path, "root")
+	if !c2.Fresh() || count(t, c2, "files") != 0 {
+		t.Fatalf("предыдущая версия: fresh=%v, files=%d", c2.Fresh(), count(t, c2, "files"))
 	}
 }
 

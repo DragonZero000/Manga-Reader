@@ -43,7 +43,7 @@ func (s ScanStore) Load() (map[string]library.StoredEntry, error) {
 		if errText.Valid {
 			e.Err = library.RestoreError(kind.String, errText.String)
 		} else if err := json.Unmarshal(gallery, &e.Gallery); err != nil {
-			log.Printf("каталог: %s: запись повреждена, файл будет разобран заново: %v", rel, err)
+			log.Printf("catalog: %s: damaged record, the file will be parsed again: %v", rel, err)
 			continue
 		}
 		out[rel] = e
@@ -120,7 +120,7 @@ func (c *Catalog) checkIndex() error {
 	if docs == galleries && orphans == 0 {
 		return nil
 	}
-	log.Printf("каталог: индекс поиска (%d) разошёлся с галереями (%d) — перестраиваю", docs, galleries)
+	log.Printf("catalog: search index (%d) differs from galleries (%d), rebuilding", docs, galleries)
 	stored, err := c.ScanStore().Load()
 	if err != nil {
 		return err

@@ -1,5 +1,6 @@
 package io.github.mangareader.app.browser
 
+import io.github.mangareader.app.R
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
@@ -43,7 +44,7 @@ object DownloadManager {
     fun start(ctx: Context, response: WebResponse, page: String, tree: String, onFinish: () -> Unit = {}) {
         val app = ctx.applicationContext
         if (tree.isBlank()) {
-            BrowserEngine.toast("Папка библиотеки не выбрана")
+            BrowserEngine.toast(Lang.str(app, R.string.library_not_selected))
             response.body?.close()
             onFinish()
             return
@@ -69,13 +70,13 @@ object DownloadManager {
                 val taken = childNames(cr, tree) + items.filter { it.state == State.RUNNING }.map { it.name }
                 val name = uniqueName(fileName(response), taken)
                 part = DocumentsContract.createDocument(cr, parent, "application/octet-stream", "$name.part")
-                    ?: error("не удалось создать $name.part")
+                    ?: error("could not create $name.part")
                 item = Item(name, page).also { items.add(0, it) }
             }
             val it = item!!
             it.total = contentLength(response)
             changed(ctx)
-            val body = response.body ?: error("нет тела ответа")
+            val body = response.body ?: error("no response body")
             body.use { input ->
                 cr.openOutputStream(part!!)!!.use { out ->
                     val buf = ByteArray(64 * 1024)
@@ -92,16 +93,16 @@ object DownloadManager {
                     }
                 }
             }
-            DocumentsContract.renameDocument(cr, part!!, it.name) ?: error("не удалось переименовать ${it.name}.part")
+            DocumentsContract.renameDocument(cr, part!!, it.name) ?: error("could not rename ${it.name}.part")
             it.state = State.DONE
-            Log.i(TAG, "скачано ${it.name} (${it.done} байт) со страницы $page")
+            Log.i(TAG, "downloaded ${it.name} (${it.done} bytes) from page $page")
             GoBridge.nativeOnDownloaded(it.name, page)
-            BrowserEngine.toast("Скачано: ${it.name}")
+            BrowserEngine.toast(Lang.str(ctx, R.string.downloaded, it.name))
         } catch (e: Exception) {
-            Log.e(TAG, "загрузка ${response.uri}", e)
+            Log.e(TAG, "download ${response.uri}", e)
             item?.state = State.FAILED
             part?.let { runCatching { DocumentsContract.deleteDocument(cr, it) } }
-            BrowserEngine.toast("Не удалось скачать ${item?.name ?: response.uri}")
+            BrowserEngine.toast(Lang.str(ctx, R.string.download_error, item?.name ?: response.uri))
         } finally {
             changed(ctx)
         }

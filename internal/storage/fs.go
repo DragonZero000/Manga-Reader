@@ -6,9 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
-	"strings"
 )
 
 // FS — папка библиотеки в обычной файловой системе.
@@ -23,7 +21,7 @@ func (s *FS) Name() string { return s.root }
 
 func (s *FS) Walk(ctx context.Context, fn func(Entry) error) error {
 	if s.root == "" {
-		return fmt.Errorf("%w: папка не определена", ErrUnavailable)
+		return fmt.Errorf("%w: folder is not set", ErrUnavailable)
 	}
 	if _, err := os.Stat(s.root); err != nil {
 		return fmt.Errorf("%w: %v", ErrUnavailable, err)
@@ -55,9 +53,9 @@ func (s *FS) Walk(ctx context.Context, fn func(Entry) error) error {
 
 // path — путь файла на диске по относительному пути внутри папки.
 func (s *FS) path(relPath string) (string, error) {
-	clean := path.Clean("/" + relPath)[1:]
-	if clean == "" || clean != relPath || strings.HasPrefix(clean, "../") {
-		return "", fmt.Errorf("недопустимый путь %q", relPath)
+	clean, err := cleanRel(relPath)
+	if err != nil {
+		return "", err
 	}
 	return filepath.Join(s.root, filepath.FromSlash(clean)), nil
 }
@@ -81,7 +79,7 @@ func (s *FS) Open(relPath string) (File, error) {
 	}
 	if info.IsDir() {
 		f.Close()
-		return nil, errors.New("это папка")
+		return nil, errors.New("this is a folder")
 	}
 	return &osFile{File: f, size: info.Size()}, nil
 }

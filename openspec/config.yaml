@@ -9,7 +9,8 @@ context: |
 
   Stack: Go 1.26 (go.mod), Fyne v2.8.0 с миграцией fyneDo: обновления UI из горутин —
   только через fyne.Do; сборки идут с тегом migrated_fynedo, make run — с проверками потоков.
-  Без базы данных: индекс поиска в памяти, настройки — settings.json / Preferences.
+  Каталог библиотеки и индекс поиска — SQLite library.db (internal/catalog, при недоступности — в памяти);
+  настройки — settings.json / Preferences.
 
   Platforms:
   - Windows (amd64): портативный режим — всё в папке рядом с exe (manga/, settings.json,
@@ -29,7 +30,12 @@ context: |
   Version: единственный источник — FyneApp.toml (Version, MAJOR.MINOR.PATCH);
   Android versionCode = MAJOR*10000 + MINOR*100 + PATCH (internal/appversion).
 
-  Language: интерфейс только на русском (i18n пока нет, строки в коде); комментарии в коде — на русском.
+  Language: интерфейс на русском и английском (internal/i18n, locales/<язык>.json; English — по умолчанию).
+  Язык — настройка ui.language (auto/en/ru): по умолчанию язык системы, если перевода нет — English;
+  смена — после перезапуска. Всё, что видит пользователь, — через i18n.T/N (в коде internal/ui нет
+  строк с кириллицей — это проверяет тест); ошибки сервисов типизированы, err.Error() — на английском,
+  перевод — в UI (screens.ErrorText). Логи (Go и Kotlin) — на английском. Браузер Android — строки в
+  res/values*/strings.xml. Комментарии в коде — на русском.
   Docs: README.md (English) + README.ru.md; docs/en/ и docs/ru/ с одинаковыми именами файлов;
   THIRD_PARTY_NOTICES.md — распространяемые сторонние компоненты и их лицензии.
 
@@ -52,4 +58,5 @@ rules:
     - Always end with a verification task that runs make test (plus platform builds if build code changed)
     - If user-visible behavior or build steps change, add a task to update docs in BOTH languages (docs/en + docs/ru, README.md + README.ru.md)
     - New package in internal/ → add it to internal/archtest and to the architecture docs (docs/en/architecture.md, docs/ru/architecture.md)
+    - New user-visible string → a key in every internal/i18n/locales/*.json; Android browser strings → every res/values*/strings.xml
     - Changed distributed components (Firefox ESR, GeckoView, go.mod modules) → task to update THIRD_PARTY_NOTICES.md

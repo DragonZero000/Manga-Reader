@@ -95,7 +95,7 @@ func (b *Bridge) download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := storage.WriteSourceURL(req.File, page); err != nil {
-		log.Printf("браузер: адрес страницы для %s: %v", rel, err)
+		log.Printf("browser: page address for %s: %v", rel, err)
 		http.Error(w, "error", http.StatusInternalServerError)
 		return
 	}

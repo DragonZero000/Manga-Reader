@@ -55,73 +55,63 @@ func NewQuery() Query {
 	return Query{Sort: DefaultSort}
 }
 
-// FilterError — ошибка валидации конкретного фильтра.
-type FilterError struct {
-	Index  int
-	Filter Filter
-	Reason string
-}
-
-func (e *FilterError) Error() string {
-	return fmt.Sprintf("фильтр #%d (%s): %s", e.Index+1, e.Filter, e.Reason)
-}
-
 // Validate проверяет запрос и нормализует теги в фильтрах.
 func (q *Query) Validate() error {
 	if q.Limit < 0 {
-		return errors.New("лимит не может быть отрицательным")
+		return errors.New("limit must not be negative")
 	}
 	if q.Offset < 0 {
-		return errors.New("смещение не может быть отрицательным")
+		return errors.New("offset must not be negative")
 	}
 	if q.Sort.Field == 0 {
 		q.Sort = DefaultSort
 	}
 	if fi, ok := q.Sort.Field.Info(); !ok || !fi.Sortable {
-		return fmt.Errorf("сортировка по полю %s недоступна", q.Sort.Field)
+		return fmt.Errorf("sorting by field %s is not available", q.Sort.Field)
 	}
 	for i := range q.Filters {
-		if reason := validateFilter(&q.Filters[i]); reason != "" {
-			return &FilterError{Index: i, Filter: q.Filters[i], Reason: reason}
+		if r := validateFilter(&q.Filters[i]); r != nil {
+			return &FilterError{Index: i, Filter: q.Filters[i], Reason: *r}
 		}
 	}
 	return nil
 }
 
-func validateFilter(f *Filter) string {
+// validateFilter проверяет фильтр; nil — корректен.
+func validateFilter(f *Filter) *Reason {
 	fi, ok := f.Field.Info()
 	if !ok {
-		return "неизвестное поле"
+		return reason(ReasonUnknownField)
 	}
 	if !fi.Allows(f.Op) {
-		return fmt.Sprintf("операция «%s» недопустима для поля %s", f.Op, fi.Name)
+		return reason(ReasonOpNotAllowed, f.Op.String(), fi.Name)
 	}
 	v := &f.Value
 	switch fi.Kind {
 	case KindText:
 		if strings.TrimSpace(v.Text) == "" {
-			return "пустой текст"
+			return reason(ReasonEmptyText)
 		}
 	case KindTag:
 		v.Tag = model.NewTag(v.Tag.Type, v.Tag.Name)
 		if v.Tag.Name == "" {
-			return "пустой тег"
+			return reason(ReasonEmptyTag)
 		}
 		// пустой тип — «тег с таким именем любого типа»
 	case KindNumber:
 		if v.Num < 0 || (f.Op == OpBetween && v.Num2 < 0) {
-			return "отрицательное значение"
+			return reason(ReasonNegative)
 		}
 		if f.Op == OpBetween && v.Num > v.Num2 {
-			return fmt.Sprintf("некорректный диапазон: %d больше %d", v.Num, v.Num2)
+			return reason(ReasonBadRange, v.Num, v.Num2)
 		}
 	case KindDate:
 		if v.Time.IsZero() || (f.Op == OpBetween && v.Time2.IsZero()) {
-			return "не задана дата"
+			return reason(ReasonNoDate)
 		}
 		if f.Op == OpBetween && v.Time.After(v.Time2) {
-			return "некорректный диапазон дат: начало позже конца"
+			return reason(ReasonBadDateRange)
 		}
 	}
-	return ""
+	return nil
 }

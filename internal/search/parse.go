@@ -2,7 +2,6 @@ package search
 
 import (
 	"errors"
-	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -11,16 +10,6 @@ import (
 
 	"mangareader/internal/model"
 )
-
-// ParseError — ошибка разбора строки запроса: проблемный фрагмент и причина.
-type ParseError struct {
-	Token  string
-	Reason string
-}
-
-func (e *ParseError) Error() string {
-	return "«" + e.Token + "» — " + e.Reason
-}
 
 // parser описывает поле строки запроса.
 type fieldParser struct {
@@ -64,7 +53,7 @@ func Parse(s string) (Query, error) {
 		name, value, isField := splitField(body)
 		if !isField {
 			if neg {
-				return Query{}, &ParseError{tok, "исключение поддерживается только для тегов"}
+				return Query{}, &ParseError{tok, Reason{Code: ReasonNegationTagsOnly}}
 			}
 			if w := Normalize(strings.TrimSpace(unquote(body))); w != "" {
 				q.Terms = append(q.Terms, w)
@@ -73,15 +62,19 @@ func Parse(s string) (Query, error) {
 		}
 		fp := queryFields[name]
 		if neg && !fp.isTag {
-			return Query{}, &ParseError{tok, "исключение поддерживается только для тегов"}
+			return Query{}, &ParseError{tok, Reason{Code: ReasonNegationTagsOnly}}
 		}
 		value = strings.TrimSpace(unquote(value))
 		if value == "" {
-			return Query{}, &ParseError{tok, "не указано значение"}
+			return Query{}, &ParseError{tok, Reason{Code: ReasonNoValue}}
 		}
 		f, err := parseFilter(fp, value, neg)
 		if err != nil {
-			return Query{}, &ParseError{tok, err.Error()}
+			var r *Reason
+			if !errors.As(err, &r) {
+				return Query{}, err
+			}
+			return Query{}, &ParseError{tok, *r}
 		}
 		q.Filters = append(q.Filters, f)
 		filterTokens = append(filterTokens, tok)
@@ -178,13 +171,13 @@ func parseNumber(field Field, value string) (Filter, error) {
 		}
 		n, err := num(strings.TrimSpace(s), 10, 64)
 		if err != nil || n < 0 {
-			return 0, fmt.Errorf("ожидается неотрицательное целое число, получено %q", s)
+			return 0, reason(ReasonNotNumber, s)
 		}
 		return n, nil
 	}
 	op, rest := splitOp(value)
 	if field == FieldID && (op != "" || strings.Contains(rest, "..")) {
-		return Filter{}, errors.New("для id поддерживается только точное значение")
+		return Filter{}, reason(ReasonIDExactOnly)
 	}
 	if op == "" {
 		if a, b, ok := strings.Cut(rest, ".."); ok {
@@ -243,7 +236,7 @@ func parseSize(s string) (int64, error) {
 	}
 	f, err := strconv.ParseFloat(strings.Replace(v, ",", ".", 1), 64)
 	if err != nil || f < 0 || math.IsInf(f, 0) || math.IsNaN(f) {
-		return 0, fmt.Errorf("ожидается размер вида 10mb, 1,5gb или 500k, получено %q", s)
+		return 0, reason(ReasonBadSize, s)
 	}
 	return int64(math.Round(f * mul)), nil
 }
@@ -268,7 +261,7 @@ func period(s string, loc *time.Location) (start, end time.Time, err error) {
 		}
 		return t, p.next(t).Add(-time.Nanosecond), nil
 	}
-	return time.Time{}, time.Time{}, fmt.Errorf("ожидается дата ГГГГ, ГГГГ-ММ или ГГГГ-ММ-ДД, получено %q", s)
+	return time.Time{}, time.Time{}, reason(ReasonBadDate, s)
 }
 
 func parseDate(field Field, value string, loc *time.Location) (Filter, error) {

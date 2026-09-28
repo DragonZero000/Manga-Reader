@@ -10,7 +10,7 @@ import "errors"
 const Supported = false
 
 // ErrUnsupported — функция есть только на Android.
-var ErrUnsupported = errors.New("частота экрана настраивается только на Android")
+var ErrUnsupported = errors.New("display refresh rate is configurable only on Android")
 
 // SetMax60: частота экрана настраивается только на Android.
 func SetMax60(bool) error { return ErrUnsupported }

@@ -18,6 +18,7 @@ import android.widget.PopupMenu
 import android.widget.ScrollView
 import android.widget.Switch
 import android.widget.TextView
+import io.github.mangareader.app.R
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.GeckoView
 import org.mozilla.geckoview.WebExtension
@@ -37,6 +38,8 @@ class BrowserActivity : Activity(), BrowserEngine.Listener, BrowserToolbar.Actio
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // язык — до движка и панели: из него строки интерфейса и язык страниц
+        BrowserSettings.parse(intent?.getStringExtra("settings"))?.let { Lang.code = it.lang }
         BrowserEngine.init(this)
         gecko = GeckoView(this)
         toolbar = BrowserToolbar(this).also { it.actions = this }
@@ -53,7 +56,10 @@ class BrowserActivity : Activity(), BrowserEngine.Listener, BrowserToolbar.Actio
 
     /** Настройки, папка и адрес из Intent читалки. */
     private fun apply(intent: Intent?, created: Boolean) {
-        BrowserSettings.parse(intent?.getStringExtra("settings"))?.let { BrowserEngine.settings = it }
+        BrowserSettings.parse(intent?.getStringExtra("settings"))?.let {
+            BrowserEngine.settings = it
+            BrowserEngine.setLanguage(it.lang)
+        }
         intent?.getStringExtra("tree")?.takeIf { it.isNotBlank() }?.let { BrowserEngine.tree = it }
         if (created || toolbarTop != BrowserEngine.settings.toolbarTop) layout()
         val url = intent?.getStringExtra("url").orEmpty()
@@ -122,6 +128,9 @@ class BrowserActivity : Activity(), BrowserEngine.Listener, BrowserToolbar.Actio
         refresh()
     }
 
+    /** Строка на языке приложения. */
+    private fun s(id: Int, vararg args: Any): String = Lang.str(this, id, *args)
+
     private fun refresh() {
         val tab = BrowserEngine.activeTab()
         toolbar.show(tab, BrowserEngine.tabs.size, tab != null && BrowserEngine.bookmarks.contains(tab.url))
@@ -136,13 +145,13 @@ class BrowserActivity : Activity(), BrowserEngine.Listener, BrowserToolbar.Actio
     override fun onInstallPrompt(name: String, permissions: List<String>, sites: Int, decide: (Boolean) -> Unit) = runOnUiThread {
         val perms = buildList {
             addAll(permissions)
-            if (sites > 0) add("доступ к данным сайтов: $sites")
+            if (sites > 0) add(s(R.string.ext_perm_sites, sites))
         }.joinToString("\n• ", prefix = "• ")
         AlertDialog.Builder(this)
-            .setTitle("Добавить «$name»?")
-            .setMessage("Расширению нужны разрешения:\n$perms")
-            .setPositiveButton("Добавить") { _, _ -> decide(true) }
-            .setNegativeButton("Отмена") { _, _ -> decide(false) }
+            .setTitle(s(R.string.ext_add_title, name))
+            .setMessage(s(R.string.ext_add_message, perms))
+            .setPositiveButton(s(R.string.add)) { _, _ -> decide(true) }
+            .setNegativeButton(s(R.string.cancel)) { _, _ -> decide(false) }
             .setOnCancelListener { decide(false) }
             .show()
     }
@@ -181,16 +190,16 @@ class BrowserActivity : Activity(), BrowserEngine.Listener, BrowserToolbar.Actio
         val tab = BrowserEngine.activeTab() ?: return
         if (tab.url.isBlank() || tab.url == "about:blank") return
         val added = BrowserEngine.bookmarks.toggle(tab.title, tab.url)
-        BrowserEngine.toast(if (added) "Добавлено в закладки" else "Удалено из закладок")
+        BrowserEngine.toast(s(if (added) R.string.bookmark_added else R.string.bookmark_removed))
         refresh()
     }
 
     override fun onMenu(anchor: View) {
         PopupMenu(this, anchor).apply {
-            menu.add("Новая вкладка").setOnMenuItemClickListener { BrowserEngine.newTab(null); true }
-            menu.add("Закладки").setOnMenuItemClickListener { showBookmarks(); true }
-            menu.add("Загрузки").setOnMenuItemClickListener { showDownloads(); true }
-            menu.add("Расширения").setOnMenuItemClickListener { showExtensions(); true }
+            menu.add(s(R.string.menu_new_tab)).setOnMenuItemClickListener { BrowserEngine.newTab(null); true }
+            menu.add(s(R.string.menu_bookmarks)).setOnMenuItemClickListener { showBookmarks(); true }
+            menu.add(s(R.string.menu_downloads)).setOnMenuItemClickListener { showDownloads(); true }
+            menu.add(s(R.string.menu_extensions)).setOnMenuItemClickListener { showExtensions(); true }
             show()
         }
     }
@@ -198,14 +207,14 @@ class BrowserActivity : Activity(), BrowserEngine.Listener, BrowserToolbar.Actio
     override fun onTabs() {
         val list = listDialogBody()
         val dialog = AlertDialog.Builder(this)
-            .setTitle("Вкладки: ${BrowserEngine.tabs.size}")
+            .setTitle(s(R.string.tabs_title, BrowserEngine.tabs.size))
             .setView(ScrollView(this).apply { addView(list) })
-            .setPositiveButton("Новая вкладка") { _, _ -> BrowserEngine.newTab(null) }
-            .setNegativeButton("Закрыть", null)
+            .setPositiveButton(s(R.string.menu_new_tab)) { _, _ -> BrowserEngine.newTab(null) }
+            .setNegativeButton(s(R.string.close), null)
             .create()
         BrowserEngine.tabs.forEachIndexed { i, tab ->
             list.addView(row(
-                tab.title.ifBlank { "Новая вкладка" }, tab.url, i == BrowserEngine.active,
+                tab.title.ifBlank { s(R.string.menu_new_tab) }, tab.url, i == BrowserEngine.active,
                 onOpen = { BrowserEngine.select(i); dialog.dismiss() },
                 onClose = { BrowserEngine.close(i); dialog.dismiss(); onTabs() },
             ))
@@ -217,11 +226,11 @@ class BrowserActivity : Activity(), BrowserEngine.Listener, BrowserToolbar.Actio
         val list = listDialogBody()
         val items = BrowserEngine.bookmarks.list()
         val dialog = AlertDialog.Builder(this)
-            .setTitle("Закладки")
+            .setTitle(s(R.string.menu_bookmarks))
             .setView(ScrollView(this).apply { addView(list) })
-            .setNegativeButton("Закрыть", null)
+            .setNegativeButton(s(R.string.close), null)
             .create()
-        if (items.isEmpty()) list.addView(note("Закладок пока нет — нажмите ☆ на странице"))
+        if (items.isEmpty()) list.addView(note(s(R.string.bookmarks_empty)))
         items.forEach { b ->
             list.addView(row(
                 b.title, b.url, false,
@@ -235,20 +244,20 @@ class BrowserActivity : Activity(), BrowserEngine.Listener, BrowserToolbar.Actio
     private fun showDownloads() {
         val list = listDialogBody()
         val items = DownloadManager.list()
-        if (items.isEmpty()) list.addView(note("Загрузок пока нет. Файлы сохраняются в папку библиотеки"))
+        if (items.isEmpty()) list.addView(note(s(R.string.downloads_empty)))
         items.forEach { d ->
             val status = when (d.state) {
                 DownloadManager.State.RUNNING ->
-                    if (d.total > 0) "скачивается: ${d.done * 100 / d.total}%" else "скачивается: ${d.done / 1024} КБ"
-                DownloadManager.State.DONE -> "готово — в библиотеке"
-                DownloadManager.State.FAILED -> "не удалось скачать"
+                    if (d.total > 0) s(R.string.download_progress, (d.done * 100 / d.total).toInt()) else s(R.string.download_progress_kb, (d.done / 1024).toInt())
+                DownloadManager.State.DONE -> s(R.string.download_done)
+                DownloadManager.State.FAILED -> s(R.string.download_failed)
             }
             list.addView(row(d.name, status, false, onOpen = null, onClose = null))
         }
         AlertDialog.Builder(this)
-            .setTitle("Загрузки")
+            .setTitle(s(R.string.menu_downloads))
             .setView(ScrollView(this).apply { addView(list) })
-            .setNegativeButton("Закрыть", null)
+            .setNegativeButton(s(R.string.close), null)
             .show()
     }
 
@@ -258,15 +267,15 @@ class BrowserActivity : Activity(), BrowserEngine.Listener, BrowserToolbar.Actio
             runOnUiThread {
                 val list = listDialogBody()
                 val builder = AlertDialog.Builder(this)
-                    .setTitle("Расширения")
+                    .setTitle(s(R.string.menu_extensions))
                     .setView(ScrollView(this).apply { addView(list) })
-                    .setPositiveButton("Найти расширения") { _, _ ->
-                        BrowserEngine.newTab("https://addons.mozilla.org/ru/android/")
+                    .setPositiveButton(s(R.string.ext_find)) { _, _ ->
+                        BrowserEngine.newTab(s(R.string.amo_url))
                     }
-                    .setNegativeButton("Закрыть", null)
+                    .setNegativeButton(s(R.string.close), null)
                 val dialog = builder.create()
                 val user = exts.orEmpty().filter { !it.isBuiltIn }
-                if (user.isEmpty()) list.addView(note("Расширений нет. Установите их с addons.mozilla.org кнопкой «Добавить в Firefox»"))
+                if (user.isEmpty()) list.addView(note(s(R.string.ext_empty)))
                 user.forEach { e -> list.addView(extensionRow(controller, e) { dialog.dismiss(); showExtensions() }) }
                 dialog.show()
             }
@@ -292,9 +301,9 @@ class BrowserActivity : Activity(), BrowserEngine.Listener, BrowserToolbar.Actio
             setPadding(dp(16), dp(4), dp(8), dp(4))
             setOnClickListener {
                 AlertDialog.Builder(this@BrowserActivity)
-                    .setTitle("Удалить «$name»?")
-                    .setPositiveButton("Удалить") { _, _ -> controller.uninstall(e).accept({ runOnUiThread(reload) }, { runOnUiThread(reload) }) }
-                    .setNegativeButton("Отмена", null)
+                    .setTitle(s(R.string.ext_remove_title, name))
+                    .setPositiveButton(s(R.string.remove)) { _, _ -> controller.uninstall(e).accept({ runOnUiThread(reload) }, { runOnUiThread(reload) }) }
+                    .setNegativeButton(s(R.string.cancel), null)
                     .show()
             }
         })
@@ -303,7 +312,7 @@ class BrowserActivity : Activity(), BrowserEngine.Listener, BrowserToolbar.Actio
 
     // --- системная «Назад» и возврат в читалку ---
 
-    @Deprecated("системная «Назад»")
+    @Deprecated("system Back")
     override fun onBackPressed() {
         val tab = BrowserEngine.activeTab()
         if (tab != null && tab.canGoBack) BrowserEngine.activeSession()?.goBack() else finish()

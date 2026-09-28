@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"mangareader/internal/i18n"
 	"mangareader/internal/library"
 	"mangareader/internal/mobilebrowser"
 	"mangareader/internal/model"
@@ -29,6 +30,15 @@ func TestMobileBrowserSettings(t *testing.T) {
 	st.SetString(KeyBrowserToolbar, "сбоку")
 	if MobileBrowserSettings(st).Toolbar != mobilebrowser.ToolbarBottom {
 		t.Fatal("неизвестное положение — снизу")
+	}
+}
+
+// Браузер получает язык приложения — для интерфейса и языка страниц.
+func TestMobileBrowserSettingsLang(t *testing.T) {
+	i18n.Init("ru")
+	t.Cleanup(func() { i18n.Init(i18n.Fallback) })
+	if got := MobileBrowserSettings(storage.NewMemSettings()).Lang; got != "ru" {
+		t.Fatalf("язык браузера %q", got)
 	}
 }
 

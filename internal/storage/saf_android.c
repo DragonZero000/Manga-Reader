@@ -175,3 +175,22 @@ int safOpenFd(uintptr_t jenv, uintptr_t jctx, const char *tree, const char *docI
 	if ((*err = takeException(env)) != NULL) return -1;
 	return fd;
 }
+
+// safDeleteDocument — DocumentsContract.deleteDocument(cr, buildDocumentUriUsingTree(tree, docId)).
+// 0 — удалён, -1 — ошибка (текст в *err).
+int safDeleteDocument(uintptr_t jenv, uintptr_t jctx, const char *tree, const char *docId, char **err) {
+	JNIEnv *env = (JNIEnv *)jenv;
+	jobject cr = resolver(env, (jobject)jctx);
+	jobject treeUri = parseUri(env, tree);
+	jclass dc = (*env)->FindClass(env, "android/provider/DocumentsContract");
+	jmethodID build = (*env)->GetStaticMethodID(env, dc, "buildDocumentUriUsingTree",
+		"(Landroid/net/Uri;Ljava/lang/String;)Landroid/net/Uri;");
+	jobject doc = (*env)->CallStaticObjectMethod(env, dc, build, treeUri, (*env)->NewStringUTF(env, docId));
+	if ((*err = takeException(env)) != NULL) return -1;
+	jmethodID del = (*env)->GetStaticMethodID(env, dc, "deleteDocument",
+		"(Landroid/content/ContentResolver;Landroid/net/Uri;)Z");
+	jboolean ok = (*env)->CallStaticBooleanMethod(env, dc, del, cr, doc);
+	if ((*err = takeException(env)) != NULL) return -1;
+	if (!ok) { *err = strdup("deleteDocument returned false"); return -1; }
+	return 0;
+}

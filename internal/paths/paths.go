@@ -55,7 +55,7 @@ func isGoBuild(exe string) bool {
 // EnsureDir создаёт каталог вместе с родительскими, если его нет.
 func EnsureDir(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("создание папки %s: %w", dir, err)
+		return fmt.Errorf("creating folder %s: %w", dir, err)
 	}
 	return nil
 }

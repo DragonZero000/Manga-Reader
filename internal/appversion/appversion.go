@@ -33,19 +33,19 @@ var (
 func Parse(s string) (Version, error) {
 	m := reFormat.FindStringSubmatch(s)
 	if m == nil {
-		return Version{}, fmt.Errorf("версия %q: ожидается MAJOR.MINOR.PATCH, например 1.2.3 (без суффиксов и ведущих нулей)", s)
+		return Version{}, fmt.Errorf("version %q: expected MAJOR.MINOR.PATCH, e.g. 1.2.3 (no suffixes or leading zeros)", s)
 	}
 	var p [3]int
 	for i := range p {
 		n, err := strconv.Atoi(m[i+1])
 		if err != nil {
-			return Version{}, fmt.Errorf("версия %q: %w", s, err)
+			return Version{}, fmt.Errorf("version %q: %w", s, err)
 		}
 		p[i] = n
 	}
 	v := Version{p[0], p[1], p[2]}
 	if v.Major > maxMajor || v.Minor > maxPart || v.Patch > maxPart {
-		return Version{}, fmt.Errorf("версия %q: MAJOR не больше %d, MINOR и PATCH не больше %d", s, maxMajor, maxPart)
+		return Version{}, fmt.Errorf("version %q: MAJOR must not exceed %d, MINOR and PATCH must not exceed %d", s, maxMajor, maxPart)
 	}
 	return v, nil
 }
@@ -54,11 +54,11 @@ func Parse(s string) (Version, error) {
 func Read(path string) (Version, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return Version{}, fmt.Errorf("метаданные: %w (запускайте из корня проекта)", err)
+		return Version{}, fmt.Errorf("metadata: %w (run from the project root)", err)
 	}
 	m := reVersion.FindSubmatch(data)
 	if m == nil {
-		return Version{}, fmt.Errorf("в %s нет поля Version", path)
+		return Version{}, fmt.Errorf("%s has no Version field", path)
 	}
 	v, err := Parse(string(m[1]))
 	if err != nil {

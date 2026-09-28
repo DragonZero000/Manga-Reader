@@ -114,6 +114,9 @@ func (r *Reader) Layer() fyne.CanvasObject { return r.layer }
 // Visible сообщает, открыта ли читалка.
 func (r *Reader) Visible() bool { return r.visible }
 
+// Gallery — открытое произведение (пустое, если читалка закрыта).
+func (r *Reader) Gallery() model.Gallery { return r.g }
+
 // Open открывает галерею с первой страницы.
 func (r *Reader) Open(g model.Gallery) {
 	r.token++
@@ -139,7 +142,7 @@ func (r *Reader) Open(g model.Gallery) {
 				return
 			}
 			if err != nil {
-				log.Printf("читалка: размеры страниц %s: %v", g.Key, err)
+				log.Printf("reader: page sizes %s: %v", g.Key, err)
 				sizes = make([]library.PageSize, len(g.Pages))
 				for i := range sizes {
 					sizes[i].Err = err

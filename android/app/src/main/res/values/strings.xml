@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Строки встроенного браузера. values — English (язык по умолчанию),
+     values-<язык> — переводы; набор ключей во всех файлах одинаковый. -->
+<resources>
+    <string name="add">Add</string>
+    <string name="cancel">Cancel</string>
+    <string name="close">Close</string>
+    <string name="remove">Remove</string>
+
+    <string name="address_hint">Address or search</string>
+    <string name="menu_new_tab">New tab</string>
+    <string name="menu_bookmarks">Bookmarks</string>
+    <string name="menu_downloads">Downloads</string>
+    <string name="menu_extensions">Extensions</string>
+    <string name="tabs_title">Tabs: %1$d</string>
+
+    <string name="bookmark_added">Added to bookmarks</string>
+    <string name="bookmark_removed">Removed from bookmarks</string>
+    <string name="bookmarks_empty">No bookmarks yet - tap ☆ on a page</string>
+
+    <string name="downloads_empty">No downloads yet. Files are saved to the library folder</string>
+    <string name="download_progress">downloading: %1$d%%</string>
+    <string name="download_progress_kb">downloading: %1$d KB</string>
+    <string name="download_done">done - in the library</string>
+    <string name="download_failed">download failed</string>
+    <string name="downloaded">Downloaded: %1$s</string>
+    <string name="download_error">Could not download %1$s</string>
+    <string name="library_not_selected">The library folder is not selected</string>
+
+    <string name="channel_downloads">Downloads</string>
+    <plurals name="notif_downloading_many">
+        <item quantity="one">Downloading: %1$d file</item>
+        <item quantity="other">Downloading: %1$d files</item>
+    </plurals>
+    <string name="notif_downloading_one">Downloading %1$s</string>
+    <string name="notif_progress">%1$s - %2$d%%</string>
+
+    <string name="ext_add_title">Add “%1$s”?</string>
+    <string name="ext_add_message">The extension needs permissions:\n%1$s</string>
+    <string name="ext_perm_sites">access to site data: %1$d</string>
+    <string name="ext_find">Find extensions</string>
+    <string name="ext_empty">No extensions. Install them from addons.mozilla.org with the “Add to Firefox” button</string>
+    <string name="ext_remove_title">Remove “%1$s”?</string>
+    <string name="ext_installed">Extension installed: %1$s</string>
+    <string name="ext_install_failed">Extension not installed</string>
+    <string name="amo_url">https://addons.mozilla.org/en-US/android/</string>
+
+    <string name="cleared">Cleared</string>
+    <string name="clear_failed">Could not clear: %1$s</string>
+</resources>

@@ -8,6 +8,7 @@ import (
 
 	"mangareader/internal/app"
 	"mangareader/internal/browser"
+	"mangareader/internal/i18n"
 	"mangareader/internal/model"
 )
 
@@ -32,36 +33,36 @@ func newBrowserCard(svc *app.Services, win fyne.Window, notify func(string)) *br
 	st := svc.Settings
 
 	c.home = widget.NewEntry()
-	c.home.SetPlaceHolder("Стартовая страница Firefox")
+	c.home.SetPlaceHolder(i18n.T("browser.home_placeholder_desktop"))
 	c.home.SetText(st.String(app.KeyBrowserHome, ""))
-	c.homeErr = widget.NewLabel("Нужен адрес, начинающийся с http:// или https://")
+	c.homeErr = widget.NewLabel(i18n.T("browser.home_invalid"))
 	c.homeErr.Importance = widget.DangerImportance
 	c.homeErr.Hide()
 	c.home.OnChanged = c.setHome
 
-	c.restart = widget.NewLabel("Изменения вступят в силу после перезапуска браузера")
+	c.restart = widget.NewLabel(i18n.T("browser.restart"))
 	c.restart.Wrapping = fyne.TextWrapWord
 	c.restart.Importance = widget.WarningImportance
 	c.restart.Hide()
 
 	// поисковик выбирается в настройках самого Firefox (без корпоративных политик
 	// приложение не может задать его) и хранится в профиле
-	search := widget.NewButtonWithIcon("Поисковик", theme.SearchIcon(), func() { c.open("about:preferences#search") })
-	addons := widget.NewButtonWithIcon("Расширения", theme.SettingsIcon(), func() { c.open("about:addons") })
-	c.clearBtn[browser.ClearCookies] = widget.NewButtonWithIcon("Очистить cookies и данные сайтов", theme.DeleteIcon(),
+	search := widget.NewButtonWithIcon(i18n.T("browser.search"), theme.SearchIcon(), func() { c.open("about:preferences#search") })
+	addons := widget.NewButtonWithIcon(i18n.T("browser.addons"), theme.SettingsIcon(), func() { c.open("about:addons") })
+	c.clearBtn[browser.ClearCookies] = widget.NewButtonWithIcon(i18n.T("browser.clear_cookies"), theme.DeleteIcon(),
 		func() {
-			c.confirmClear(browser.ClearCookies, "Очистить cookies и данные сайтов?", "Вы выйдете из аккаунтов на сайтах. История и закладки сохранятся.")
+			c.confirmClear(browser.ClearCookies, i18n.T("browser.clear_cookies.confirm"), i18n.T("browser.clear_cookies.text_desktop"))
 		})
-	c.clearBtn[browser.ClearHistory] = widget.NewButtonWithIcon("Очистить историю", theme.DeleteIcon(),
+	c.clearBtn[browser.ClearHistory] = widget.NewButtonWithIcon(i18n.T("browser.clear_history"), theme.DeleteIcon(),
 		func() {
-			c.confirmClear(browser.ClearHistory, "Очистить историю?", "Будут удалены история посещений и загрузок и данные форм. Закладки и cookies сохранятся.")
+			c.confirmClear(browser.ClearHistory, i18n.T("browser.clear_history.confirm"), i18n.T("browser.clear_history.text_desktop"))
 		})
 
 	form := widget.NewForm(
-		widget.NewFormItem("Домашняя страница", container.NewVBox(c.home, c.homeErr)),
+		widget.NewFormItem(i18n.T("browser.home"), container.NewVBox(c.home, c.homeErr)),
 	)
-	c.card = widget.NewCard("Браузер", "", container.NewVBox(
-		cardNote("Встроенный Firefox; загрузки сохраняются в папку библиотеки"),
+	c.card = widget.NewCard(i18n.T("browser.title"), "", container.NewVBox(
+		cardNote(i18n.T("browser.note")),
 		form, c.restart, container.NewGridWithColumns(2, search, addons),
 		c.clearBtn[browser.ClearCookies], c.clearBtn[browser.ClearHistory],
 	))
@@ -104,7 +105,7 @@ func (c *browserCard) open(url string) {
 	b := c.svc.Browser
 	go func() {
 		if err := b.Open(url); err != nil {
-			c.notify(err.Error())
+			c.notify(ErrorText(err))
 		}
 	}()
 }
@@ -112,20 +113,20 @@ func (c *browserCard) open(url string) {
 // confirmClear запрашивает очистку kind; Firefox выполнит её при следующем
 // открытии. Открытый браузер предлагается закрыть.
 func (c *browserCard) confirmClear(kind, title, text string) {
-	Confirm(title, text, "Очистить", func(ok bool) {
+	Confirm(title, text, i18n.T("browser.clear"), func(ok bool) {
 		if !ok {
 			return
 		}
 		app.RequestBrowserClear(c.svc.Settings, kind)
 		if !c.running {
-			c.notify("Будет очищено при следующем открытии браузера")
+			c.notify(i18n.T("browser.clear_later"))
 			return
 		}
-		Confirm("Закрыть браузер?", "Очистка выполнится при следующем открытии браузера. Закрыть его сейчас?", "Закрыть", func(close bool) {
+		Confirm(i18n.T("browser.close.title"), i18n.T("browser.close.text"), i18n.T("browser.close"), func(close bool) {
 			if close {
 				go c.svc.Browser.Close()
 			}
-			c.notify("Будет очищено при следующем открытии браузера")
+			c.notify(i18n.T("browser.clear_later"))
 		}, c.win)
 	}, c.win)
 }

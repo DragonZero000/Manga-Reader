@@ -37,7 +37,7 @@ const (
 )
 
 // ErrNoCover — у галереи нет страниц.
-var ErrNoCover = errors.New("нет обложки")
+var ErrNoCover = errors.New("no cover")
 
 // OpenFunc открывает страницу галереи (library.Source.OpenPage).
 type OpenFunc func(k model.Key, page string) (io.ReadCloser, error)
@@ -272,7 +272,7 @@ func (c *Cache) load(g model.Gallery, w, h int, store Store) (image.Image, error
 	if store != nil {
 		var buf bytes.Buffer
 		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: jpegQuality}); err != nil {
-			log.Printf("миниатюра %s: %v", g.Key, err)
+			log.Printf("thumbnail %s: %v", g.Key, err)
 		} else {
 			store.Save(key, g.Key.ID, w, h, buf.Bytes())
 		}
@@ -290,7 +290,7 @@ func (c *Cache) decode(g model.Gallery, cover model.Page, w, h int) (*image.RGBA
 	c.decodes.Add(1)
 	src, _, err := image.Decode(rc)
 	if err != nil {
-		return nil, fmt.Errorf("декодирование %s: %w", cover.Name, err)
+		return nil, fmt.Errorf("decoding %s: %w", cover.Name, err)
 	}
 	return Downscale(src, w, h), nil
 }

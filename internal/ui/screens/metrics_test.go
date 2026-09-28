@@ -29,7 +29,7 @@ func setMobile(t *testing.T, mobile bool) {
 func gridWindow(t *testing.T, m *GridMetrics, n int, size fyne.Size) (*galleryGrid, fyne.Window) {
 	t.Helper()
 	th := thumbs.New(func(model.Key, string) (io.ReadCloser, error) { return nil, io.EOF }, 1<<20, 1)
-	g := newGalleryGrid(th, m, func(model.Gallery) {})
+	g := newGalleryGrid(th, m, &GalleryActions{Open: func(model.Gallery) {}})
 	g.do = func(func()) {}
 	for i := range n {
 		g.items = append(g.items, galleryOf(fmt.Sprintf("%d.zip", i)))
@@ -179,7 +179,7 @@ func TestGridReloadShowsPlaceholder(t *testing.T) {
 	th := thumbs.New(func(model.Key, string) (io.ReadCloser, error) {
 		return io.NopCloser(bytes.NewReader(buf.Bytes())), nil
 	}, 1<<20, 1)
-	g := newGalleryGrid(th, m, func(model.Gallery) {})
+	g := newGalleryGrid(th, m, &GalleryActions{Open: func(model.Gallery) {}})
 	q := make(chan func(), 64)
 	g.do = func(f func()) { q <- f }
 	g.items = []model.Gallery{galleryOf("a.zip")}

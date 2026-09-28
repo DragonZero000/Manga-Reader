@@ -21,7 +21,7 @@ import (
 func New(version string, _ fyne.App) *Services {
 	dir, err := paths.AppDir()
 	if err != nil {
-		log.Printf("папка приложения: %v", err)
+		log.Printf("app folder: %v", err)
 	}
 	lib := filepath.Join(dir, paths.LibraryDirName)
 	settings := storage.NewFileSettings(filepath.Join(dir, paths.SettingsFileName))
@@ -30,12 +30,12 @@ func New(version string, _ fyne.App) *Services {
 	s := newServices(version, storage.NewFS(lib), settings, thumbsConfig{limit: 64 << 20}, cat)
 	if err := paths.EnsureDir(lib); err != nil {
 		s.LibraryErr = err
-		log.Printf("папка библиотеки: %v", err)
+		log.Printf("library folder: %v", err)
 		return s
 	}
 	// без наблюдения работают сканирование при запуске и кнопка «Обновить»
 	if w, err := library.NewWatcher(lib); err != nil {
-		log.Printf("папка библиотеки: %v", err)
+		log.Printf("library folder: %v", err)
 	} else {
 		s.Watcher = w
 	}
@@ -60,9 +60,9 @@ func newBrowser(dir, lib string, settings storage.Settings) *browser.Browser {
 	go func() {
 		if b.Available() && !b.Running() {
 			if n, err := browser.CleanRegistry(ff, nil); err != nil {
-				log.Printf("браузер: уборка реестра: %v", err)
+				log.Printf("browser: registry cleanup: %v", err)
 			} else if n > 0 {
-				log.Printf("браузер: удалено записей реестра после прошлого запуска: %d", n)
+				log.Printf("browser: registry entries removed after the previous run: %d", n)
 			}
 		}
 	}()

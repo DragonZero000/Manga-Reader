@@ -30,7 +30,7 @@ func NewFileSettings(path string) *FileSettings {
 	data, err := os.ReadFile(path)
 	if err == nil {
 		if err := json.Unmarshal(data, &s.vals); err != nil {
-			log.Printf("настройки %s повреждены, используются значения по умолчанию: %v", path, err)
+			log.Printf("settings %s are damaged, using defaults: %v", path, err)
 			s.vals = map[string]string{}
 		}
 	}
@@ -52,7 +52,7 @@ func (s *FileSettings) SetString(key, value string) {
 	defer s.mu.Unlock()
 	s.vals[key] = value
 	if err := s.save(); err != nil {
-		log.Printf("настройки %s: %v", s.path, err)
+		log.Printf("settings %s: %v", s.path, err)
 	}
 }
 

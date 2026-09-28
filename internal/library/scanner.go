@@ -79,7 +79,7 @@ func NewScannerWithStore(st storage.Storage, store ScanStore) *Scanner {
 	}
 	stored, err := store.Load()
 	if err != nil {
-		log.Printf("каталог: результаты сканирования не загружены: %v", err)
+		log.Printf("catalog: scan results not loaded: %v", err)
 		return s
 	}
 	for rel, e := range stored {
@@ -127,7 +127,7 @@ func (s *Scanner) Scan(ctx context.Context) (ScanResult, error) {
 		return nil
 	})
 	if err != nil {
-		return ScanResult{}, fmt.Errorf("сканирование %s: %w", s.st.Name(), err)
+		return ScanResult{}, fmt.Errorf("scanning %s: %w", s.st.Name(), err)
 	}
 	for _, e := range entries {
 		if ctx.Err() != nil {
@@ -152,7 +152,7 @@ func (s *Scanner) Scan(ctx context.Context) (ScanResult, error) {
 	}
 	if s.store != nil && !delta.Empty() {
 		if err := s.store.Save(delta); err != nil {
-			log.Printf("каталог: результаты сканирования не сохранены: %v", err)
+			log.Printf("catalog: scan results not saved: %v", err)
 		}
 	}
 	for rel, e := range s.cache {
@@ -289,7 +289,7 @@ func readEntry(st storage.Storage, e storage.Entry) (model.Gallery, []string, er
 		return model.Gallery{}, nil, storage.ErrBusy // причина — ровно текст ErrBusy
 	}
 	if err != nil {
-		return model.Gallery{}, nil, fmt.Errorf("не удалось открыть: %w", err)
+		return model.Gallery{}, nil, fmt.Errorf("could not open: %w", err)
 	}
 	defer f.Close()
 	ext := path.Ext(e.RelPath)

@@ -24,7 +24,7 @@ import (
 const sizeStep = 64
 
 // ErrStale — запрос устарел (сменилась страница или галерея) и не выполнялся.
-var ErrStale = errors.New("запрос устарел")
+var ErrStale = errors.New("request is stale")
 
 // OpenFunc открывает страницу галереи (library.Source.OpenPage).
 type OpenFunc func(k model.Key, page string) (io.ReadCloser, error)
@@ -251,7 +251,7 @@ func (l *Loader) decode(r Request) Result {
 	l.decodes.Add(1)
 	src, _, err := image.Decode(rc)
 	if err != nil {
-		return Result{Err: fmt.Errorf("декодирование %s: %w", r.Page, err)}
+		return Result{Err: fmt.Errorf("decoding %s: %w", r.Page, err)}
 	}
 	img := scaleToBox(src, r.W, r.H)
 	b := img.Bounds()

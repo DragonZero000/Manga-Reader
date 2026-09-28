@@ -4,7 +4,7 @@
 
 MangaReader shows manga from zip archives in your library folder and helps you grow it: the built-in browser saves downloads straight into that folder. Only the browser needs the internet — the library, reader and search work offline.
 
-> The interface is currently in Russian only. Buttons and tabs are quoted here the way you see them on screen, with an English translation at first mention.
+> The interface is available in English and Russian. By default it follows the system language (English if the app has no translation for it); you can pick the language in **Settings** → **Язык / Language**.
 
 - [Library folder](#library-folder)
 - [Archive format](#archive-format)
@@ -43,13 +43,13 @@ MangaReader\
 On first start the system folder picker opens. Pick or create a folder **inside** `Download`, for example `Download/manga`, and tap "Use this folder" → "Allow". The app remembers the choice and sees everything in that folder and its subfolders: files saved by a browser, moved by a file manager or copied from a PC over USB. No special permissions ("all files access") are needed.
 
 - Android doesn't allow picking the `Download` root itself. If a browser saved an archive directly into `Download`, move it into your folder.
-- To change the folder: **Настройки** (Settings) → **Изменить папку** (Change folder).
+- To change the folder: **Settings** → **Change folder**.
 - If the folder was deleted or renamed, the app asks you to pick it again.
 - Copying from a PC with adb: `adb push example.zip /sdcard/Download/manga/`.
 
 ### Automatic updates
 
-While the app is open, the library updates itself: new, changed and removed files show up within a second or two, no need to press **Обновить** (Refresh). Unfinished downloads (`*.part`) don't get in the way — the file is checked once the download completes. If a file is briefly locked by another program (an antivirus, for example), the app waits.
+While the app is open, the library updates itself: new, changed and removed files show up within a second or two, no need to press **Refresh**. Unfinished downloads (`*.part`) don't get in the way — the file is checked once the download completes. If a file is briefly locked by another program (an antivirus, for example), the app waits.
 
 ## Archive format
 
@@ -75,23 +75,43 @@ example.zip
 | `title.japanese` | Alternative title (or the main one if there is no English title) | Gallery page |
 | `id` | ID on the site (a number or a string with a number) | Search `id:` |
 | `tags` | List of `{"type": "...", "name": "..."}`; types `artist`, `group`, `parody`, `character`, `language`, `category`, `tag`; other types are shown too | Gallery page, search |
-| `upload_date` | Upload date on the site (Unix time) | "Загружено" (Uploaded), search `uploaded:` |
-| `num_pages` | Page count according to the site | "Страниц" (Pages), if it differs from the archive |
-| `num_favorites` | Number of favorites on the site | "Избранное" (Favorites), search `favorites:` |
-| `scanlator` | Scanlator | "Сканлейтор" (Scanlator), search `scanlator:` |
-| `url`, `source`, `link`, `source_url`, `gallery_url` | Link to the work (the first `http(s)` one is used) | **Открыть в браузере** (Open in browser) button |
+| `upload_date` | Upload date on the site (Unix time) | "Uploaded", search `uploaded:` |
+| `num_pages` | Page count according to the site | "Pages", if it differs from the archive |
+| `num_favorites` | Number of favorites on the site | "Favorites", search `favorites:` |
+| `scanlator` | Scanlator | "Scanlator", search `scanlator:` |
+| `url`, `source`, `link`, `source_url`, `gallery_url` | Link to the work (the first `http(s)` one is used) | **Open in browser** button |
 
 Example: [`testdata/example.zip`](../../testdata/example.zip).
 
 ## Library
 
-The **Библиотека** (Library) tab shows galleries as a grid of cards: cover and title. Card size is set in **Настройки** (Settings), in the **Сетка** (Grid) section. Newest files come first (by file modification time). At the top are the gallery count and the **Обновить** (Refresh) button — usually not needed, since the folder is watched automatically.
+The **Library** tab shows galleries as a grid of cards: cover and title. Card size is set in **Settings**, in the **Grid** section. Newest files come first (by file modification time). At the top are the gallery count and the **Refresh** button — usually not needed, since the folder is watched automatically.
 
 ![Library on Windows](../images/library.png)
 
-Tapping a card opens its gallery page. The 🎲 button on the panel opens the page of a random gallery from the library; it is inactive while the library is empty. If the library is empty, the app shows the path of the folder to put archives into; you can copy the path in **Настройки** (Settings).
+Tapping a card opens its gallery page. The 🎲 button on the panel opens the page of a random gallery from the library; it is inactive while the library is empty. If the library is empty, the app shows the path of the folder to put archives into; you can copy the path in **Settings**.
 
 <img src="../images/mobile-library.png" alt="Empty library on Android" width="280">
+
+### Card menu
+
+Every card in the library and in search results has a **⋮** button in the top-right corner of the cover. Right-clicking a card (PC) or pressing and holding it (phone) opens the same menu:
+
+- **Open** — the gallery page;
+- **Read** — the reader from page 1; closing it returns you to the grid;
+- **Open in browser** — only when a link to the work is known; works like the button on the gallery page;
+- **Copy title** — copies the main title to the clipboard;
+- **Show in folder** (Windows only) — opens File Explorer in the archive's folder with the file selected;
+- **Delete…** — deletes the archive after confirmation (see below).
+
+### Deleting an archive
+
+**Delete…** always asks first and shows the title and the file's path inside the library folder:
+
+- **Windows**: the file is moved to the **Recycle Bin** and can be restored from there. If the drive has no Recycle Bin (a USB stick, a network drive), the app says so and offers to delete the file permanently.
+- **Android**: the file is deleted **permanently** — Android folders have no Recycle Bin, and the confirmation says so. Deleting needs write access to the library folder: if the folder was granted read-only, the app asks you to pick it again.
+
+The card disappears from the library and the search results right away; then the library is rescanned. If another program is using the file, the app says so and the file stays. A gallery that is open in the reader can't be deleted — close it first.
 
 ## Gallery page
 
@@ -101,20 +121,22 @@ Everything about one gallery:
 
 
 - cover, title and alternative title;
-- the **Читать** (Read) button;
-- the **Открыть в браузере** (Open in browser) button — when a link to the work is known: from `meta.json`, or the page the file was downloaded from with the built-in browser;
-- tags grouped by type: "Автор" (Artist), "Группа" (Group), "Пародия" (Parody), "Персонаж" (Character), "Язык" (Language), "Категория" (Category), "Теги" (Tags), then groups of other types. **Tapping a tag searches for it**;
-- details: "Страниц" (Pages), "Загружено" (Uploaded), "Избранное" (Favorites), "Сканлейтор" (Scanlator), "Файл" (File), "Размер" (Size), "Изменён" (Modified). Empty fields are hidden.
+- the **Read** button;
+- the **Open in browser** button — when a link to the work is known: from `meta.json`, or the page the file was downloaded from with the built-in browser;
+- tags grouped by type: "Artist", "Group", "Parody", "Character", "Language", "Category", "Tags", then groups of other types. **Tapping a tag searches for it**;
+- details: "Pages", "Uploaded", "Favorites", "Scanlator", "File", "Size", "Modified". Empty fields are hidden. Dates, numbers and sizes follow the interface language.
+
+The **⋮** button on the right of the top bar holds the actions that are not on the page itself: **Copy title**, **Show in folder** (Windows) and **Delete…**. After deleting, the page closes and you return to the grid.
 
 ## Reader
 
-**Читать** (Read) opens the reader on top of all tabs. Close it with ✕ on the panel, Esc (PC) or Back (Android). Esc and Back close the reader first, then the gallery page.
+**Read** opens the reader on top of all tabs. Close it with ✕ on the panel, Esc (PC) or Back (Android). Esc and Back close the reader first, then the gallery page.
 
 ![Reader with the panel shown](../images/reader.png)
 
 Two modes, switched on the panel and remembered:
 
-**Страницы** (Pages) — one page at a time, western order (left to right):
+**Pages** — one page at a time, western order (left to right):
 
 | Action | PC | Phone |
 |---|---|---|
@@ -125,18 +147,18 @@ Two modes, switched on the panel and remembered:
 | Move a zoomed page | Drag, wheel | Drag |
 | Show / hide the panel | Click the middle third | Tap the middle third |
 
-**Лента** (Strip) — all pages one below another. Scroll with the wheel, ↓/↑, PageDown/PageUp, Space; → and ← jump to the next and previous page; Home/End go to the start and end. A single tap shows and hides the panel.
+**Strip** — all pages one below another. Scroll with the wheel, ↓/↑, PageDown/PageUp, Space; → and ← jump to the next and previous page; Home/End go to the start and end. A single tap shows and hides the panel.
 
-The panel has the title, page number "N / total", a slider to jump to a page, the **Страницы** / **Лента** switch and a close button. Pages load in the background; neighbouring pages are preloaded.
+The panel has the title, page number "N / total", a slider to jump to a page, the **Pages** / **Strip** switch and a close button. Pages load in the background; neighbouring pages are preloaded.
 
 ## Search
 
-The **Поиск** (Search) tab searches the whole library. Conditions separated by spaces are combined with AND. Letter case, "ё"/"е" and character width don't matter: `елка` finds "Ёлка", `ＡＢＣ` finds "ABC". When the query runs depends on the mode chosen in **Настройки** (Settings):
+The **Search** tab searches the whole library. Conditions separated by spaces are combined with AND. Letter case, "ё"/"е" and character width don't matter: `елка` finds "Ёлка", `ＡＢＣ` finds "ABC". When the query runs depends on the mode chosen in **Settings**:
 
-- **При вводе** (As you type, the default) — half a second after you stop typing; results appear even while the keyboard is open. There is no 🔍 button, and Enter only closes the keyboard.
-- **По кнопке** (On button) — only when you press 🔍 or Enter.
+- **While typing** (the default) — half a second after you stop typing; results appear even while the keyboard is open. There is no 🔍 button, and Enter only closes the keyboard.
+- **On button** — only when you press 🔍 or Enter.
 
-The **✕** button clears the box and keeps the results on screen. The 🎲 button next to it opens the page of a random gallery from the current results; it is always visible but inactive until a query has found something. A query with a mistake keeps the previous results, so 🎲 keeps picking from them. The **Как искать** (How to search) cheat sheet is shown until the first query of the session; after that the screen always shows the last result, even with an empty box — the table below covers the same syntax.
+The **✕** button clears the box and keeps the results on screen. The 🎲 button next to it opens the page of a random gallery from the current results; it is always visible but inactive until a query has found something. A query with a mistake keeps the previous results, so 🎲 keeps picking from them. The **How to search** cheat sheet is shown until the first query of the session; after that the screen always shows the last result, even with an empty box — the table below covers the same syntax.
 
 ![Search by tag](../images/search.png)
 
@@ -155,11 +177,11 @@ The **✕** button clears the box and keeps the results on screen. The 🎲 butt
 | `scanlator:name` | Scanlator |
 | `school pages:>20 -tag:yuri` | All together |
 
-Dates: `2024` is the whole year, `2024-06` a month, `2024-06-15` a day; `>period` means after its end, `<period` before its start. If a query has a mistake, "Ошибка в запросе: …" (Query error) appears below the search box with an explanation. Results refresh on their own when the library changes: the last query that ran is repeated.
+Dates: `2024` is the whole year, `2024-06` a month, `2024-06-15` a day; `>period` means after its end, `<period` before its start. If a query has a mistake, "Query error: …" appears below the search box with an explanation. Results refresh on their own when the library changes: the last query that ran is repeated.
 
 ## Built-in browser
 
-The **Браузер** (Browser) button on the library toolbar opens a Firefox-based browser. Everything you download there is saved straight into the library folder and shows up in the library within a second or two (or on the **Ошибки** (Errors) tab if it isn't an archive). Downloaded files remember the page they came from — for the **Открыть в браузере** (Open in browser) button.
+The **Browser** button on the library toolbar opens a Firefox-based browser. Everything you download there is saved straight into the library folder and shows up in the library within a second or two (or on the **Errors** tab if it isn't an archive). Downloaded files remember the page they came from — for the **Open in browser** button.
 
 ### Windows
 
@@ -168,6 +190,7 @@ The **Браузер** (Browser) button on the library toolbar opens a Firefox-b
 - Tabs are switched with the "all tabs" button in the header (next to "new tab"). The "MangaReader" button (book icon) minimizes the browser and shows the app.
 - Extensions are installed from addons.mozilla.org and kept in the profile. The browser theme is always dark.
 - Firefox updates, telemetry, ads and welcome screens are disabled. The Firefox version is updated together with the app.
+- Firefox itself is currently in Russian regardless of the app language.
 - The source page address is stored in the file itself (an NTFS stream) and survives renaming; it is lost when copying to a FAT/exFAT USB stick. For files downloaded by other browsers, the Windows download mark is used — sites often trim it to the home page.
 - While open, Firefox keeps a few values in the registry (`HKCU\Software\Mozilla\Firefox`); after the browser closes, the app removes them. Values of other Firefox installations are left alone.
 
@@ -181,15 +204,18 @@ The **Браузер** (Browser) button on the library toolbar opens a Firefox-b
 - To keep the browser's memory down, inactive tabs are unloaded: while you are in the browser the current and the previous tab stay loaded, after you return to the reader only the current one does. An unloaded tab stays in the list and reloads with the same history when you pick it (anything typed into forms is lost). A tab with a download in progress is not unloaded until the download finishes.
 - Downloads go to the root of the library folder: `name.part` while downloading, `name (1).zip` if the name is taken. Progress is shown in the notification shade (Android asks for permission on the first download); the download continues if you minimize the app.
 - Extensions come from addons.mozilla.org via "Add to Firefox" (for example, uBlock Origin); menu → "Extensions" to enable, disable or remove them.
+- The browser's toolbar, menus, dialogs and download notifications follow the app language; sites are asked for pages in that language too (as in Firefox, where the page language follows the interface language).
 - The browser needs write access to the library folder. If the folder was granted read-only, the app asks you to pick it again the first time you open the browser.
 
 ## Errors
 
-The app checks **every** file in the library folder. Only a `.zip` archive with images becomes a gallery; everything else lands on the **Ошибки** (Errors) tab with a reason, for example:
+The app checks **every** file in the library folder. Only a `.zip` archive with images becomes a gallery; everything else lands on the **Errors** tab with a reason, for example:
 
-- "Изображение — поддерживаются только zip-архивы" (An image — only zip archives are supported): pictures, video, audio, PDF, RAR/7z, text — the type is detected by content, not by extension;
-- "Веб-страница (HTML) вместо архива" (A web page instead of an archive) — the site returned an error or check page instead of the file;
-- "не zip-архив или архив повреждён" (not a zip or a damaged archive), "нет изображений" (no images), "Пустой файл" (empty file), "Файл занят другой программой" (file is locked by another program).
+- "Image - only zip archives are supported": pictures, video, audio, PDF, RAR/7z, text — the type is detected by content, not by extension;
+- "Web page (HTML) instead of an archive" — the site returned an error or check page instead of the file;
+- "not a zip archive or the archive is damaged", "no images", "Empty file", "The file is in use by another program".
+
+Reasons are shown in the current interface language, including for files checked before the language was changed.
 
 Broken files are **not deleted** — remove or replace them yourself; the entry disappears after the next scan. The number on the tab icon counts unseen errors; opening the tab marks them as seen.
 
@@ -197,15 +223,16 @@ Not treated as errors: hidden files and folders (name starts with `.`) — you c
 
 ## Settings
 
-The **Настройки** (Settings) tab:
+The **Settings** tab:
 
-- **Папка библиотеки** (Library folder) — the folder path; on Windows the **Скопировать путь** (Copy path) button, on Android **Изменить папку** (Change folder).
-- **Браузер** (Browser, Windows) — **Домашняя страница** (Home page), **Поисковик** (Search engine — opens Firefox search settings), **Расширения** (Extensions), **Очистить cookies и данные сайтов** (Clear cookies and site data), **Очистить историю** (Clear history). Clearing happens the next time the browser opens; bookmarks are kept.
-- **Браузер** (Browser, Android) — **Домашняя страница** (Home page), **Поисковик** (Search engine), **Панель браузера** (Browser toolbar: **Снизу** / **Сверху**, bottom / top), clearing cookies and history (immediately; bookmarks and extensions are kept).
-- **Поиск** (Search) — when a query runs: **При вводе** (As you type) or **По кнопке** (On button); see [Search](#search).
-- **Случайный выбор** (Random pick) — how the 🎲 button picks: **С повторами** (With repeats, the default) — every press picks from the whole set, so the same gallery can come up again; **Без повторов** (No repeats) — a gallery doesn't come up again until every gallery in the set has, and the next round never starts with the one shown last. The library and search keep separate rounds; a round starts over when the set changes (different search results, library contents changed after a rescan) and isn't kept between launches.
-- **Сетка** (Grid) — how dense the card grid is in the library and search; applies immediately, no restart needed. On Android — **Карточек в ряду** (Cards per row): **2**, **3** (the default) or **4**; in portrait the cards split the screen width evenly, in landscape they keep the same size and more fit in a row. On Windows — **Размер карточек** (Card size): **Маленькие** (Small), **Средние** (Medium, the default) or **Крупные** (Large); the number of columns follows the window width. After a change, covers are reloaded for the new size.
-- **Экран** (Screen, Android) — **Ограничить 60 Гц** (Limit to 60 Hz, on by default): on 120 Hz screens the app asks the system for 60 Hz, which makes scrolling smoother. The built-in browser runs at whatever rate the system picks.
-- **О приложении** (About) — the version.
+- **Язык / Language** — **System** (the default: the system language, or English if the app has no translation for it), **English** or **Русский**. The new language applies after the app restarts; until then a hint in the chosen language is shown.
+- **Library folder** — the folder path; on Windows the **Copy path** button, on Android **Change folder**.
+- **Browser** (Windows) — **Home page**, **Search engine** (opens Firefox search settings), **Extensions**, **Clear cookies and site data**, **Clear history**. Clearing happens the next time the browser opens; bookmarks are kept.
+- **Browser** (Android) — **Home page**, **Search engine**, **Browser toolbar** (**Bottom** / **Top**), clearing cookies and history (immediately; bookmarks and extensions are kept).
+- **Search** — when a query runs: **While typing** or **On button**; see [Search](#search).
+- **Random pick** — how the 🎲 button picks: **With repeats** (the default) — every press picks from the whole set, so the same gallery can come up again; **No repeats** — a gallery doesn't come up again until every gallery in the set has, and the next round never starts with the one shown last. The library and search keep separate rounds; a round starts over when the set changes (different search results, library contents changed after a rescan) and isn't kept between launches.
+- **Grid** — how dense the card grid is in the library and search; applies immediately, no restart needed. On Android — **Cards per row**: **2**, **3** (the default) or **4**; in portrait the cards split the screen width evenly, in landscape they keep the same size and more fit in a row. On Windows — **Card size**: **Small**, **Medium** (the default) or **Large**; the number of columns follows the window width. After a change, covers are reloaded for the new size.
+- **Display** (Android) — **Limit to 60 Hz** (on by default): on 120 Hz screens the app asks the system for 60 Hz, which makes scrolling smoother. The built-in browser runs at whatever rate the system picks.
+- **About** — the version.
 
 The reader mode is remembered automatically. On Windows, settings are stored in `settings.json` next to the app.

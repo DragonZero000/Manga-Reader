@@ -10,6 +10,7 @@ import (
 
 	"mangareader/internal/browser"
 	"mangareader/internal/catalog"
+	"mangareader/internal/i18n"
 	"mangareader/internal/library"
 	"mangareader/internal/mobilebrowser"
 	"mangareader/internal/problems"
@@ -22,7 +23,7 @@ import (
 const KeyLibraryTree = "library.tree"
 
 // ErrChooseNotSupported — выбор папки на этой платформе не поддерживается.
-var ErrChooseNotSupported = errors.New("выбор папки не поддерживается")
+var ErrChooseNotSupported = errors.New("folder selection is not supported")
 
 // Services — зависимости, передаваемые в UI.
 type Services struct {
@@ -103,6 +104,20 @@ func RandomMode(s storage.Settings) string {
 // SetRandomMode сохраняет режим случайного выбора.
 func SetRandomMode(s storage.Settings, mode string) {
 	s.SetString(KeyRandomMode, mode)
+}
+
+// KeyUILanguage — язык интерфейса: код языка из i18n.Available или
+// i18n.Auto (как в системе, по умолчанию). Применяется при запуске.
+const KeyUILanguage = "ui.language"
+
+// UILanguage — выбранный язык интерфейса: код языка или i18n.Auto.
+func UILanguage(s storage.Settings) string {
+	return s.String(KeyUILanguage, i18n.Auto)
+}
+
+// SetUILanguage сохраняет язык интерфейса (код языка или i18n.Auto).
+func SetUILanguage(s storage.Settings, lang string) {
+	s.SetString(KeyUILanguage, lang)
 }
 
 // Плотность сетки карточек.
@@ -197,11 +212,11 @@ type thumbsConfig struct {
 func openCatalog(path, root string) *catalog.Catalog {
 	c, err := catalog.Open(path, root)
 	if err != nil {
-		log.Printf("каталог недоступен, библиотека — только в памяти: %v", err)
+		log.Printf("catalog unavailable, library kept in memory only: %v", err)
 		return nil
 	}
 	if c.Fresh() {
-		log.Printf("каталог %s создан, библиотека будет просканирована целиком", path)
+		log.Printf("catalog %s created, the library will be scanned in full", path)
 	}
 	return c
 }
@@ -232,9 +247,9 @@ func newServices(version string, st storage.Storage, settings storage.Settings, 
 		s.Cached = s.Library.LoadCatalog()
 	}
 	if root := s.Library.Root(); root != "" {
-		log.Printf("папка библиотеки: %s", root)
+		log.Printf("library folder: %s", root)
 	} else {
-		log.Printf("папка библиотеки не выбрана")
+		log.Printf("library folder is not selected")
 	}
 	return s
 }
@@ -255,6 +270,7 @@ func MobileBrowserSettings(s storage.Settings) mobilebrowser.Settings {
 		Home:    s.String(KeyBrowserHome, ""),
 		Search:  mobilebrowser.EngineTemplate(s.String(KeyBrowserSearch, "")),
 		Toolbar: toolbar,
+		Lang:    i18n.Lang(),
 	}
 }
 
@@ -270,7 +286,7 @@ func (s *Services) OpenMobileBrowser(url string) error {
 func (s *Services) OnDownloaded(rel, page string) {
 	if s.Links != nil {
 		if err := s.Links.Set(rel, page); err != nil {
-			log.Printf("браузер: %v", err)
+			log.Printf("browser: %v", err)
 		}
 	}
 	s.Library.Invalidate(rel)
@@ -289,7 +305,7 @@ func (s *Services) PruneLinks() {
 		exists[it.RelPath] = true
 	}
 	if err := s.Links.Prune(func(rel string) bool { return exists[rel] }); err != nil {
-		log.Printf("ссылки: %v", err)
+		log.Printf("links: %v", err)
 	}
 }
 
@@ -297,7 +313,7 @@ func (s *Services) PruneLinks() {
 func (s *Services) Close() {
 	if s.Catalog != nil {
 		if err := s.Catalog.Close(); err != nil {
-			log.Printf("каталог: %v", err)
+			log.Printf("catalog: %v", err)
 		}
 	}
 }

@@ -24,7 +24,7 @@ type PageSize struct {
 func (s *Source) PageSizes(k model.Key) ([]PageSize, error) {
 	g, ok := s.Get(k)
 	if !ok {
-		return nil, fmt.Errorf("галерея %s не найдена", k)
+		return nil, fmt.Errorf("gallery %s not found", k)
 	}
 	zr, closeFn, err := s.openGallery(g)
 	if err != nil {
@@ -47,7 +47,7 @@ func pageSize(open func(string) (fs.File, error), name string) PageSize {
 	defer f.Close()
 	cfg, _, err := image.DecodeConfig(f)
 	if err != nil {
-		return PageSize{Err: fmt.Errorf("заголовок %s: %w", name, err)}
+		return PageSize{Err: fmt.Errorf("header %s: %w", name, err)}
 	}
 	return PageSize{Width: cfg.Width, Height: cfg.Height}
 }

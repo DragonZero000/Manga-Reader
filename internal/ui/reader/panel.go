@@ -10,21 +10,25 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"mangareader/internal/i18n"
 	"mangareader/internal/model"
 )
 
-var modeLabels = map[string]string{ModePaged: "Страницы", ModeStrip: "Лента"}
+// modeKeys — ключи перевода подписей режимов.
+var modeKeys = map[string]string{ModePaged: "reader.mode.paged", ModeStrip: "reader.mode.strip"}
 
 // panel — панель управления поверх страницы: название, номер страницы,
 // ползунок, переключатель режима и «Закрыть».
 type panel struct {
-	r        *Reader
-	layer    *fyne.Container
-	title    *widget.Label
-	pageLbl  *widget.Label
-	slider   *widget.Slider
-	mode     *widget.RadioGroup
-	suppress bool // программное изменение — не реагировать
+	r       *Reader
+	layer   *fyne.Container
+	title   *widget.Label
+	pageLbl *widget.Label
+	slider  *widget.Slider
+	mode    *widget.RadioGroup
+	// modeLabels — подписи режимов на языке интерфейса
+	modeLabels map[string]string
+	suppress   bool // программное изменение — не реагировать
 }
 
 func newPanel(r *Reader) *panel {
@@ -48,11 +52,15 @@ func newPanel(r *Reader) *panel {
 			r.win.Canvas().Unfocus()
 		}
 	}
-	p.mode = widget.NewRadioGroup([]string{modeLabels[ModePaged], modeLabels[ModeStrip]}, func(s string) {
+	p.modeLabels = map[string]string{}
+	for mode, key := range modeKeys {
+		p.modeLabels[mode] = i18n.T(key)
+	}
+	p.mode = widget.NewRadioGroup([]string{p.modeLabels[ModePaged], p.modeLabels[ModeStrip]}, func(s string) {
 		if p.suppress {
 			return
 		}
-		for mode, label := range modeLabels {
+		for mode, label := range p.modeLabels {
 			if label == s {
 				r.setMode(mode)
 			}
@@ -91,7 +99,7 @@ func (p *panel) setPage(page, total int) {
 
 func (p *panel) setMode(mode string) {
 	p.suppress = true
-	p.mode.SetSelected(modeLabels[mode])
+	p.mode.SetSelected(p.modeLabels[mode])
 	p.suppress = false
 }
 

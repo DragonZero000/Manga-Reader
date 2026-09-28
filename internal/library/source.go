@@ -17,7 +17,7 @@ import (
 )
 
 // ErrScanInProgress — сканирование уже идёт.
-var ErrScanInProgress = errors.New("сканирование уже идёт")
+var ErrScanInProgress = errors.New("a scan is already running")
 
 // maxPageSize ограничивает размер читаемой страницы (защита от «zip-бомб»).
 const maxPageSize = 256 << 20
@@ -100,7 +100,7 @@ func (s *Source) SetStorage(st storage.Storage) {
 	s.mu.Unlock()
 	for _, g := range old {
 		if err := s.index.Remove(context.Background(), g.Key); err != nil {
-			log.Printf("индекс: удаление %s: %v", g.Key, err)
+			log.Printf("index: removing %s: %v", g.Key, err)
 		}
 	}
 }
@@ -128,6 +128,69 @@ func (s *Source) Invalidate(relPath string) {
 	}
 }
 
+// CanDelete сообщает, умеет ли хранилище библиотеки удалять файлы на этой
+// платформе (Windows, Android).
+func (s *Source) CanDelete() bool {
+	_, ok := storage.DeleterOf(s.storage())
+	return ok
+}
+
+// CanTrash сообщает, попадёт ли архив галереи k в корзину. Может обращаться
+// к диску — не вызывать из UI-потока.
+func (s *Source) CanTrash(k model.Key) (bool, error) {
+	d, err := s.deleter(k)
+	if err != nil {
+		return false, err
+	}
+	return d.CanTrash(k.ID)
+}
+
+// Delete удаляет архив галереи k (в корзину или, если permanent,
+// безвозвратно) и сразу убирает галерею из списка и индекса; каталог,
+// ошибки и ссылки приводит в порядок следующее сканирование. Ждёт окончания
+// идущего сканирования — не вызывать из UI-потока.
+func (s *Source) Delete(k model.Key, permanent bool) error {
+	d, err := s.deleter(k)
+	if err != nil {
+		return err
+	}
+	if err := d.Delete(k.ID, permanent); err != nil {
+		return err
+	}
+	s.Invalidate(k.ID)
+
+	s.mu.Lock()
+	if i, ok := s.byKey[k]; ok {
+		gs := make([]model.Gallery, 0, len(s.galleries)-1)
+		gs = append(append(gs, s.galleries[:i]...), s.galleries[i+1:]...)
+		byKey := make(map[model.Key]int, len(gs))
+		for j, g := range gs {
+			byKey[g.Key] = j
+		}
+		s.galleries, s.byKey = gs, byKey
+	}
+	s.mu.Unlock()
+	if err := s.index.Remove(context.Background(), k); err != nil {
+		log.Printf("index: removing %s: %v", k, err)
+	}
+	return nil
+}
+
+func (s *Source) deleter(k model.Key) (storage.Deleter, error) {
+	if k.Source != model.SourceLocal {
+		return nil, fmt.Errorf("%w: gallery %s is not a local file", storage.ErrUnsupported, k)
+	}
+	st := s.storage()
+	if st == nil {
+		return nil, fmt.Errorf("%w: library folder is not selected", storage.ErrUnavailable)
+	}
+	d, ok := storage.DeleterOf(st)
+	if !ok {
+		return nil, storage.ErrUnsupported
+	}
+	return d, nil
+}
+
 // LoadCatalog показывает результаты прошлых сканирований из хранилища без
 // обхода папки: галереи доступны сразу при запуске. Индекс не трогается —
 // он хранится вместе с результатами. Ждёт идущего сканирования.
@@ -149,7 +212,7 @@ func (s *Source) LoadCatalog() ScanResult {
 	s.mu.Lock()
 	s.galleries, s.byKey = res.Galleries, byKey
 	s.mu.Unlock()
-	log.Printf("каталог: загружено %d галерей и %d ошибок за %v",
+	log.Printf("catalog: loaded %d galleries and %d errors in %v",
 		len(res.Galleries), len(res.Errors), time.Since(start).Round(time.Millisecond))
 	return res
 }
@@ -166,7 +229,7 @@ func (s *Source) Scan(ctx context.Context) (ScanResult, error) {
 	scanner := s.scanner
 	s.stMu.RUnlock()
 	if scanner == nil {
-		return ScanResult{}, fmt.Errorf("%w: папка библиотеки не выбрана", storage.ErrUnavailable)
+		return ScanResult{}, fmt.Errorf("%w: library folder is not selected", storage.ErrUnavailable)
 	}
 	start := time.Now()
 	scanner.BusyAsError = s.busyAsError
@@ -174,7 +237,7 @@ func (s *Source) Scan(ctx context.Context) (ScanResult, error) {
 	if err != nil {
 		return ScanResult{}, err
 	}
-	log.Printf("библиотека: %d галерей, новых/изменённых %d, ошибок %d, открыто файлов %d, за %v",
+	log.Printf("library: %d galleries, %d new/changed, %d errors, %d files opened, in %v",
 		len(res.Galleries), len(res.Added)+len(res.Changed), len(res.Errors), res.Opened, time.Since(start).Round(time.Millisecond))
 
 	byKey := make(map[model.Key]int, len(res.Galleries))
@@ -187,10 +250,10 @@ func (s *Source) Scan(ctx context.Context) (ScanResult, error) {
 
 	s.updateIndex(ctx, res)
 	for _, e := range res.NewErrors {
-		log.Printf("библиотека: %v", e)
+		log.Printf("library: %v", e)
 	}
 	for _, w := range res.Warnings {
-		log.Printf("библиотека: %s", w)
+		log.Printf("library: %s", w)
 	}
 	return res, nil
 }
@@ -199,13 +262,13 @@ func (s *Source) updateIndex(ctx context.Context, res ScanResult) {
 	for _, gs := range [][]model.Gallery{res.Added, res.Changed} {
 		for _, g := range gs {
 			if err := s.index.Upsert(ctx, g); err != nil {
-				log.Printf("индекс: %s: %v", g.Key, err)
+				log.Printf("index: %s: %v", g.Key, err)
 			}
 		}
 	}
 	for _, k := range res.Removed {
 		if err := s.index.Remove(ctx, k); err != nil {
-			log.Printf("индекс: удаление %s: %v", k, err)
+			log.Printf("index: removing %s: %v", k, err)
 		}
 	}
 }
@@ -233,7 +296,7 @@ func (s *Source) Get(k model.Key) (model.Gallery, bool) {
 func (s *Source) OpenPage(k model.Key, page string) (io.ReadCloser, error) {
 	g, ok := s.Get(k)
 	if !ok {
-		return nil, fmt.Errorf("галерея %s не найдена", k)
+		return nil, fmt.Errorf("gallery %s not found", k)
 	}
 	found := false
 	for _, p := range g.Pages {
@@ -243,7 +306,7 @@ func (s *Source) OpenPage(k model.Key, page string) (io.ReadCloser, error) {
 		}
 	}
 	if !found {
-		return nil, fmt.Errorf("страница %q не найдена в %s", page, k)
+		return nil, fmt.Errorf("page %q not found in %s", page, k)
 	}
 
 	zr, closeFn, err := s.openGallery(g)
@@ -253,12 +316,12 @@ func (s *Source) OpenPage(k model.Key, page string) (io.ReadCloser, error) {
 	defer closeFn()
 	f, err := zr.Open(page)
 	if err != nil {
-		return nil, fmt.Errorf("открытие %s: %w", page, err)
+		return nil, fmt.Errorf("opening %s: %w", page, err)
 	}
 	defer f.Close()
 	data, err := io.ReadAll(io.LimitReader(f, maxPageSize))
 	if err != nil {
-		return nil, fmt.Errorf("чтение %s: %w", page, err)
+		return nil, fmt.Errorf("reading %s: %w", page, err)
 	}
 	return io.NopCloser(bytes.NewReader(data)), nil
 }
@@ -268,11 +331,11 @@ func (s *Source) OpenPage(k model.Key, page string) (io.ReadCloser, error) {
 func (s *Source) openGallery(g model.Gallery) (*zip.Reader, func(), error) {
 	st := s.storage()
 	if st == nil {
-		return nil, nil, fmt.Errorf("%w: папка библиотеки не выбрана", storage.ErrUnavailable)
+		return nil, nil, fmt.Errorf("%w: library folder is not selected", storage.ErrUnavailable)
 	}
 	f, err := openArchive(st, g.Key.ID)
 	if err != nil {
-		return nil, nil, fmt.Errorf("открытие %s: %w", g.Key.ID, err)
+		return nil, nil, fmt.Errorf("opening %s: %w", g.Key.ID, err)
 	}
 	zr, err := zip.NewReader(f, f.Size())
 	if err != nil {

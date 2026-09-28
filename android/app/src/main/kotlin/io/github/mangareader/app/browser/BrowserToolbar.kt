@@ -1,5 +1,6 @@
 package io.github.mangareader.app.browser
 
+import io.github.mangareader.app.R
 import android.content.Context
 import android.graphics.Color
 import android.graphics.Typeface
@@ -50,7 +51,7 @@ class BrowserToolbar(ctx: Context) : LinearLayout(ctx) {
             setSingleLine()
             inputType = InputType.TYPE_TEXT_VARIATION_URI or InputType.TYPE_CLASS_TEXT
             imeOptions = EditorInfo.IME_ACTION_GO
-            hint = "Адрес или поиск"
+            hint = Lang.str(context, R.string.address_hint)
             setTextColor(Color.WHITE)
             setHintTextColor(Color.GRAY)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)

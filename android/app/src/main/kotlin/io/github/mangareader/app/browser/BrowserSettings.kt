@@ -8,6 +8,8 @@ data class BrowserSettings(
     val home: String = "",
     val search: String = DEFAULT_SEARCH,
     val toolbarTop: Boolean = false,
+    /** Язык приложения ("en", "ru"): интерфейс браузера и язык страниц; пусто — язык системы. */
+    val lang: String = "",
 ) {
     /** Домашняя страница; пусто — пустая вкладка. */
     fun homeUrl(): String = home.ifBlank { "about:blank" }
@@ -31,6 +33,7 @@ data class BrowserSettings(
                     home = o.optString("home"),
                     search = o.optString("search").ifBlank { DEFAULT_SEARCH },
                     toolbarTop = o.optString("toolbar") == "top",
+                    lang = o.optString("lang"),
                 )
             }.getOrNull()
         }

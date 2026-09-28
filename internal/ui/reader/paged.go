@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"mangareader/internal/i18n"
 	"mangareader/internal/library"
 	"mangareader/internal/model"
 	"mangareader/internal/pages"
@@ -114,7 +115,7 @@ func (v *pagedView) step(d int) {
 func (v *pagedView) showPage(page int) {
 	if len(v.g.Pages) == 0 {
 		v.reset()
-		v.status.SetText("В галерее нет страниц")
+		v.status.SetText(i18n.T("reader.no_pages"))
 		return
 	}
 	page = max(0, min(page, len(v.g.Pages)-1))
@@ -176,7 +177,7 @@ func (v *pagedView) apply(req pages.Request, res pages.Result) {
 		v.img.Image = nil
 		v.img.Hide()
 		v.imgPx = pages.Sz{}
-		v.status.SetText("Не удалось открыть страницу " + itoa(v.page+1))
+		v.status.SetText(i18n.T("reader.page_failed", "Page", v.page+1))
 		v.Refresh()
 		return
 	}

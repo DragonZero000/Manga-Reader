@@ -3,6 +3,7 @@ package app
 import (
 	"testing"
 
+	"mangareader/internal/i18n"
 	"mangareader/internal/storage"
 )
 
@@ -33,6 +34,17 @@ func TestRandomMode(t *testing.T) {
 	s.SetString(KeyRandomMode, "что-то")
 	if m := RandomMode(s); m != RandomModeRepeat {
 		t.Fatalf("неизвестное значение %q", m)
+	}
+}
+
+func TestUILanguage(t *testing.T) {
+	s := storage.NewMemSettings()
+	if l := UILanguage(s); l != i18n.Auto {
+		t.Fatalf("по умолчанию %q", l)
+	}
+	SetUILanguage(s, "en")
+	if l := UILanguage(s); l != "en" || s.String(KeyUILanguage, "") != "en" {
+		t.Fatalf("после выбора %q", l)
 	}
 }
 

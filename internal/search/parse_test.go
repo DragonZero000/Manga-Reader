@@ -3,7 +3,6 @@ package search
 import (
 	"errors"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -132,29 +131,29 @@ func TestParseDates(t *testing.T) {
 }
 
 func TestParseErrors(t *testing.T) {
-	cases := map[string]string{
-		"-school":             "только для тегов",
-		"-pages:>2":           "только для тегов",
-		"pages:>много":        "число",
-		"pages:":              "не указано значение",
-		`tag:""`:              "не указано значение",
-		"uploaded:2024-13":    "дата",
-		"uploaded:24":         "дата",
-		"pages:50..10":        "диапазон",
-		"id:>5":               "id",
-		"size:>lots":          "размер",
-		"uploaded:2025..2024": "диапазон дат",
+	cases := map[string]ReasonCode{
+		"-school":             ReasonNegationTagsOnly,
+		"-pages:>2":           ReasonNegationTagsOnly,
+		"pages:>много":        ReasonNotNumber,
+		"pages:":              ReasonNoValue,
+		`tag:""`:              ReasonNoValue,
+		"uploaded:2024-13":    ReasonBadDate,
+		"uploaded:24":         ReasonBadDate,
+		"pages:50..10":        ReasonBadRange,
+		"id:>5":               ReasonIDExactOnly,
+		"size:>lots":          ReasonBadSize,
+		"uploaded:2025..2024": ReasonBadDateRange,
 	}
 	for s, want := range cases {
 		pe := parseErr(t, s)
-		if pe.Token != s || !strings.Contains(pe.Error(), want) {
-			t.Errorf("Parse(%q): ошибка %q (фрагмент %q), ожидалось «%s»", s, pe.Error(), pe.Token, want)
+		if pe.Token != s || pe.Reason.Code != want {
+			t.Errorf("Parse(%q): причина %q (фрагмент %q), ожидалась %q", s, pe.Reason.Code, pe.Token, want)
 		}
 	}
-	if pe := parseErr(t, "school pages:>много tag:x"); pe.Token != "pages:>много" {
-		t.Errorf("фрагмент ошибки: %q", pe.Token)
+	if pe := parseErr(t, "school pages:>много tag:x"); pe.Token != "pages:>много" || !reflect.DeepEqual(pe.Reason.Args, []any{"много"}) {
+		t.Errorf("фрагмент ошибки: %q, параметры %v", pe.Token, pe.Reason.Args)
 	}
-	if got := parseErr(t, "pages:").Error(); got != "«pages:» — не указано значение" {
+	if got := parseErr(t, "pages:").Error(); got != `"pages:": no value specified` {
 		t.Errorf("текст ошибки: %q", got)
 	}
 }

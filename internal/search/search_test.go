@@ -75,16 +75,16 @@ func TestValidateErrors(t *testing.T) {
 	cases := []struct {
 		name   string
 		filter Filter
-		want   string
+		want   ReasonCode
 	}{
-		{"операция для title", Filter{FieldTitle, OpGt, Value{Num: 5}}, "больше"},
-		{"диапазон страниц", Filter{FieldPages, OpBetween, Value{Num: 50, Num2: 10}}, "диапазон"},
-		{"пустой тег", Filter{FieldTag, OpHas, Value{}}, "пустой тег"},
-		{"пустой текст", Filter{FieldScanlator, OpEq, Value{Text: " "}}, "пустой текст"},
-		{"отрицательное", Filter{FieldSize, OpLt, Value{Num: -1}}, "отрицательное"},
-		{"нет даты", Filter{FieldUploaded, OpGt, Value{}}, "дата"},
-		{"диапазон дат", Filter{FieldAdded, OpBetween, Value{Time: day.AddDate(0, 1, 0), Time2: day}}, "диапазон дат"},
-		{"неизвестное поле", Filter{Field(99), OpEq, Value{}}, "неизвестное поле"},
+		{"операция для title", Filter{FieldTitle, OpGt, Value{Num: 5}}, ReasonOpNotAllowed},
+		{"диапазон страниц", Filter{FieldPages, OpBetween, Value{Num: 50, Num2: 10}}, ReasonBadRange},
+		{"пустой тег", Filter{FieldTag, OpHas, Value{}}, ReasonEmptyTag},
+		{"пустой текст", Filter{FieldScanlator, OpEq, Value{Text: " "}}, ReasonEmptyText},
+		{"отрицательное", Filter{FieldSize, OpLt, Value{Num: -1}}, ReasonNegative},
+		{"нет даты", Filter{FieldUploaded, OpGt, Value{}}, ReasonNoDate},
+		{"диапазон дат", Filter{FieldAdded, OpBetween, Value{Time: day.AddDate(0, 1, 0), Time2: day}}, ReasonBadDateRange},
+		{"неизвестное поле", Filter{Field(99), OpEq, Value{}}, ReasonUnknownField},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -98,8 +98,8 @@ func TestValidateErrors(t *testing.T) {
 			if fe.Index != 1 {
 				t.Errorf("индекс фильтра = %d, ожидался 1", fe.Index)
 			}
-			if !strings.Contains(err.Error(), c.want) {
-				t.Errorf("ошибка %q не содержит %q", err, c.want)
+			if fe.Reason.Code != c.want {
+				t.Errorf("причина %q, ожидалась %q (%v)", fe.Reason.Code, c.want, err)
 			}
 		})
 	}
@@ -109,8 +109,8 @@ func TestTitleErrorMentionsField(t *testing.T) {
 	q := NewQuery()
 	q.Filters = []Filter{{FieldTitle, OpGt, Value{Num: 5}}}
 	err := q.Validate()
-	if err == nil || !strings.Contains(err.Error(), "title") || !strings.Contains(err.Error(), "больше") {
-		t.Fatalf("ошибка должна указывать поле title и операцию «больше»: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "title") || !strings.Contains(err.Error(), `">"`) {
+		t.Fatalf("ошибка должна указывать поле title и операцию «>»: %v", err)
 	}
 }
 

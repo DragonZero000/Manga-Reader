@@ -39,7 +39,7 @@ func TestSyncNoDuplicatesAndOrder(t *testing.T) {
 	if got := paths(tr.Items()); got != "b.mp4,a.jpg,v2.txt,v10.txt" {
 		t.Fatalf("порядок: %s", got)
 	}
-	if tr.Unseen() != 4 || tr.Items()[0].Reason != "причина b.mp4" {
+	if tr.Unseen() != 4 || tr.Items()[0].Err.Error() != "причина b.mp4" {
 		t.Fatalf("unseen=%d items=%+v", tr.Unseen(), tr.Items())
 	}
 }

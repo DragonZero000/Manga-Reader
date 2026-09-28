@@ -11,6 +11,7 @@ int safIsPersisted(uintptr_t env, uintptr_t ctx, const char *uri, int write);
 char *safTreeDocId(uintptr_t env, const char *uri, char **err);
 char *safListChildren(uintptr_t env, uintptr_t ctx, const char *tree, const char *docId, char **err);
 int safOpenFd(uintptr_t env, uintptr_t ctx, const char *tree, const char *docId, char **err);
+int safDeleteDocument(uintptr_t env, uintptr_t ctx, const char *tree, const char *docId, char **err);
 */
 import "C"
 
@@ -26,6 +27,12 @@ import (
 	"unsafe"
 
 	"fyne.io/fyne/v2/driver"
+)
+
+// Удаление на Android: хранилище SAF, всегда безвозвратно (корзины нет).
+const (
+	CanDelete = true
+	HasTrash  = false
 )
 
 // dirMime — MIME-тип папки в DocumentsContract.
@@ -78,7 +85,7 @@ func (s *SAF) Name() string {
 
 func (s *SAF) Walk(ctx context.Context, fn func(Entry) error) error {
 	if !isPersisted(s.tree) {
-		return fmt.Errorf("%w: нет разрешения на папку", ErrUnavailable)
+		return fmt.Errorf("%w: no permission for the folder", ErrUnavailable)
 	}
 	root, err := treeDocID(s.tree)
 	if err != nil {
@@ -137,7 +144,7 @@ func (s *SAF) Open(relPath string) (File, error) {
 	f, ok := s.files[relPath]
 	s.mu.RUnlock()
 	if !ok {
-		return nil, fmt.Errorf("файл %q не найден в папке", relPath)
+		return nil, fmt.Errorf("file %q not found in the folder", relPath)
 	}
 	var file *os.File
 	err := jni(func(env, ctx C.uintptr_t) error {
@@ -158,6 +165,74 @@ func (s *SAF) Open(relPath string) (File, error) {
 	return NewOSFile(file, f.size), nil
 }
 
+// CanTrash: у папки SAF корзины нет — удаление всегда безвозвратное.
+func (s *SAF) CanTrash(relPath string) (bool, error) {
+	_, err := cleanRel(relPath)
+	return false, err
+}
+
+// Delete удаляет документ relPath из выбранной папки (всегда безвозвратно,
+// permanent не учитывается). Без постоянного доступа на запись — ErrNoWriteAccess
+// без попытки удаления.
+func (s *SAF) Delete(relPath string, _ bool) error {
+	rel, err := cleanRel(relPath)
+	if err != nil {
+		return err
+	}
+	if !HasWriteAccess(s.tree) {
+		return ErrNoWriteAccess
+	}
+	docID, err := s.docID(rel)
+	if err != nil {
+		return err
+	}
+	err = jni(func(env, ctx C.uintptr_t) error {
+		ct, cd := C.CString(s.tree), C.CString(docID)
+		defer C.free(unsafe.Pointer(ct))
+		defer C.free(unsafe.Pointer(cd))
+		var e *C.char
+		C.safDeleteDocument(env, ctx, ct, cd, &e)
+		return cerr(e)
+	})
+	if err != nil {
+		return fmt.Errorf("deleting %q: %w", rel, err)
+	}
+	s.mu.Lock()
+	delete(s.files, rel)
+	s.mu.Unlock()
+	return nil
+}
+
+// docID — id документа по относительному пути: из последнего обхода, иначе
+// поиском по именам от корня дерева.
+func (s *SAF) docID(rel string) (string, error) {
+	s.mu.RLock()
+	f, ok := s.files[rel]
+	s.mu.RUnlock()
+	if ok {
+		return f.docID, nil
+	}
+	id, err := treeDocID(s.tree)
+	if err != nil {
+		return "", err
+	}
+next:
+	for _, name := range strings.Split(rel, "/") {
+		children, err := listChildren(s.tree, id)
+		if err != nil {
+			return "", err
+		}
+		for _, c := range children {
+			if c.name == name {
+				id = c.id
+				continue next
+			}
+		}
+		return "", fmt.Errorf("file %q not found in the folder", rel)
+	}
+	return id, nil
+}
+
 // --- JNI ---
 
 type child struct {
@@ -169,7 +244,7 @@ func jni(fn func(env, ctx C.uintptr_t) error) error {
 	return driver.RunNative(func(c any) error {
 		ac, ok := c.(*driver.AndroidContext)
 		if !ok {
-			return errors.New("нет контекста Android")
+			return errors.New("no Android context")
 		}
 		return fn(C.uintptr_t(ac.Env), C.uintptr_t(ac.Ctx))
 	})

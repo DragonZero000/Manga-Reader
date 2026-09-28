@@ -51,6 +51,8 @@ The Firefox ESR and GeckoView builds may themselves include third-party code. Th
 
 Exact versions are in [`go.mod`](go.mod). The full license texts ship with each module and are available at the links above.
 
+The files `internal/i18n/fyne/base.<lang>.json` are copies of Fyne's built-in translations (`fyne.io/fyne/v2/lang/translations`, BSD-3-Clause, same license as `fyne.io/fyne/v2` above); they are embedded into the app to show Fyne's own texts in the app language.
+
 ## Android libraries (APK)
 
 | Component | License |

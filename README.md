@@ -8,7 +8,7 @@
 
 An offline manga reader for zip archives on **Windows** and **Android**, with a built-in Firefox-based browser: archives you download in it go straight into your library. Written in Go with [Fyne](https://fyne.io).
 
-> **The interface is currently in Russian only.** The [user guide](docs/en/user-guide.md) gives every button and tab with an English translation.
+> **The interface is in English and Russian.** It follows the system language by default (English if there is no translation for it); pick the language in **Settings** → **Язык / Language**.
 
 <p align="center">
   <img src="docs/images/library.png" alt="Library on Windows" height="240">

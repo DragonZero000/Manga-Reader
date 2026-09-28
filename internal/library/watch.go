@@ -38,12 +38,12 @@ func NewWatcher(root string) (*Watcher, error) {
 func newWatcher(root string, quiet, maxWait time.Duration) (*Watcher, error) {
 	fw, err := fsnotify.NewWatcher()
 	if err != nil {
-		return nil, fmt.Errorf("наблюдение за %s: %w", root, err)
+		return nil, fmt.Errorf("watching %s: %w", root, err)
 	}
 	w := &Watcher{root: root, fs: fw, quiet: quiet, maxWait: maxWait}
 	if err := w.addTree(root); err != nil {
 		fw.Close()
-		return nil, fmt.Errorf("наблюдение за %s: %w", root, err)
+		return nil, fmt.Errorf("watching %s: %w", root, err)
 	}
 	return w, nil
 }
@@ -68,7 +68,7 @@ func (w *Watcher) addTree(dir string) error {
 			if p == dir {
 				return err
 			}
-			log.Printf("наблюдение: %s: %v", p, err)
+			log.Printf("watch: %s: %v", p, err)
 		}
 		return nil
 	})
@@ -104,7 +104,7 @@ func (w *Watcher) Run(ctx context.Context, onChange func()) {
 			if ev.Has(fsnotify.Create) && w.isNewDir(ev.Name) {
 				// в новой папке уже могут быть файлы — серия запускается в любом случае
 				if err := w.addTree(ev.Name); err != nil {
-					log.Printf("наблюдение: %s: %v", ev.Name, err)
+					log.Printf("watch: %s: %v", ev.Name, err)
 				}
 			}
 			if w.relevant(ev) {
@@ -115,7 +115,7 @@ func (w *Watcher) Run(ctx context.Context, onChange func()) {
 				return
 			}
 			// например, переполнение буфера: полный скан всё восстановит
-			log.Printf("наблюдение: %v", err)
+			log.Printf("watch: %v", err)
 			trigger()
 		case <-timer.C:
 			pending = false

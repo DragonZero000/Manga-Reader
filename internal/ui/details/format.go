@@ -1,24 +1,24 @@
 package details
 
 import (
-	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"mangareader/internal/i18n"
 	"mangareader/internal/model"
 )
 
-// knownTypeOrder — порядок групп тегов и их подписи.
+// knownTypeOrder — порядок групп тегов и ключи перевода их подписей.
 var knownTypeOrder = []struct{ typ, label string }{
-	{model.TagTypeArtist, "Автор"},
-	{model.TagTypeGroup, "Группа"},
-	{model.TagTypeParody, "Пародия"},
-	{model.TagTypeCharacter, "Персонаж"},
-	{model.TagTypeLanguage, "Язык"},
-	{model.TagTypeCategory, "Категория"},
-	{model.TagTypeTag, "Теги"},
+	{model.TagTypeArtist, "tags.artist"},
+	{model.TagTypeGroup, "tags.group"},
+	{model.TagTypeParody, "tags.parody"},
+	{model.TagTypeCharacter, "tags.character"},
+	{model.TagTypeLanguage, "tags.language"},
+	{model.TagTypeCategory, "tags.category"},
+	{model.TagTypeTag, "tags.tag"},
 }
 
 // Group — теги одного типа.
@@ -44,7 +44,7 @@ func TagGroups(tags []model.Tag) []Group {
 	for _, k := range knownTypeOrder {
 		known[k.typ] = true
 		if names := byType[k.typ]; len(names) > 0 {
-			out = append(out, Group{Type: k.typ, Label: k.label, Names: names})
+			out = append(out, Group{Type: k.typ, Label: i18n.T(k.label), Names: names})
 		}
 	}
 	var unknown []string
@@ -57,7 +57,7 @@ func TagGroups(tags []model.Tag) []Group {
 	for _, typ := range unknown {
 		label := typ
 		if label == "" {
-			label = "Прочее"
+			label = i18n.T("tags.other")
 		}
 		out = append(out, Group{Type: typ, Label: label, Names: byType[typ]})
 	}
@@ -94,70 +94,39 @@ func InfoRows(g model.Gallery) []Row {
 	if n := len(g.Pages); n > 0 {
 		v := strconv.Itoa(n)
 		if g.NumPages > 0 && g.NumPages != n {
-			v += fmt.Sprintf(" (в метаданных: %d)", g.NumPages)
+			v = i18n.T("info.pages_meta", "Pages", n, "Meta", g.NumPages)
 		}
-		add("Страниц", v)
+		add(i18n.T("info.pages"), v)
 	}
 	if g.ExternalID > 0 {
-		add("ID", strconv.FormatInt(g.ExternalID, 10))
+		add(i18n.T("info.id"), strconv.FormatInt(g.ExternalID, 10))
 	}
 	if !g.Uploaded.IsZero() {
-		add("Загружено", FormatDate(g.Uploaded))
+		add(i18n.T("info.uploaded"), FormatDate(g.Uploaded))
 	}
 	if g.Favorites > 0 {
-		add("Избранное", FormatInt(int64(g.Favorites)))
+		add(i18n.T("info.favorites"), FormatInt(int64(g.Favorites)))
 	}
-	add("Сканлейтор", strings.TrimSpace(g.Scanlator))
-	add("Файл", g.Key.ID)
+	add(i18n.T("info.scanlator"), strings.TrimSpace(g.Scanlator))
+	add(i18n.T("info.file"), g.Key.ID)
 	if g.File.Size > 0 {
-		add("Размер", FormatSize(g.File.Size))
+		add(i18n.T("info.size"), FormatSize(g.File.Size))
 	}
 	if !g.File.ModTime.IsZero() {
-		add("Изменён", FormatDateTime(g.File.ModTime))
+		add(i18n.T("info.modified"), FormatDateTime(g.File.ModTime))
 	}
 	return rows
 }
 
-// FormatDate — дата в UTC в формате ДД.ММ.ГГГГ (дата загрузки хранится в UTC
-// и не должна «съезжать» на соседний день из-за часового пояса).
-func FormatDate(t time.Time) string {
-	return t.UTC().Format("02.01.2006")
-}
+// FormatDate — дата в UTC по формату языка интерфейса (см. i18n.Date).
+func FormatDate(t time.Time) string { return i18n.Date(t) }
 
-// FormatDateTime — местные дата и время ДД.ММ.ГГГГ ЧЧ:ММ.
-func FormatDateTime(t time.Time) string {
-	return t.Local().Format("02.01.2006 15:04")
-}
+// FormatDateTime — местные дата и время по формату языка интерфейса.
+func FormatDateTime(t time.Time) string { return i18n.DateTime(t) }
 
-// FormatSize — размер в Б/КБ/МБ/ГБ (основание 1024) с одной цифрой после запятой.
-func FormatSize(n int64) string {
-	if n < 1024 {
-		return fmt.Sprintf("%d Б", n)
-	}
-	units := []string{"КБ", "МБ", "ГБ", "ТБ"}
-	v := float64(n) / 1024
-	i := 0
-	for v >= 1024 && i < len(units)-1 {
-		v /= 1024
-		i++
-	}
-	return strings.Replace(fmt.Sprintf("%.1f %s", v, units[i]), ".", ",", 1)
-}
+// FormatSize — размер в Б/КБ/МБ/ГБ (основание 1024) с одной цифрой после
+// десятичного разделителя языка интерфейса.
+func FormatSize(n int64) string { return i18n.Size(n) }
 
-// FormatInt — число с неразрывным пробелом между разрядами: 12 345.
-func FormatInt(n int64) string {
-	s := strconv.FormatInt(n, 10)
-	neg := strings.HasPrefix(s, "-")
-	s = strings.TrimPrefix(s, "-")
-	var b strings.Builder
-	for i, r := range s {
-		if i > 0 && (len(s)-i)%3 == 0 {
-			b.WriteRune(' ')
-		}
-		b.WriteRune(r)
-	}
-	if neg {
-		return "-" + b.String()
-	}
-	return b.String()
-}
+// FormatInt — число с разделителем разрядов языка интерфейса: 12 345.
+func FormatInt(n int64) string { return i18n.Int(n) }

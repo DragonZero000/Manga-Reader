@@ -26,7 +26,7 @@ func New(version string, a fyne.App) *Services {
 	links := library.LoadLinksWithBackup(filepath.Join(dir, "links.json"), linkBackup(cat))
 	if cat != nil && cat.Fresh() {
 		if err := cat.ImportLinks(links.All()); err != nil {
-			log.Printf("каталог: перенос ссылок: %v", err)
+			log.Printf("catalog: moving links: %v", err)
 		}
 	}
 	var st storage.Storage
@@ -53,13 +53,13 @@ func (s *Services) NeedsWriteAccess() bool {
 // Вызывать сразу после выбора, пока действует временный доступ.
 func (s *Services) SetFolder(tree string) error {
 	if err := storage.TakePersistable(tree); err != nil {
-		return fmt.Errorf("не удалось сохранить доступ к папке: %w", err)
+		return fmt.Errorf("could not keep access to the folder: %w", err)
 	}
 	s.Settings.SetString(KeyLibraryTree, tree)
 	if s.Catalog != nil {
 		// каталог — одной папки: прежние галереи, обложки и ссылки не нужны
 		if err := s.Catalog.Reset(tree); err != nil {
-			log.Printf("каталог: смена папки: %v", err)
+			log.Printf("catalog: changing folder: %v", err)
 		}
 	}
 	s.Library.SetStorage(library.WithLinks(storage.NewSAF(tree), s.Links))

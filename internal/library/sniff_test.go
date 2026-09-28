@@ -98,11 +98,11 @@ func TestScanReasons(t *testing.T) {
 	writeFile(t, dir, "part.zip", full[:len(full)/2])
 
 	tests := []struct{ rel, want string }{
-		{"g-2.zip", "Изображение — поддерживаются только zip-архивы"},
-		{"g-3.zip", "Веб-страница (HTML) вместо архива — вероятно, сайт вернул страницу с ошибкой или проверкой"},
-		{"clip.mp4", "Видео — поддерживаются только zip-архивы"},
-		{"empty.zip", "Пустой файл"},
-		{"book.cbz", "Zip-архив с расширением «.cbz» — поддерживаются только файлы .zip"},
+		{"g-2.zip", "image - only zip archives are supported"},
+		{"g-3.zip", "web page (HTML) instead of an archive - the site probably returned an error or a check page"},
+		{"clip.mp4", "video - only zip archives are supported"},
+		{"empty.zip", "empty file"},
+		{"book.cbz", `zip archive with extension ".cbz" - only .zip files are supported`},
 		{"part.zip", ErrNotZip.Error()},
 	}
 	for _, tt := range tests {

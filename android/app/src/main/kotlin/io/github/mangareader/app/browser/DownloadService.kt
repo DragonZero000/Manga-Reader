@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.IBinder
+import io.github.mangareader.app.R
 
 /**
  * Foreground service на время загрузок: уведомление с прогрессом не даёт
@@ -39,7 +40,7 @@ class DownloadService : Service() {
         private fun build(ctx: Context): Notification {
             val nm = ctx.getSystemService(NotificationManager::class.java)
             if (nm.getNotificationChannel(CHANNEL) == null) {
-                nm.createNotificationChannel(NotificationChannel(CHANNEL, "Загрузки", NotificationManager.IMPORTANCE_LOW))
+                nm.createNotificationChannel(NotificationChannel(CHANNEL, Lang.str(ctx, R.string.channel_downloads), NotificationManager.IMPORTANCE_LOW))
             }
             val active = DownloadManager.list().filter { it.state == DownloadManager.State.RUNNING }
             val first = active.firstOrNull()
@@ -47,10 +48,13 @@ class DownloadService : Service() {
                 .setSmallIcon(android.R.drawable.stat_sys_download)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
-                .setContentTitle(if (active.size > 1) "Скачивание: ${active.size} файла" else "Скачивание ${first?.name ?: ""}")
+                .setContentTitle(
+                    if (active.size > 1) Lang.plural(ctx, R.plurals.notif_downloading_many, active.size, active.size)
+                    else Lang.str(ctx, R.string.notif_downloading_one, first?.name ?: ""),
+                )
             if (first != null && first.total > 0) {
                 val pct = (first.done * 100 / first.total).toInt().coerceIn(0, 100)
-                b.setProgress(100, pct, false).setContentText("${first.name} — $pct%")
+                b.setProgress(100, pct, false).setContentText(Lang.str(ctx, R.string.notif_progress, first.name, pct))
             } else {
                 b.setProgress(0, 0, true)
             }

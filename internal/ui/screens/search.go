@@ -2,7 +2,6 @@ package screens
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"mangareader/internal/app"
+	"mangareader/internal/i18n"
 	"mangareader/internal/library"
 	"mangareader/internal/model"
 	"mangareader/internal/search"
@@ -22,18 +22,19 @@ import (
 // изменения текста.
 const searchDelay = 500 * time.Millisecond
 
-// helpExamples — справка по синтаксису при пустом запросе.
+// helpExamples — справка по синтаксису при пустом запросе: запрос (синтаксис
+// от языка не зависит) и ключ перевода пояснения.
 var helpExamples = [][2]string{
-	{"school", "часть слова в названии, тегах, сканлейторе, имени файла, ID"},
-	{`"english name"`, "фраза целиком"},
-	{`tag:"tag 1"`, "точный тег любого типа"},
-	{`artist:"artist 1"`, "тег типа: artist, group, parody, character, language, category"},
-	{`-tag:yuri`, "исключить произведения с тегом"},
-	{"pages:>20", "число страниц: > < >= <= 10..50"},
-	{"uploaded:2024", "дата загрузки: 2024, >2024-06, 2024-01..2024-03"},
-	{"size:>10mb", "размер файла: k, mb, gb"},
-	{"favorites:>100  id:535147", "избранное и ID"},
-	{"school pages:>20 -tag:yuri", "всё вместе: условия объединяются «И»"},
+	{"school", "search.help.word"},
+	{`"english name"`, "search.help.phrase"},
+	{`tag:"tag 1"`, "search.help.tag"},
+	{`artist:"artist 1"`, "search.help.typed_tag"},
+	{`-tag:yuri`, "search.help.exclude"},
+	{"pages:>20", "search.help.pages"},
+	{"uploaded:2024", "search.help.uploaded"},
+	{"size:>10mb", "search.help.size"},
+	{"favorites:>100  id:535147", "search.help.favorites"},
+	{"school pages:>20 -tag:yuri", "search.help.combined"},
 }
 
 // Search — экран поиска: поле запроса, статус, результаты сеткой или справка.
@@ -63,6 +64,8 @@ type Search struct {
 	helpDone bool
 	// filling — поле меняется программно: OnChanged не запускает таймер.
 	filling bool
+	// total — число найденных последним запросом (строка статуса).
+	total int
 
 	seq      int         // номер последнего запуска; старые результаты отбрасываются
 	timer    *time.Timer // задержка поиска при вводе
@@ -70,24 +73,24 @@ type Search struct {
 }
 
 // NewSearch создаёт экран; metrics — размер карточек, общий с библиотекой;
-// open вызывается при нажатии на результат.
-func NewSearch(svc *app.Services, metrics *GridMetrics, open func(model.Gallery)) *Search {
+// actions — действия карточки результата (нажатие — actions.Open).
+func NewSearch(svc *app.Services, metrics *GridMetrics, actions *GalleryActions) *Search {
 	s := &Search{index: svc.Index, src: svc.Library, do: fyne.Do, delay: searchDelay}
 
 	s.entry = widget.NewEntry()
-	s.entry.SetPlaceHolder(`Слово, "фраза", tag:"…", pages:>20…`)
+	s.entry.SetPlaceHolder(i18n.T("search.placeholder"))
 	s.entry.OnChanged = func(string) { s.changed() }
 	s.entry.OnSubmitted = func(string) { s.submitted() }
 
 	s.status = widget.NewLabel("")
 	s.status.Wrapping = fyne.TextWrapWord
-	s.grid = newGalleryGrid(svc.Thumbs, metrics, open)
+	s.grid = newGalleryGrid(svc.Thumbs, metrics, actions)
 	s.help = newSearchHelp()
 
 	s.clearBtn = widget.NewButtonWithIcon("", theme.ContentClearIcon(), s.Clear)
 	s.runBtn = widget.NewButtonWithIcon("", theme.SearchIcon(), func() { s.execute(s.entry.Text) })
 	// 🎲 — из результата в сетке; ошибка разбора сетку не меняет
-	s.random = newRandomButton(app.RandomMode(svc.Settings), s.grid.Items, open)
+	s.random = newRandomButton(app.RandomMode(svc.Settings), s.grid.Items, func(g model.Gallery) { actions.Open(g) })
 	buttons := container.NewHBox(s.clearBtn, s.runBtn, s.random.btn)
 	top := container.NewVBox(container.NewBorder(nil, nil, nil, buttons, s.entry), s.status)
 	s.content = container.NewBorder(top, nil, nil, nil, container.NewStack(s.help, s.grid.Widget()))
@@ -206,7 +209,7 @@ func (s *Search) execute(text string) {
 	q, err := search.Parse(text)
 	if err != nil {
 		// прежние результаты остаются до исправления запроса
-		s.setStatus("Ошибка в запросе: "+err.Error(), true)
+		s.setStatus(i18n.T("search.query_error", "Error", ErrorText(err)), true)
 		return
 	}
 	go func() {
@@ -228,16 +231,32 @@ func (s *Search) execute(text string) {
 
 func (s *Search) apply(items []model.Gallery, total int, err error) {
 	if err != nil {
-		s.setStatus("Ошибка поиска: "+err.Error(), true)
+		s.setStatus(i18n.T("search.failed", "Error", ErrorText(err)), true)
 		return
 	}
 	s.grid.SetItems(items)
-	s.random.update(len(items))
-	if total == 0 {
-		s.setStatus("Ничего не найдено", false)
+	s.total = total
+	s.updateFound()
+}
+
+// updateFound показывает число найденных и включает 🎲, если есть результаты.
+func (s *Search) updateFound() {
+	s.random.update(len(s.grid.Items()))
+	if s.total == 0 {
+		s.setStatus(i18n.T("search.nothing"), false)
 	} else {
-		s.setStatus(fmt.Sprintf("Найдено: %d", total), false)
+		s.setStatus(i18n.T("search.found", "Count", s.total), false)
 	}
+}
+
+// Remove убирает галерею k из результатов сразу после удаления файла.
+// Вызывать из UI-потока.
+func (s *Search) Remove(k model.Key) {
+	if !s.grid.Remove(k) {
+		return
+	}
+	s.total = max(0, s.total-1)
+	s.updateFound()
 }
 
 func (s *Search) setStatus(text string, isErr bool) {
@@ -258,12 +277,12 @@ func newSearchHelp() fyne.CanvasObject {
 	form := container.New(layout.NewFormLayout())
 	for _, ex := range helpExamples {
 		q := widget.NewLabelWithStyle(ex[0], fyne.TextAlignLeading, fyne.TextStyle{Monospace: true})
-		d := widget.NewLabel(ex[1])
+		d := widget.NewLabel(i18n.T(ex[1]))
 		d.Wrapping = fyne.TextWrapWord
 		form.Add(q)
 		form.Add(d)
 	}
-	title := widget.NewLabelWithStyle("Как искать", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	title := widget.NewLabelWithStyle(i18n.T("search.help.title"), fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	return container.NewVScroll(container.NewVBox(title, form))
 }
 

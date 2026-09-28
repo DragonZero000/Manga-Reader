@@ -65,7 +65,7 @@ func TestScanFindsArchives(t *testing.T) {
 	if !errors.As(res.Errors[0].Err, &ue) || ue.Kind != KindText {
 		t.Fatalf("notes.txt: %v", res.Errors[0].Err)
 	}
-	if got := res.Errors[0].Err.Error(); got != "Текстовый файл — поддерживаются только zip-архивы" {
+	if got := res.Errors[0].Err.Error(); got != "text file - only zip archives are supported" {
 		t.Errorf("причина: %q", got)
 	}
 }

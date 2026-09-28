@@ -63,7 +63,7 @@ func TestScanBusyAsError(t *testing.T) {
 	src.SetBusyAsError(true)
 
 	res, _ := src.Scan(context.Background())
-	if len(res.Errors) != 1 || res.Errors[0].Err.Error() != "Файл занят другой программой" || len(res.Busy) != 1 {
+	if len(res.Errors) != 1 || !errors.Is(res.Errors[0].Err, storage.ErrBusy) || len(res.Busy) != 1 {
 		t.Fatalf("errors=%v busy=%v", res.Errors, res.Busy)
 	}
 	if len(res.NewErrors) != 1 {

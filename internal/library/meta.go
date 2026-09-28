@@ -71,7 +71,7 @@ func (f *flexInt) UnmarshalJSON(b []byte) error {
 		}
 		n, err := strconv.ParseInt(s, 10, 64)
 		if err != nil {
-			return fmt.Errorf("число в строке: %w", err)
+			return fmt.Errorf("number in a string: %w", err)
 		}
 		*f = flexInt(n)
 		return nil

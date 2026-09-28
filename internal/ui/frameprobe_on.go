@@ -37,5 +37,5 @@ func startFrameProbe() {
 	a.RepeatCount = fyne.AnimationRepeatForever
 	a.Curve = fyne.AnimationLinear
 	a.Start()
-	log.Print("frameprobe: замер кадров включён")
+	log.Print("frameprobe: frame timing enabled")
 }

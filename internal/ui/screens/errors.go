@@ -8,8 +8,8 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"mangareader/internal/i18n"
 	"mangareader/internal/problems"
-	"mangareader/internal/ui/details"
 )
 
 // Errors — экран ошибок библиотеки: файлы, которые приложение не может
@@ -28,8 +28,8 @@ func NewErrors(tracker *problems.Tracker) *Errors {
 	e.list = container.NewVBox()
 	e.scroll = container.NewVScroll(e.list)
 
-	title := widget.NewLabelWithStyle("Ошибок нет", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	hint := widget.NewLabel("Все файлы в папке библиотеки открываются.")
+	title := widget.NewLabelWithStyle(i18n.T("errors.empty.title"), fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	hint := widget.NewLabel(i18n.T("errors.empty.hint"))
 	hint.Alignment = fyne.TextAlignCenter
 	hint.Wrapping = fyne.TextWrapWord
 	e.empty = container.NewVBox(layout.NewSpacer(), title, hint, layout.NewSpacer())
@@ -91,11 +91,11 @@ func (r *errorRow) CreateRenderer() fyne.WidgetRenderer {
 	path := widget.NewLabelWithStyle(it.RelPath, fyne.TextAlignLeading, fyne.TextStyle{Bold: !it.Seen})
 	path.Wrapping = fyne.TextWrapBreak
 
-	reason := widget.NewLabel(it.Reason)
+	reason := widget.NewLabel(ProblemText(it.Err))
 	reason.Wrapping = fyne.TextWrapWord
 	reason.Importance = widget.DangerImportance
 
-	when := widget.NewLabel(details.FormatDateTime(it.ModTime))
+	when := widget.NewLabel(i18n.DateTime(it.ModTime))
 	when.Importance = widget.LowImportance
 
 	// маркер занимает место и у просмотренных, чтобы строки не «прыгали»

@@ -23,6 +23,6 @@ func (s Covers) Save(key, rel string, w, h int, jpeg []byte) {
 	if _, err := s.c.db.Exec(`INSERT INTO covers(key, rel, w, h, jpeg) VALUES(?, ?, ?, ?, ?)
 		ON CONFLICT(key) DO UPDATE SET rel = excluded.rel, w = excluded.w, h = excluded.h, jpeg = excluded.jpeg`,
 		key, rel, w, h, jpeg); err != nil {
-		log.Printf("каталог: обложка %s: %v", rel, err)
+		log.Printf("catalog: cover %s: %v", rel, err)
 	}
 }

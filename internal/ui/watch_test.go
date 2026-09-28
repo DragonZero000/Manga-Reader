@@ -16,6 +16,7 @@ import (
 	"mangareader/internal/model"
 	"mangareader/internal/search"
 	"mangareader/internal/storage"
+	"mangareader/internal/ui/screens"
 )
 
 // busyFS — папка, часть файлов которой «занята другим процессом».
@@ -141,7 +142,7 @@ func TestBusyFileBecomesError(t *testing.T) {
 	l.library.Refresh()
 	l.runUntil(t, "ошибка «Файл занят»", func() bool {
 		items := l.svc.Problems.Items()
-		return len(items) == 1 && items[0].Reason == "Файл занят другой программой"
+		return len(items) == 1 && screens.ProblemText(items[0].Err) == "Файл занят другой программой"
 	})
 	// повторы прекращаются
 	time.Sleep(100 * time.Millisecond)

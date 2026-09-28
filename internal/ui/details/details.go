@@ -13,6 +13,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
+	"mangareader/internal/i18n"
 	"mangareader/internal/library"
 	"mangareader/internal/model"
 	"mangareader/internal/pages"
@@ -38,6 +39,8 @@ type Details struct {
 	onSearch func(string)
 	// onOpenURL открывает ссылку на произведение; nil — кнопки нет.
 	onOpenURL func(string)
+	// menu строит меню «⋮» для произведения; nil — кнопки нет.
+	menu func(model.Gallery) *fyne.Menu
 	// do выполняет функцию в UI-потоке (fyne.Do); подменяется в тестах.
 	do func(func())
 
@@ -52,6 +55,8 @@ type Details struct {
 	layer  *fyne.Container
 	// linkBtn — кнопка «Открыть в браузере» текущей страницы (nil — нет ссылки).
 	linkBtn *widget.Button
+	// menuBtn — кнопка «⋮» справа в верхней полосе.
+	menuBtn *widget.Button
 }
 
 // New создаёт скрытый слой. onRead открывает читалку, onSearch — поиск
@@ -72,8 +77,11 @@ func New(win fyne.Window, src *library.Source, th *thumbs.Cache, onRead func(mod
 	d.cover = newCover(d)
 
 	back := widget.NewButtonWithIcon("", theme.NavigateBackIcon(), d.Close)
+	d.menuBtn = widget.NewButtonWithIcon("", theme.MoreVerticalIcon(), d.showMenu)
+	d.menuBtn.Importance = widget.LowImportance
+	d.menuBtn.Hide()
 	topBg := canvas.NewRectangle(theme.Color(theme.ColorNameHeaderBackground))
-	top := container.NewStack(topBg, container.NewBorder(nil, nil, back, nil, d.title))
+	top := container.NewStack(topBg, container.NewBorder(nil, nil, back, d.menuBtn, d.title))
 
 	d.scroll = container.NewVScroll(container.NewPadded(d.body))
 	bg := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
@@ -88,6 +96,36 @@ func (d *Details) SetDispatcher(do func(func())) { d.do = do }
 // SetOpenURL задаёт открытие ссылки на произведение (кнопка «Открыть в
 // браузере»); nil — кнопка не показывается.
 func (d *Details) SetOpenURL(open func(string)) { d.onOpenURL = open }
+
+// SetMenu задаёт меню кнопки «⋮» (действия, которых нет на самой странице);
+// nil — кнопка не показывается.
+func (d *Details) SetMenu(menu func(model.Gallery) *fyne.Menu) {
+	d.menu = menu
+	if menu == nil {
+		d.menuBtn.Hide()
+	} else {
+		d.menuBtn.Show()
+	}
+}
+
+// MenuButton — кнопка «⋮» верхней полосы.
+func (d *Details) MenuButton() *widget.Button { return d.menuBtn }
+
+// showMenu показывает меню «⋮» под кнопкой.
+func (d *Details) showMenu() {
+	if !d.visible || d.menu == nil {
+		return
+	}
+	m := d.menu(d.g)
+	if len(m.Items) == 0 {
+		return
+	}
+	pos := fyne.CurrentApp().Driver().AbsolutePositionForObject(d.menuBtn).AddXY(0, d.menuBtn.Size().Height)
+	showPopUpMenu(m, d.win.Canvas(), pos)
+}
+
+// showPopUpMenu показывает всплывающее меню; подменяется в тестах.
+var showPopUpMenu = widget.ShowPopUpMenuAtPosition
 
 // OpenInBrowserButton — кнопка «Открыть в браузере» (nil — не показана).
 func (d *Details) OpenInBrowserButton() *widget.Button { return d.linkBtn }
@@ -153,12 +191,12 @@ func (d *Details) build() {
 		objs = append(objs, altLbl)
 	}
 
-	readBtn := widget.NewButtonWithIcon("Читать", theme.MediaPlayIcon(), d.read)
+	readBtn := widget.NewButtonWithIcon(i18n.T("details.read"), theme.MediaPlayIcon(), d.read)
 	readBtn.Importance = widget.HighImportance
 	buttons := container.NewHBox(readBtn)
 	d.linkBtn = nil
 	if u := g.SourceURL; u != "" && d.onOpenURL != nil {
-		d.linkBtn = widget.NewButtonWithIcon("Открыть в браузере", theme.ComputerIcon(), func() { d.onOpenURL(u) })
+		d.linkBtn = widget.NewButtonWithIcon(i18n.T("details.open_in_browser"), theme.ComputerIcon(), func() { d.onOpenURL(u) })
 		buttons.Add(d.linkBtn)
 	}
 	objs = append(objs, buttons)

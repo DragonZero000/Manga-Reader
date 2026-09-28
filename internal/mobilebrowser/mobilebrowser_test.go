@@ -20,8 +20,8 @@ func TestEngineTemplate(t *testing.T) {
 }
 
 func TestSettingsJSON(t *testing.T) {
-	got := Settings{Home: "https://a.example", Search: "https://s.example/?q=%s", Toolbar: ToolbarTop}.json()
-	if got != `{"home":"https://a.example","search":"https://s.example/?q=%s","toolbar":"top"}` {
+	got := Settings{Home: "https://a.example", Search: "https://s.example/?q=%s", Toolbar: ToolbarTop, Lang: "en"}.json()
+	if got != `{"home":"https://a.example","search":"https://s.example/?q=%s","toolbar":"top","lang":"en"}` {
 		t.Fatal(got)
 	}
 }

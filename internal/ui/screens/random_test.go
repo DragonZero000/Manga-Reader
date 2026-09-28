@@ -136,7 +136,7 @@ func TestLibraryRandomButton(t *testing.T) {
 	a := test.NewTempApp(t)
 	svc := app.NewForTest(library.NewDirSource(t.TempDir(), nil), nil, storage.NewMemSettings())
 	var opened []model.Gallery
-	l := NewLibrary(svc, NewGridMetrics(svc.Settings), func(string) {}, func(g model.Gallery) { opened = append(opened, g) }, nil)
+	l := NewLibrary(svc, NewGridMetrics(svc.Settings), func(string) {}, &GalleryActions{Open: func(g model.Gallery) { opened = append(opened, g) }}, nil)
 	a.NewWindow("t").SetContent(l.Content())
 
 	if !l.random.btn.Disabled() {
@@ -177,7 +177,7 @@ func TestLibraryRandomButton(t *testing.T) {
 func TestLibraryRandomAfterCached(t *testing.T) {
 	test.NewTempApp(t)
 	svc := app.NewForTest(library.NewDirSource(t.TempDir(), nil), nil, storage.NewMemSettings())
-	l := NewLibrary(svc, NewGridMetrics(svc.Settings), func(string) {}, func(model.Gallery) {}, nil)
+	l := NewLibrary(svc, NewGridMetrics(svc.Settings), func(string) {}, &GalleryActions{Open: func(model.Gallery) {}}, nil)
 	l.ShowCached(library.ScanResult{Galleries: galleries("a.zip")})
 	if l.random.btn.Disabled() {
 		t.Fatal("после каталога 🎲 должна быть активна")
@@ -189,7 +189,7 @@ func TestLibraryRandomAfterCached(t *testing.T) {
 func TestLibraryRandomButtonLooksEnabled(t *testing.T) {
 	test.NewTempApp(t)
 	svc := app.NewForTest(library.NewDirSource(t.TempDir(), nil), nil, storage.NewMemSettings())
-	l := NewLibrary(svc, NewGridMetrics(svc.Settings), func(string) {}, func(model.Gallery) {}, nil)
+	l := NewLibrary(svc, NewGridMetrics(svc.Settings), func(string) {}, &GalleryActions{Open: func(model.Gallery) {}}, nil)
 	shown, ok := l.tools.Objects[0].(fyne.Widget)
 	if !ok {
 		t.Fatalf("первый объект панели — %T, ожидалась кнопка 🎲", l.tools.Objects[0])

@@ -12,11 +12,11 @@ import (
 
 // ErrUnavailable — папка библиотеки недоступна: не выбрана, нет разрешения,
 // удалена или её не удалось создать.
-var ErrUnavailable = errors.New("хранилище недоступно")
+var ErrUnavailable = errors.New("storage is unavailable")
 
 // ErrBusy — файл временно занят другим процессом (антивирус, незавершённая
 // запись). Открытие стоит повторить позже.
-var ErrBusy = errors.New("Файл занят другой программой")
+var ErrBusy = errors.New("the file is in use by another program")
 
 // Entry — элемент папки библиотеки.
 type Entry struct {

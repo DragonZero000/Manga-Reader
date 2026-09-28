@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="add">Добавить</string>
+    <string name="cancel">Отмена</string>
+    <string name="close">Закрыть</string>
+    <string name="remove">Удалить</string>
+
+    <string name="address_hint">Адрес или поиск</string>
+    <string name="menu_new_tab">Новая вкладка</string>
+    <string name="menu_bookmarks">Закладки</string>
+    <string name="menu_downloads">Загрузки</string>
+    <string name="menu_extensions">Расширения</string>
+    <string name="tabs_title">Вкладки: %1$d</string>
+
+    <string name="bookmark_added">Добавлено в закладки</string>
+    <string name="bookmark_removed">Удалено из закладок</string>
+    <string name="bookmarks_empty">Закладок пока нет — нажмите ☆ на странице</string>
+
+    <string name="downloads_empty">Загрузок пока нет. Файлы сохраняются в папку библиотеки</string>
+    <string name="download_progress">скачивается: %1$d%%</string>
+    <string name="download_progress_kb">скачивается: %1$d КБ</string>
+    <string name="download_done">готово — в библиотеке</string>
+    <string name="download_failed">не удалось скачать</string>
+    <string name="downloaded">Скачано: %1$s</string>
+    <string name="download_error">Не удалось скачать %1$s</string>
+    <string name="library_not_selected">Папка библиотеки не выбрана</string>
+
+    <string name="channel_downloads">Загрузки</string>
+    <plurals name="notif_downloading_many">
+        <item quantity="one">Скачивание: %1$d файл</item>
+        <item quantity="few">Скачивание: %1$d файла</item>
+        <item quantity="many">Скачивание: %1$d файлов</item>
+        <item quantity="other">Скачивание: %1$d файла</item>
+    </plurals>
+    <string name="notif_downloading_one">Скачивание %1$s</string>
+    <string name="notif_progress">%1$s — %2$d%%</string>
+
+    <string name="ext_add_title">Добавить «%1$s»?</string>
+    <string name="ext_add_message">Расширению нужны разрешения:\n%1$s</string>
+    <string name="ext_perm_sites">доступ к данным сайтов: %1$d</string>
+    <string name="ext_find">Найти расширения</string>
+    <string name="ext_empty">Расширений нет. Установите их с addons.mozilla.org кнопкой «Добавить в Firefox»</string>
+    <string name="ext_remove_title">Удалить «%1$s»?</string>
+    <string name="ext_installed">Расширение установлено: %1$s</string>
+    <string name="ext_install_failed">Расширение не установлено</string>
+    <string name="amo_url">https://addons.mozilla.org/ru/android/</string>
+
+    <string name="cleared">Очищено</string>
+    <string name="clear_failed">Не удалось очистить: %1$s</string>
+</resources>

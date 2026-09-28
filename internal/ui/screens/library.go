@@ -4,7 +4,6 @@ package screens
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"time"
 
@@ -15,6 +14,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"mangareader/internal/app"
+	"mangareader/internal/i18n"
 	"mangareader/internal/library"
 	"mangareader/internal/model"
 	"mangareader/internal/problems"
@@ -64,17 +64,17 @@ type Library struct {
 }
 
 // NewLibrary создаёт экран; metrics — размер карточек, общий с поиском;
-// open вызывается при нажатии на карточку, chooseFolder открывает выбор
-// папки (Android; на ПК — nil).
-func NewLibrary(svc *app.Services, metrics *GridMetrics, notify func(string), open func(model.Gallery), chooseFolder func()) *Library {
+// actions — действия карточки (нажатие — actions.Open), chooseFolder
+// открывает выбор папки (Android; на ПК — nil).
+func NewLibrary(svc *app.Services, metrics *GridMetrics, notify func(string), actions *GalleryActions, chooseFolder func()) *Library {
 	l := &Library{src: svc.Library, problems: svc.Problems, notify: notify, do: fyne.Do, busyDelay: busyRetryDelay}
 
 	l.count = widget.NewLabel("")
 	l.activity = widget.NewActivity()
 	l.activity.Hide()
-	l.refresh = widget.NewButtonWithIcon("Обновить", theme.ViewRefreshIcon(), l.Refresh)
-	l.grid = newGalleryGrid(svc.Thumbs, metrics, open)
-	l.random = newRandomButton(app.RandomMode(svc.Settings), l.grid.Items, open)
+	l.refresh = widget.NewButtonWithIcon(i18n.T("library.refresh"), theme.ViewRefreshIcon(), l.Refresh)
+	l.grid = newGalleryGrid(svc.Thumbs, metrics, actions)
+	l.random = newRandomButton(app.RandomMode(svc.Settings), l.grid.Items, func(g model.Gallery) { actions.Open(g) })
 	l.tools = container.NewHBox(l.random.btn, l.activity, l.refresh)
 	toolbar := container.NewBorder(nil, nil, l.count, l.tools)
 
@@ -140,6 +140,28 @@ func (l *Library) RequestScan() {
 	l.Refresh()
 }
 
+// Remove убирает галерею k из сетки сразу после удаления файла и обновляет
+// число галерей и кнопку 🎲; каталог приводит в порядок сканирование.
+// Вызывать из UI-потока.
+func (l *Library) Remove(k model.Key) {
+	if !l.grid.Remove(k) {
+		return
+	}
+	l.updateCount()
+	if len(l.grid.Items()) == 0 {
+		l.show(l.empty)
+	}
+}
+
+// Galleries — галереи в сетке (для тестов).
+func (l *Library) Galleries() []model.Gallery { return l.grid.Items() }
+
+// RandomButton — кнопка 🎲 (для тестов).
+func (l *Library) RandomButton() *widget.Button { return l.random.btn }
+
+// Count — текст числа галерей (для тестов).
+func (l *Library) Count() string { return l.count.Text }
+
 // Scanning — идёт сканирование (для тестов).
 func (l *Library) Scanning() bool { return l.scanning }
 
@@ -188,7 +210,7 @@ func (l *Library) applyScan(res library.ScanResult, err error) {
 		return
 	}
 	if err != nil {
-		log.Printf("библиотека: %v", err)
+		log.Printf("library: %v", err)
 		if l.choose != nil && errors.Is(err, storage.ErrUnavailable) {
 			// Android: папка не выбрана, доступ отозван или папка удалена
 			l.grid.SetItems(nil)
@@ -196,7 +218,7 @@ func (l *Library) applyScan(res library.ScanResult, err error) {
 			l.show(l.choose)
 			return
 		}
-		l.notify("Не удалось прочитать папку библиотеки: " + err.Error())
+		l.notify(i18n.T("library.read_failed", "Error", ErrorText(err)))
 		return
 	}
 	l.scanned = true
@@ -211,7 +233,7 @@ func (l *Library) applyScan(res library.ScanResult, err error) {
 	}
 	// toast только о записях, которых ещё не было в списке ошибок
 	if n := l.problems.Sync(res.Errors); n > 0 {
-		l.notify(fmt.Sprintf("Новые ошибки: %d — см. вкладку «Ошибки»", n))
+		l.notify(i18n.T("library.new_errors", "Count", n))
 	}
 	if l.OnScanned != nil {
 		l.OnScanned()
@@ -257,7 +279,7 @@ func (l *Library) show(o fyne.CanvasObject) {
 func (l *Library) updateEmptyDir() {
 	dir := l.src.Root()
 	if dir == "" {
-		dir = "папка не выбрана"
+		dir = i18n.T("library.folder_not_selected")
 	}
 	l.emptyDir.SetText(dir)
 }
@@ -265,15 +287,15 @@ func (l *Library) updateEmptyDir() {
 // updateCount показывает число галерей; 🎲 активна, если они есть.
 func (l *Library) updateCount() {
 	n := len(l.grid.Items())
-	l.count.SetText(fmt.Sprintf("Галерей: %d", n))
+	l.count.SetText(i18n.N("library.count", n))
 	l.random.update(n)
 }
 
 // newEmptyState — пустое состояние с папкой библиотеки.
 func newEmptyState() (fyne.CanvasObject, *widget.Label) {
-	title := widget.NewLabelWithStyle("Библиотека пуста", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	title := widget.NewLabelWithStyle(i18n.T("library.empty.title"), fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 
-	hint := widget.NewLabel("Скопируйте .zip-архивы в папку библиотеки:")
+	hint := widget.NewLabel(i18n.T("library.empty.hint"))
 	hint.Alignment = fyne.TextAlignCenter
 	hint.Wrapping = fyne.TextWrapWord
 
@@ -293,12 +315,11 @@ func newEmptyState() (fyne.CanvasObject, *widget.Label) {
 
 // newChooseState — «Выберите папку с мангой» с кнопкой выбора (Android).
 func newChooseState(choose func()) fyne.CanvasObject {
-	title := widget.NewLabelWithStyle("Выберите папку с мангой", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	hint := widget.NewLabel("Выберите или создайте папку внутри Download, например Download/manga, " +
-		"и складывайте туда .zip-архивы. Приложение увидит всё, что лежит в этой папке.")
+	title := widget.NewLabelWithStyle(i18n.T("library.choose.title"), fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	hint := widget.NewLabel(i18n.T("library.choose.hint"))
 	hint.Alignment = fyne.TextAlignCenter
 	hint.Wrapping = fyne.TextWrapWord
-	btn := widget.NewButtonWithIcon("Выбрать папку", theme.FolderOpenIcon(), choose)
+	btn := widget.NewButtonWithIcon(i18n.T("folder.choose"), theme.FolderOpenIcon(), choose)
 	btn.Importance = widget.HighImportance
 	icon := widget.NewIcon(theme.FolderIcon())
 	return container.NewVBox(

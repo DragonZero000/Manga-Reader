@@ -12,7 +12,15 @@ import (
 )
 
 // ErrUnsupported — встроенный браузер есть только на Windows.
-var ErrUnsupported = errors.New("встроенный браузер доступен только на Windows")
+var ErrUnsupported = errors.New("the embedded browser is available only on Windows")
+
+// NotFoundError — нет firefox.exe портативного браузера (например, запуск
+// через go run без папки browser).
+type NotFoundError struct {
+	Path string // ожидаемый путь к firefox.exe
+}
+
+func (e *NotFoundError) Error() string { return "browser not found: " + e.Path }
 
 // Интервалы: проверка новых окон и выхода процесса; ожидание штатного
 // закрытия перед принудительным завершением.
@@ -116,7 +124,7 @@ func (b *Browser) Open(url string) error {
 		return ErrUnsupported
 	}
 	if !b.Available() {
-		return fmt.Errorf("Браузер не найден: %s", b.exe)
+		return &NotFoundError{Path: b.exe}
 	}
 	if b.Running() {
 		b.mu.Lock()
@@ -129,7 +137,7 @@ func (b *Browser) Open(url string) error {
 			// без -no-remote Firefox передаёт адрес запущенному экземпляру
 			// с тем же профилем и сразу завершается
 			if err := b.command(url).Run(); err != nil {
-				return fmt.Errorf("передача адреса в браузер: %w", err)
+				return fmt.Errorf("passing the address to the browser: %w", err)
 			}
 		}
 		for _, h := range findWindows(b.exe) {
@@ -148,7 +156,7 @@ func (b *Browser) Open(url string) error {
 	b.mu.Unlock()
 	cmd := b.command(url)
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("запуск браузера: %w", err)
+		return fmt.Errorf("starting the browser: %w", err)
 	}
 	go cmd.Wait() // процесс-лаунчер: окно принадлежит дочернему процессу
 	b.watch()
@@ -195,7 +203,7 @@ func (b *Browser) startBridge() (port int, token string) {
 		}
 		br, err := NewBridge(b.opt.DownloadDir, onDownload, onShow)
 		if err != nil {
-			log.Printf("браузер: мост к расширению: %v", err)
+			log.Printf("browser: extension bridge: %v", err)
 			return 0, ""
 		}
 		b.bridge = br
@@ -221,11 +229,11 @@ func (b *Browser) writeConfig() error {
 		cfg.Home, cfg.Clear = b.opt.Prefs()
 	}
 	if err := os.Remove(cfg.LegacyPoliciesPath()); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("настройки браузера: %w", err)
+		return fmt.Errorf("browser settings: %w", err)
 	}
 	ext, err := Extension(b.startBridge())
 	if err != nil {
-		return fmt.Errorf("расширение браузера: %w", err)
+		return fmt.Errorf("browser extension: %w", err)
 	}
 	files := []struct {
 		path string
@@ -237,10 +245,10 @@ func (b *Browser) writeConfig() error {
 	}
 	for _, f := range files {
 		if err := os.MkdirAll(filepath.Dir(f.path), 0o755); err != nil {
-			return fmt.Errorf("настройки браузера: %w", err)
+			return fmt.Errorf("browser settings: %w", err)
 		}
 		if err := os.WriteFile(f.path, f.data, 0o644); err != nil {
-			return fmt.Errorf("настройки браузера: %w", err)
+			return fmt.Errorf("browser settings: %w", err)
 		}
 	}
 	if len(cfg.Clear) > 0 && b.opt.ClearApplied != nil {
@@ -302,9 +310,9 @@ func (b *Browser) cleanup() {
 	b.before = nil
 	b.mu.Unlock()
 	if n, err := CleanRegistry(b.opt.FirefoxDir, before); err != nil {
-		log.Printf("браузер: уборка реестра: %v", err)
+		log.Printf("browser: registry cleanup: %v", err)
 	} else if n > 0 {
-		log.Printf("браузер: удалено записей реестра: %d", n)
+		log.Printf("browser: registry entries removed: %d", n)
 	}
 }
 
@@ -323,7 +331,7 @@ func (b *Browser) Close() {
 		time.Sleep(100 * time.Millisecond)
 	}
 	if countProcs(b.exe) > 0 {
-		log.Printf("браузер: не закрылся за %v — завершается принудительно", closeTimeout)
+		log.Printf("browser: did not close within %v, killing it", closeTimeout)
 		killProcs(b.exe)
 	}
 	b.stopBridge()

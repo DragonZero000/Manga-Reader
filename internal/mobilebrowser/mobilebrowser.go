@@ -11,7 +11,7 @@ import (
 )
 
 // ErrUnsupported — встроенный браузер Android на этой платформе недоступен.
-var ErrUnsupported = errors.New("встроенный браузер Android недоступен")
+var ErrUnsupported = errors.New("the Android embedded browser is unavailable")
 
 // Engine — поисковик: имя и шаблон адреса (%s — запрос).
 type Engine struct {
@@ -54,6 +54,9 @@ type Settings struct {
 	Home    string `json:"home"`    // «» — пустая вкладка
 	Search  string `json:"search"`  // шаблон поисковика
 	Toolbar string `json:"toolbar"` // ToolbarBottom или ToolbarTop
+	// Lang — язык приложения ("en", "ru"): интерфейс браузера и язык страниц
+	// (Accept-Language); «» — язык системы.
+	Lang string `json:"lang"`
 }
 
 func (s Settings) json() string {

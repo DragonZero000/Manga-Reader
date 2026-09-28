@@ -21,7 +21,7 @@ func (c *Catalog) Links() map[string]string {
 	out := map[string]string{}
 	rows, err := c.db.Query(`SELECT rel, url FROM links`)
 	if err != nil {
-		log.Printf("каталог: ссылки: %v", err)
+		log.Printf("catalog: links: %v", err)
 		return out
 	}
 	defer rows.Close()

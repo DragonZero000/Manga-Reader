@@ -6,6 +6,7 @@ import (
 	"fyne.io/fyne/v2/test"
 
 	"mangareader/internal/app"
+	"mangareader/internal/i18n"
 	"mangareader/internal/library"
 	"mangareader/internal/model"
 	"mangareader/internal/storage"
@@ -34,6 +35,31 @@ func TestSettingsFitPhoneWidth(t *testing.T) {
 	s := NewSettings(a, a.NewWindow("t"), svc, func(string) {}, func() {}, nil, nil, nil)
 	if w := s.Content().MinSize().Width; w > phoneWidth {
 		t.Fatalf("минимальная ширина экрана настроек %.0f > %d", w, phoneWidth)
+	}
+}
+
+// Выбор языка сохраняется, подсказка о перезапуске — на выбранном языке;
+// возврат к языку запуска её скрывает.
+func TestLanguageSetting(t *testing.T) {
+	st := storage.NewMemSettings()
+	s := newTestSettings(t, st)
+	if s.LanguageHint() != "" {
+		t.Fatal("до выбора подсказки быть не должно")
+	}
+	s.SelectLanguage("en")
+	if got := app.UILanguage(st); got != "en" {
+		t.Fatalf("сохранено %q", got)
+	}
+	if got := s.LanguageHint(); got != "The language will change after the app restarts." {
+		t.Fatalf("подсказка %q", got)
+	}
+	s.SelectLanguage("ru")
+	if got := s.LanguageHint(); got != "Язык изменится после перезапуска приложения." {
+		t.Fatalf("подсказка %q", got)
+	}
+	s.SelectLanguage(i18n.Auto)
+	if app.UILanguage(st) != i18n.Auto || s.LanguageHint() != "" {
+		t.Fatalf("возврат к «Системный»: %q, подсказка %q", app.UILanguage(st), s.LanguageHint())
 	}
 }
 
@@ -75,7 +101,7 @@ func TestLibraryShowCached(t *testing.T) {
 	a := test.NewTempApp(t)
 	svc := app.NewForTest(library.NewDirSource(t.TempDir(), nil), nil, storage.NewMemSettings())
 	var notes []string
-	l := NewLibrary(svc, NewGridMetrics(svc.Settings), func(s string) { notes = append(notes, s) }, func(model.Gallery) {}, nil)
+	l := NewLibrary(svc, NewGridMetrics(svc.Settings), func(s string) { notes = append(notes, s) }, &GalleryActions{Open: func(model.Gallery) {}}, nil)
 	w := a.NewWindow("t")
 	w.SetContent(l.Content())
 
@@ -88,7 +114,7 @@ func TestLibraryShowCached(t *testing.T) {
 		Errors:    []library.ScanError{{RelPath: "page.html", Err: &library.UnsupportedError{Kind: library.KindHTML}}},
 	}
 	l.ShowCached(res)
-	if l.count.Text != "Галерей: 2" || len(l.grid.Items()) != 2 || !l.grid.Widget().Visible() {
+	if l.count.Text != "2 галереи" || len(l.grid.Items()) != 2 || !l.grid.Widget().Visible() {
 		t.Fatalf("из каталога: %q, в сетке %d", l.count.Text, len(l.grid.Items()))
 	}
 	if len(svc.Problems.Items()) != 1 || len(notes) != 0 {
@@ -101,7 +127,7 @@ func TestLibraryShowCached(t *testing.T) {
 func TestLibraryShowCachedAfterScan(t *testing.T) {
 	a := test.NewTempApp(t)
 	svc := app.NewForTest(library.NewDirSource(t.TempDir(), nil), nil, storage.NewMemSettings())
-	l := NewLibrary(svc, NewGridMetrics(svc.Settings), func(string) {}, func(model.Gallery) {}, nil)
+	l := NewLibrary(svc, NewGridMetrics(svc.Settings), func(string) {}, &GalleryActions{Open: func(model.Gallery) {}}, nil)
 	a.NewWindow("t").SetContent(l.Content())
 	l.applyScan(library.ScanResult{Galleries: []model.Gallery{galleryOf("fresh.zip")}}, nil)
 	l.ShowCached(library.ScanResult{Galleries: []model.Gallery{galleryOf("old1.zip"), galleryOf("old2.zip")}})

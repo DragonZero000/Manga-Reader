@@ -29,6 +29,7 @@ func TestServicePackagesHaveNoWidgets(t *testing.T) {
 		"mangareader/internal/mobilebrowser",
 		"mangareader/internal/display",
 		"mangareader/internal/catalog",
+		"mangareader/internal/i18n",
 		"mangareader/internal/search/indextest",
 	} {
 		for _, goos := range []string{"windows", "android"} {

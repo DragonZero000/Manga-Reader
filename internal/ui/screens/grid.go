@@ -17,7 +17,7 @@ import (
 type galleryGrid struct {
 	thumbs  *thumbs.Cache
 	metrics *GridMetrics
-	onOpen  func(model.Gallery)
+	actions *GalleryActions
 	// do выполняет функцию в UI-потоке (fyne.Do); подменяется в тестах.
 	do func(func())
 
@@ -28,22 +28,75 @@ type galleryGrid struct {
 	box *fyne.Container
 }
 
-func newGalleryGrid(th *thumbs.Cache, m *GridMetrics, onOpen func(model.Gallery)) *galleryGrid {
-	g := &galleryGrid{thumbs: th, metrics: m, onOpen: onOpen, do: fyne.Do}
+// newGalleryGrid создаёт сетку; нажатие на карточку — actions.Open, меню
+// карточки («⋮», правый клик, долгое нажатие) — actions.CardMenu.
+func newGalleryGrid(th *thumbs.Cache, m *GridMetrics, actions *GalleryActions) *galleryGrid {
+	g := &galleryGrid{thumbs: th, metrics: m, actions: actions, do: fyne.Do}
 	m.grids = append(m.grids, g)
 	g.grid = widget.NewGridWrap(
 		func() int { return len(g.items) },
-		func() fyne.CanvasObject { return newGalleryCard(g.metrics) },
+		func() fyne.CanvasObject { return g.newCard() },
 		func(id widget.GridWrapItemID, o fyne.CanvasObject) { g.updateCard(id, o.(*galleryCard)) },
 	)
+	// выбор с клавиатуры (ПК); нажатия мышью и пальцем обрабатывает карточка
 	g.grid.OnSelected = func(id widget.GridWrapItemID) {
 		g.grid.UnselectAll()
-		if id >= 0 && id < len(g.items) {
-			g.onOpen(g.items[id])
-		}
+		g.open(id)
 	}
 	g.box = container.New(gridLayout{g}, g.grid)
 	return g
+}
+
+func (g *galleryGrid) newCard() *galleryCard {
+	c := newGalleryCard(g.metrics)
+	c.onTap = g.open
+	c.onMenu = g.showMenu
+	return c
+}
+
+// item — галерея на позиции id; false — позиции уже нет.
+func (g *galleryGrid) item(id widget.GridWrapItemID) (model.Gallery, bool) {
+	if id < 0 || id >= len(g.items) {
+		return model.Gallery{}, false
+	}
+	return g.items[id], true
+}
+
+func (g *galleryGrid) open(id widget.GridWrapItemID) {
+	if it, ok := g.item(id); ok && g.actions.Open != nil {
+		g.actions.Open(it)
+	}
+}
+
+// showMenu показывает меню галереи id: в точке pos или, если pos == nil,
+// под объектом anchor.
+func (g *galleryGrid) showMenu(id widget.GridWrapItemID, anchor fyne.CanvasObject, pos *fyne.Position) {
+	it, ok := g.item(id)
+	if !ok {
+		return
+	}
+	m := g.actions.CardMenu(it)
+	if pos == nil {
+		ShowMenuBelow(m, anchor)
+		return
+	}
+	if c := fyne.CurrentApp().Driver().CanvasForObject(anchor); c != nil && len(m.Items) > 0 {
+		showMenu(m, c, *pos)
+	}
+}
+
+// Remove убирает галерею с ключом k из сетки (после удаления файла);
+// false — её в сетке нет.
+func (g *galleryGrid) Remove(k model.Key) bool {
+	for i, it := range g.items {
+		if it.Key == k {
+			items := make([]model.Gallery, 0, len(g.items)-1)
+			g.items = append(append(items, g.items[:i]...), g.items[i+1:]...)
+			g.grid.Refresh()
+			return true
+		}
+	}
+	return false
 }
 
 // Widget — объект сетки для размещения на экране.
@@ -117,6 +170,7 @@ func (g *galleryGrid) updateCard(id widget.GridWrapItemID, c *galleryCard) {
 		return
 	}
 	gal := g.items[id]
+	c.id = id
 	c.title.SetText(gal.Title)
 
 	key := thumbs.CacheKey(gal)

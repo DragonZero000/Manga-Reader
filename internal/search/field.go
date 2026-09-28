@@ -42,7 +42,7 @@ const (
 type FieldInfo struct {
 	Field    Field
 	Name     string // имя в строке запроса: pages, artist:... и т.д.
-	Label    string // подпись в UI
+	Label    string // техническая подпись поля (английская)
 	Kind     ValueKind
 	Ops      []Op
 	Sortable bool
@@ -51,15 +51,15 @@ type FieldInfo struct {
 var numRange = []Op{OpLt, OpGt, OpBetween}
 
 var fields = []FieldInfo{
-	{FieldTitle, "title", "Название", KindText, []Op{OpContains}, true},
-	{FieldTag, "tag", "Тег", KindTag, []Op{OpHas, OpNotHas}, false},
+	{FieldTitle, "title", "Title", KindText, []Op{OpContains}, true},
+	{FieldTag, "tag", "Tag", KindTag, []Op{OpHas, OpNotHas}, false},
 	{FieldID, "id", "ID", KindNumber, []Op{OpEq}, true},
-	{FieldPages, "pages", "Страниц", KindNumber, []Op{OpEq, OpLt, OpGt, OpBetween}, true},
-	{FieldUploaded, "uploaded", "Загружено на сайт", KindDate, numRange, true},
-	{FieldFavorites, "favorites", "Избранное на сайте", KindNumber, numRange, true},
-	{FieldScanlator, "scanlator", "Сканлейтор", KindText, []Op{OpEq, OpContains}, false},
-	{FieldAdded, "added", "Добавлено", KindDate, numRange, true},
-	{FieldSize, "size", "Размер файла", KindNumber, numRange, true},
+	{FieldPages, "pages", "Pages", KindNumber, []Op{OpEq, OpLt, OpGt, OpBetween}, true},
+	{FieldUploaded, "uploaded", "Uploaded to site", KindDate, numRange, true},
+	{FieldFavorites, "favorites", "Favorites on site", KindNumber, numRange, true},
+	{FieldScanlator, "scanlator", "Scanlator", KindText, []Op{OpEq, OpContains}, false},
+	{FieldAdded, "added", "Added", KindDate, numRange, true},
+	{FieldSize, "size", "File size", KindNumber, numRange, true},
 }
 
 // Fields возвращает описание всех полей поиска.
@@ -107,13 +107,13 @@ func (fi FieldInfo) Allows(op Op) bool {
 }
 
 var opNames = map[Op]string{
-	OpContains: "содержит",
-	OpHas:      "есть",
-	OpNotHas:   "нет",
-	OpEq:       "равно",
-	OpLt:       "меньше",
-	OpGt:       "больше",
-	OpBetween:  "между",
+	OpContains: "contains",
+	OpHas:      "has",
+	OpNotHas:   "not has",
+	OpEq:       "=",
+	OpLt:       "<",
+	OpGt:       ">",
+	OpBetween:  "between",
 }
 
 func (o Op) String() string {

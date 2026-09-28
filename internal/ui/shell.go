@@ -16,6 +16,7 @@ import (
 
 	"mangareader/internal/app"
 	"mangareader/internal/display"
+	"mangareader/internal/i18n"
 	"mangareader/internal/mobilebrowser"
 	"mangareader/internal/ui/details"
 	"mangareader/internal/ui/reader"
@@ -31,6 +32,16 @@ type Shell struct {
 
 	Reader  *reader.Reader
 	Details *details.Details
+
+	// actions — действия меню галереи (карточки и страница произведения)
+	actions *screens.GalleryActions
+	// do выполняет функцию в UI-потоке (fyne.Do); подменяется в тестах.
+	do func(func())
+	// confirm показывает диалог подтверждения; подменяется в тестах.
+	confirm func(title, text, confirm string, cb func(bool))
+	// needsWriteAccess — к папке библиотеки доступ только на чтение (Android);
+	// подменяется в тестах.
+	needsWriteAccess func() bool
 
 	searchTab *container.TabItem
 	errorsTab *container.TabItem
@@ -48,7 +59,11 @@ type Shell struct {
 // NewShell создаёт окно и все экраны. Экраны создаются один раз и
 // сохраняют состояние при переключении вкладок.
 func NewShell(a fyne.App, svc *app.Services) *Shell {
-	s := &Shell{Window: a.NewWindow("MangaReader")}
+	s := &Shell{Window: a.NewWindow("MangaReader"), do: fyne.Do}
+	s.confirm = func(title, text, confirm string, cb func(bool)) {
+		screens.Confirm(title, text, confirm, cb, s.Window)
+	}
+	s.needsWriteAccess = svc.NeedsWriteAccess
 	mobile := fyne.CurrentDevice().IsMobile()
 
 	var bottomInset float32
@@ -64,9 +79,11 @@ func NewShell(a fyne.App, svc *app.Services) *Shell {
 	}
 	s.Reader = reader.New(a, s.Window, svc.Library, svc.Settings, s.Toast.Show)
 	s.Details = details.New(s.Window, svc.Library, svc.Thumbs, s.Reader.Open, s.SearchFor)
+	s.actions = s.newActions()
+	s.Details.SetMenu(s.actions.DetailsMenu)
 	s.grid = screens.NewGridMetrics(svc.Settings)
-	s.library = screens.NewLibrary(svc, s.grid, s.Toast.Show, s.Details.Open, choose)
-	s.search = screens.NewSearch(svc, s.grid, s.Details.Open)
+	s.library = screens.NewLibrary(svc, s.grid, s.Toast.Show, s.actions, choose)
+	s.search = screens.NewSearch(svc, s.grid, s.actions)
 	s.errors = screens.NewErrors(svc.Problems)
 	// поиск и ошибки отражают содержимое папки после каждого сканирования
 	s.library.OnScanned = func() {
@@ -80,13 +97,13 @@ func NewShell(a fyne.App, svc *app.Services) *Shell {
 	}, s.grid.Reload) // плотность сетки — сразу в библиотеке и поиске
 	s.setupBrowser(a)
 
-	s.searchTab = container.NewTabItemWithIcon("Поиск", theme.SearchIcon(), s.search.Content())
-	s.errorsTab = container.NewTabItemWithIcon("Ошибки", theme.ErrorIcon(), s.errors.Content())
+	s.searchTab = container.NewTabItemWithIcon(i18n.T("tab.search"), theme.SearchIcon(), s.search.Content())
+	s.errorsTab = container.NewTabItemWithIcon(i18n.T("tab.errors"), theme.ErrorIcon(), s.errors.Content())
 	s.Tabs = container.NewAppTabs(
-		container.NewTabItemWithIcon("Библиотека", theme.StorageIcon(), s.library.Content()),
+		container.NewTabItemWithIcon(i18n.T("tab.library"), theme.StorageIcon(), s.library.Content()),
 		s.searchTab,
 		s.errorsTab,
-		container.NewTabItemWithIcon("Настройки", theme.SettingsIcon(), s.settings.Content()),
+		container.NewTabItemWithIcon(i18n.T("tab.settings"), theme.SettingsIcon(), s.settings.Content()),
 	)
 	s.Tabs.OnSelected = func(item *container.TabItem) {
 		switch item {
@@ -135,7 +152,7 @@ func NewShell(a fyne.App, svc *app.Services) *Shell {
 	})
 
 	if svc.LibraryErr != nil {
-		s.Toast.ShowFor("Не удалось подготовить папку библиотеки: "+svc.LibraryErr.Error(), DefaultToastDuration*2)
+		s.Toast.ShowFor(i18n.T("shell.library_prepare_failed", "Error", screens.ErrorText(svc.LibraryErr)), DefaultToastDuration*2)
 	}
 	return s
 }
@@ -151,10 +168,10 @@ func (s *Shell) setupBrowser(a fyne.App) {
 	}
 	b := s.svc.Browser
 	if b == nil {
-		s.Details.SetOpenURL(func(u string) {
+		s.setOpenURL(func(u string) {
 			if pu, err := url.Parse(u); err == nil {
 				if err := a.OpenURL(pu); err != nil {
-					s.Toast.Show("Не удалось открыть ссылку: " + err.Error())
+					s.Toast.Show(i18n.T("shell.open_link_failed", "Error", screens.ErrorText(err)))
 				}
 			}
 		})
@@ -164,12 +181,12 @@ func (s *Shell) setupBrowser(a fyne.App) {
 	open := func(u string) {
 		go func() {
 			if err := b.Open(u); err != nil {
-				s.Toast.Show(err.Error())
+				s.Toast.Show(screens.ErrorText(err))
 			}
 		}()
 	}
-	s.library.AddTool(widget.NewButtonWithIcon("Браузер", theme.ComputerIcon(), func() { open("") }))
-	s.Details.SetOpenURL(open)
+	s.library.AddTool(widget.NewButtonWithIcon(i18n.T("library.browser"), theme.ComputerIcon(), func() { open("") }))
+	s.setOpenURL(open)
 	// браузер сообщил адрес страницы скачанного файла: разобрать файл заново
 	// (Invalidate ждёт идущего сканирования — вызывается в горутине моста)
 	b.SetHandlers(func(rel string) {
@@ -185,25 +202,17 @@ func (s *Shell) setupBrowser(a fyne.App) {
 // браузера — адрес страницы и повторный разбор файла.
 func (s *Shell) setupMobileBrowser() {
 	open := func(u string) {
-		if s.svc.NeedsWriteAccess() {
+		if s.needsWriteAccess() {
 			// папка выбрана до появления браузера — доступ только на чтение
-			screens.Confirm("Нужен доступ на запись",
-				"Браузер сохраняет загрузки в папку библиотеки. Выберите её ещё раз и разрешите доступ — "+
-					"приложение запомнит доступ на чтение и запись.",
-				"Выбрать папку",
-				func(ok bool) {
-					if ok {
-						s.ChooseFolder()
-					}
-				}, s.Window)
+			s.askWriteAccess()
 			return
 		}
 		if err := s.svc.OpenMobileBrowser(u); err != nil {
-			s.Toast.Show("Не удалось открыть браузер: " + err.Error())
+			s.Toast.Show(i18n.T("shell.browser_open_failed", "Error", screens.ErrorText(err)))
 		}
 	}
-	s.library.AddTool(widget.NewButtonWithIcon("Браузер", theme.ComputerIcon(), func() { open("") }))
-	s.Details.SetOpenURL(open)
+	s.library.AddTool(widget.NewButtonWithIcon(i18n.T("library.browser"), theme.ComputerIcon(), func() { open("") }))
+	s.setOpenURL(open)
 	mobilebrowser.SetDownloadHandler(func(rel, page string) {
 		// поток загрузки Android: Invalidate ждёт идущего сканирования
 		s.svc.OnDownloaded(rel, page)
@@ -255,7 +264,7 @@ func (s *Shell) startWatcher(a fyne.App) {
 func (s *Shell) ChooseFolder() {
 	dialog.ShowFolderOpen(func(lu fyne.ListableURI, err error) {
 		if err != nil {
-			s.Toast.Show("Не удалось выбрать папку: " + err.Error())
+			s.Toast.Show(i18n.T("shell.choose_folder_failed", "Error", screens.ErrorText(err)))
 			return
 		}
 		if lu == nil {
@@ -263,7 +272,7 @@ func (s *Shell) ChooseFolder() {
 			return
 		}
 		if err := s.svc.SetFolder(lu.String()); err != nil {
-			s.Toast.Show(err.Error())
+			s.Toast.Show(i18n.T("shell.set_folder_failed", "Error", screens.ErrorText(err)))
 			return
 		}
 		s.settings.Update()
@@ -311,7 +320,7 @@ func (s *Shell) applyDisplay() {
 		return
 	}
 	if err := display.SetMax60(app.DisplayMax60(s.svc.Settings)); err != nil {
-		log.Printf("частота экрана: %v", err)
+		log.Printf("display refresh rate: %v", err)
 	}
 }
 

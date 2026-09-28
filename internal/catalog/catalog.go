@@ -25,8 +25,10 @@ import (
 // FileName — имя файла каталога.
 const FileName = "library.db"
 
-// schemaVersion — версия схемы; при изменении схемы увеличить.
-const schemaVersion = 1
+// schemaVersion — версия схемы; при изменении схемы или формата хранимых
+// данных увеличить. 2 — тексты ошибок на английском (i18n): каталог версии 1
+// хранит их на русском и пересоздаётся.
+const schemaVersion = 2
 
 // userVersion — PRAGMA user_version: схема и правила нормализации поиска.
 func userVersion() int { return schemaVersion*100 + search.NormVersion }
@@ -84,12 +86,12 @@ type Catalog struct {
 func Open(path, root string) (*Catalog, error) {
 	c, err := open(path)
 	if err != nil {
-		log.Printf("каталог %s: %v — создаю заново", path, err)
+		log.Printf("catalog %s: %v, recreating", path, err)
 		if rmErr := removeFiles(path); rmErr != nil {
-			return nil, fmt.Errorf("каталог %s: %v; удаление: %w", path, err, rmErr)
+			return nil, fmt.Errorf("catalog %s: %v; removing: %w", path, err, rmErr)
 		}
 		if c, err = open(path); err != nil {
-			return nil, fmt.Errorf("каталог %s: %w", path, err)
+			return nil, fmt.Errorf("catalog %s: %w", path, err)
 		}
 	}
 	if err := c.setRoot(root); err != nil {
@@ -97,7 +99,7 @@ func Open(path, root string) (*Catalog, error) {
 		return nil, err
 	}
 	if err := c.checkIndex(); err != nil {
-		log.Printf("каталог: проверка индекса: %v", err)
+		log.Printf("catalog: checking the index: %v", err)
 	}
 	return c, nil
 }
@@ -117,7 +119,7 @@ func open(path string) (*Catalog, error) {
 	}
 	if check != "ok" {
 		db.Close()
-		return nil, fmt.Errorf("повреждён: %s", check)
+		return nil, fmt.Errorf("damaged: %s", check)
 	}
 	var ver, tables int
 	if err := db.QueryRow(`PRAGMA user_version`).Scan(&ver); err != nil {
@@ -132,11 +134,11 @@ func open(path string) (*Catalog, error) {
 	case tables == 0:
 		if err := c.create(); err != nil {
 			db.Close()
-			return nil, fmt.Errorf("создание схемы: %w", err)
+			return nil, fmt.Errorf("creating schema: %w", err)
 		}
 	case ver != userVersion():
 		db.Close()
-		return nil, fmt.Errorf("версия %d, нужна %d", ver, userVersion())
+		return nil, fmt.Errorf("version %d, need %d", ver, userVersion())
 	}
 	return c, nil
 }
@@ -180,7 +182,7 @@ func (c *Catalog) setRoot(root string) error {
 	var cur string
 	err := c.db.QueryRow(`SELECT value FROM meta WHERE key = 'root'`).Scan(&cur)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("каталог: папка: %w", err)
+		return fmt.Errorf("catalog: folder: %w", err)
 	}
 	if err == nil && cur == root {
 		return nil
@@ -200,7 +202,7 @@ func (c *Catalog) Reset(root string) error {
 	defer tx.Rollback()
 	for _, t := range dataTables {
 		if _, err := tx.Exec(`DELETE FROM ` + t); err != nil {
-			return fmt.Errorf("каталог: очистка %s: %w", t, err)
+			return fmt.Errorf("catalog: clearing %s: %w", t, err)
 		}
 	}
 	if _, err := tx.Exec(`INSERT INTO meta(key, value) VALUES('root', ?)

@@ -48,7 +48,7 @@ func jni(fn func(env, ctx C.uintptr_t) *C.char) error {
 	return driver.RunNative(func(c any) error {
 		ac, ok := c.(*driver.AndroidContext)
 		if !ok {
-			return errors.New("нет контекста Android")
+			return errors.New("no Android context")
 		}
 		if e := fn(C.uintptr_t(ac.Env), C.uintptr_t(ac.Ctx)); e != nil {
 			defer C.free(unsafe.Pointer(e))

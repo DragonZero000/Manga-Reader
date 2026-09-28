@@ -9,6 +9,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
 
+	"mangareader/internal/i18n"
 	"mangareader/internal/library"
 	"mangareader/internal/model"
 	"mangareader/internal/pages"
@@ -251,7 +252,7 @@ func (v *stripView) acquire(page int) *stripItem {
 	it.page = page
 	it.loaded, it.pending = false, false
 	it.res = pages.Result{}
-	it.status.SetText("Загрузка…")
+	it.status.SetText(i18n.T("reader.loading"))
 	it.status.Show()
 	size := v.r.physical(v.width, 0)
 	it.req = pages.Normalize(pages.Request{
@@ -292,7 +293,7 @@ func (v *stripView) apply(it *stripItem, req pages.Request, res pages.Result) {
 	it.loaded = true
 	it.res = res
 	if res.Err != nil || len(res.Parts) == 0 {
-		it.status.SetText("Не удалось открыть страницу " + itoa(it.page+1))
+		it.status.SetText(i18n.T("reader.page_failed", "Page", it.page+1))
 		v.setHeight(it.page, errorHeight) // не оставлять большой пустой области
 		v.content.Refresh()
 		return

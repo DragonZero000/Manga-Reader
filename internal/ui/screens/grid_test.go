@@ -59,7 +59,7 @@ func TestGridCardReuseCancels(t *testing.T) {
 	}
 	o := &blockingOpen{data: buf.Bytes(), release: make(chan struct{})}
 	th := thumbs.New(o.open, 1<<20, 1)
-	g := newGalleryGrid(th, NewGridMetrics(storage.NewMemSettings()), func(model.Gallery) {})
+	g := newGalleryGrid(th, NewGridMetrics(storage.NewMemSettings()), &GalleryActions{Open: func(model.Gallery) {}})
 	q := make(chan func(), 64)
 	g.do = func(f func()) { q <- f }
 	w := a.NewWindow("t")

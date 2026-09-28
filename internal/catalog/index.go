@@ -112,7 +112,7 @@ func (x Index) Search(ctx context.Context, q search.Query) ([]model.Key, int, er
 	}
 	var total int
 	if err := x.c.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM docs d WHERE `+where, args...).Scan(&total); err != nil {
-		return nil, 0, fmt.Errorf("поиск: %w", err)
+		return nil, 0, fmt.Errorf("search: %w", err)
 	}
 	col, ok := sortColumns[q.Sort.Field]
 	if !ok {
@@ -130,7 +130,7 @@ func (x Index) Search(ctx context.Context, q search.Query) ([]model.Key, int, er
 		` ORDER BY `+col+` `+dir+`, d.key COLLATE NATSORT ASC LIMIT ? OFFSET ?`,
 		append(args, limit, q.Offset)...)
 	if err != nil {
-		return nil, 0, fmt.Errorf("поиск: %w", err)
+		return nil, 0, fmt.Errorf("search: %w", err)
 	}
 	defer rows.Close()
 	var keys []model.Key
@@ -141,7 +141,7 @@ func (x Index) Search(ctx context.Context, q search.Query) ([]model.Key, int, er
 		}
 		k, err := model.ParseKey(s)
 		if err != nil {
-			log.Printf("каталог: %v", err)
+			log.Printf("catalog: %v", err)
 			continue
 		}
 		keys = append(keys, k)
@@ -209,7 +209,7 @@ func filterCond(f search.Filter) (string, []any, error) {
 	case search.FieldAdded:
 		return timeCond("d.added", f)
 	}
-	return "", nil, fmt.Errorf("поиск: поле %v не поддерживается каталогом", f.Field)
+	return "", nil, fmt.Errorf("search: field %v is not supported by the catalog", f.Field)
 }
 
 // numCond: нулевое значение (поля нет) не проходит — как cmpNum в MemIndex.
@@ -271,7 +271,7 @@ func (x Index) SuggestTags(ctx context.Context, tagType, prefix string, limit in
 	rows, err := x.c.db.QueryContext(ctx, `SELECT type, name, COUNT(*) AS n FROM tags WHERE `+cond+
 		` GROUP BY type, name ORDER BY n DESC, type || ':' || name ASC LIMIT ?`, append(args, limit)...)
 	if err != nil {
-		return nil, fmt.Errorf("подсказки тегов: %w", err)
+		return nil, fmt.Errorf("tag suggestions: %w", err)
 	}
 	defer rows.Close()
 	out := []search.TagCount{}

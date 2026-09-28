@@ -25,13 +25,13 @@ func LocalKey(relPath string) Key {
 func ParseKey(s string) (Key, error) {
 	src, id, ok := strings.Cut(s, ":")
 	if !ok {
-		return Key{}, fmt.Errorf("ключ %q: нет разделителя ':'", s)
+		return Key{}, fmt.Errorf("key %q: no ':' separator", s)
 	}
 	if src == "" {
-		return Key{}, errors.New("ключ: пустой источник")
+		return Key{}, errors.New("key: empty source")
 	}
 	if id == "" {
-		return Key{}, errors.New("ключ: пустой идентификатор")
+		return Key{}, errors.New("key: empty identifier")
 	}
 	return Key{Source: src, ID: id}, nil
 }

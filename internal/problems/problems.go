@@ -25,8 +25,9 @@ type Item struct {
 	RelPath string
 	Size    int64
 	ModTime time.Time
-	Reason  string
-	Seen    bool
+	// Err — причина; текст на языке интерфейса строит UI.
+	Err  error
+	Seen bool
 }
 
 // key — идентичность записи: файл с другим размером или временем
@@ -50,7 +51,7 @@ func New(s storage.Settings) *Tracker {
 	t := &Tracker{settings: s, known: map[string]bool{}}
 	if raw := s.String(KeyState, ""); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &t.known); err != nil {
-			log.Printf("ошибки: настройка %s повреждена: %v", KeyState, err)
+			log.Printf("errors: setting %s is damaged: %v", KeyState, err)
 			t.known = map[string]bool{}
 		}
 	}
@@ -68,7 +69,7 @@ func (t *Tracker) Sync(errs []library.ScanError) (added int) {
 	items := make([]Item, 0, len(errs))
 	known := make(map[string]bool, len(errs))
 	for _, e := range errs {
-		it := Item{RelPath: e.RelPath, Size: e.Size, ModTime: e.ModTime, Reason: e.Err.Error()}
+		it := Item{RelPath: e.RelPath, Size: e.Size, ModTime: e.ModTime, Err: e.Err}
 		k := it.key()
 		seen, ok := t.known[k]
 		if !ok {
@@ -130,7 +131,7 @@ func (t *Tracker) setKnown(known map[string]bool) {
 	t.known = known
 	data, err := json.Marshal(known) // ключи сортируются — файл стабилен
 	if err != nil {
-		log.Printf("ошибки: %v", err)
+		log.Printf("errors: %v", err)
 		return
 	}
 	t.settings.SetString(KeyState, string(data))

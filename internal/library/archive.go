@@ -14,9 +14,9 @@ import (
 
 var (
 	// ErrNotZip — файл не удалось открыть как zip-архив.
-	ErrNotZip = errors.New("не zip-архив или архив повреждён")
+	ErrNotZip = errors.New("not a zip archive or the archive is damaged")
 	// ErrNoImages — в архиве нет изображений.
-	ErrNoImages = errors.New("нет изображений")
+	ErrNoImages = errors.New("no images")
 )
 
 // maxMetaSize ограничивает размер читаемого meta.json.
@@ -67,7 +67,7 @@ func ReadArchive(f storage.File, relPath string, e storage.Entry, display string
 	if metaFile != nil {
 		meta, err = readMeta(metaFile)
 		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("%s: некорректный %s: %v", relPath, metaFile.Name, err))
+			warnings = append(warnings, fmt.Sprintf("%s: invalid %s: %v", relPath, metaFile.Name, err))
 			meta = nil
 		}
 	}

@@ -42,7 +42,7 @@ func LoadLinksWithBackup(path string, backup LinkBackup) *Links {
 	ok := err == nil
 	if ok {
 		if err := json.Unmarshal(data, &l.links); err != nil {
-			log.Printf("ссылки %s повреждены: %v", path, err)
+			log.Printf("links %s are damaged: %v", path, err)
 			l.links, ok = map[string]string{}, false
 		}
 	}
@@ -57,9 +57,9 @@ func LoadLinksWithBackup(path string, backup LinkBackup) *Links {
 		l.links[rel] = url
 	}
 	if err := l.save(); err != nil {
-		log.Printf("ссылки %s: восстановление из каталога: %v", path, err)
+		log.Printf("links %s: restoring from the catalog: %v", path, err)
 	} else {
-		log.Printf("ссылки %s восстановлены из каталога: %d", path, len(restored))
+		log.Printf("links %s restored from the catalog: %d", path, len(restored))
 	}
 	return l
 }
@@ -86,7 +86,7 @@ func (l *Links) Get(rel string) string {
 func (l *Links) Set(rel, url string) error {
 	url = model.WebURL(url)
 	if url == "" || rel == "" {
-		return fmt.Errorf("ссылка %q для %q не сохранена", url, rel)
+		return fmt.Errorf("link %q for %q was not saved", url, rel)
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -151,3 +151,6 @@ type linkedStorage struct {
 }
 
 func (s linkedStorage) SourceURL(rel string) string { return s.links.Get(rel) }
+
+// Unwrap — обёрнутое хранилище (для storage.DeleterOf).
+func (s linkedStorage) Unwrap() storage.Storage { return s.Storage }

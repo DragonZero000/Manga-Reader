@@ -1,5 +1,6 @@
 package io.github.mangareader.app.browser
 
+import io.github.mangareader.app.R
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
@@ -85,6 +86,7 @@ object BrowserEngine {
             app,
             GeckoRuntimeSettings.Builder()
                 .preferredColorScheme(GeckoRuntimeSettings.COLOR_SCHEME_DARK)
+                .apply { Lang.code.takeIf { it.isNotBlank() }?.let { locales(arrayOf(it)) } }
                 .consoleOutput(false)
                 .aboutConfigEnabled(false)
                 .build(),
@@ -110,7 +112,17 @@ object BrowserEngine {
         })
     }
 
-    fun runtime(): GeckoRuntime = runtime ?: error("BrowserEngine.init не вызван")
+    fun runtime(): GeckoRuntime = runtime ?: error("BrowserEngine.init was not called")
+
+    /**
+     * Язык приложения: строки браузера (Lang) и язык движка — Accept-Language
+     * и служебные страницы, как в Firefox, где язык страниц по умолчанию
+     * следует языку интерфейса. Пусто — язык системы.
+     */
+    fun setLanguage(code: String) {
+        Lang.code = code
+        if (code.isNotBlank()) runtime?.settings?.setLocales(arrayOf(code))
+    }
 
     fun activeTab(): Tab? = tabs.getOrNull(active)
 
@@ -171,7 +183,7 @@ object BrowserEngine {
         s.open(runtime())
         val st = tab.state
         if (st != null) s.restoreState(st) else s.loadUri(tab.url.ifBlank { settings.homeUrl() })
-        Log.i(TAG, "вкладка загружена${if (st != null) " из состояния" else ""}: ${tab.url}")
+        Log.i(TAG, "tab loaded${if (st != null) " from state" else ""}: ${tab.url}")
         return s
     }
 
@@ -209,13 +221,13 @@ object BrowserEngine {
         val s = tab.session ?: return
         tab.session = null
         s.close()
-        Log.i(TAG, "вкладка выгружена: ${tab.url}")
+        Log.i(TAG, "tab unloaded: ${tab.url}")
     }
 
     /** Процесс вкладки завершён системой или упал: вкладка — выгруженная. */
     private fun lost(tab: Tab, session: GeckoSession, why: String) {
         if (session !== tab.session) return
-        Log.w(TAG, "процесс вкладки $why: ${tab.url}")
+        Log.w(TAG, "tab process $why: ${tab.url}")
         tab.session = null
         runCatching { session.close() }
         if (tab === activeTab() && foreground) listener?.onTabsChanged() // экран восстановит её
@@ -273,9 +285,9 @@ object BrowserEngine {
                 if (session === tab.session) close(tabs.indexOf(tab))
             }
 
-            override fun onKill(session: GeckoSession) = lost(tab, session, "завершён системой")
+            override fun onKill(session: GeckoSession) = lost(tab, session, "killed by the system")
 
-            override fun onCrash(session: GeckoSession) = lost(tab, session, "упал")
+            override fun onCrash(session: GeckoSession) = lost(tab, session, "crashed")
 
             // всё, что движок отдаёт на скачивание: ссылка, перенаправление, POST, blob
             override fun onExternalResponse(session: GeckoSession, response: WebResponse) {
@@ -312,8 +324,8 @@ object BrowserEngine {
 
     private fun install(uri: String) {
         runtime().webExtensionController.install(uri).accept(
-            { e -> toast("Расширение установлено: ${e?.metaData?.name ?: ""}") },
-            { t -> Log.w(TAG, "установка расширения $uri", t); toast("Расширение не установлено") },
+            { e -> toast(Lang.str(app, R.string.ext_installed, e?.metaData?.name ?: "")) },
+            { t -> Log.w(TAG, "installing extension $uri", t); toast(Lang.str(app, R.string.ext_install_failed)) },
         )
     }
 
@@ -329,12 +341,12 @@ object BrowserEngine {
             DownloadManager.clearFinished()
         }
         if (flags == 0L) {
-            toast("Очищено")
+            toast(Lang.str(app, R.string.cleared))
             return
         }
         runtime().storageController.clearData(flags).accept(
-            { toast("Очищено") },
-            { t -> Log.w(TAG, "очистка", t); toast("Не удалось очистить: ${t?.message}") },
+            { toast(Lang.str(app, R.string.cleared)) },
+            { t -> Log.w(TAG, "clearing", t); toast(Lang.str(app, R.string.clear_failed, t?.message ?: "")) },
         )
     }
 

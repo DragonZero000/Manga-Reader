@@ -44,6 +44,7 @@ FyneApp.toml         app metadata and the single source of the version
 | `internal/browser` | Windows built-in browser: Firefox profile, bridge extension, launching, window attachment, registry cleanup |
 | `internal/mobilebrowser` | Bridge to the Android browser (JNI): open, clear data, receive download messages |
 | `internal/catalog` | Library catalog in SQLite (`library.db`, FTS5, `sqlite_fts5` tag): scan results across launches, the search index (`search.Index`), covers on disk, a copy of the page links of downloaded files; a recoverable cache |
+| `internal/i18n` | Interface language: translations from `locales/<lang>.json` (go-i18n), plural forms, date, number and size formats, language choice at startup, Fyne built-in texts in the app language |
 | `internal/display` | Refresh rate of the app window on Android (JNI, `DisplayRate.kt`): the 60 Hz limit; a stub on other platforms |
 | `internal/appversion` | The version from `FyneApp.toml` and the Android build number |
 | `internal/ui` | Shell: window, tabs, toast notifications, wiring screens to services |
@@ -78,6 +79,12 @@ Linux is not supported yet.
 ## Threads and UI
 
 The app is migrated to `fyne.Do` (`[Migrations] fyneDo = true` in `FyneApp.toml`): widgets are changed **only** from the main thread. Scanning, thumbnail and page decoding, search and browser events run in goroutines and hand results to the UI through `fyne.Do`. `make run` starts the app with Fyne thread checks; release builds use the `migrated_fynedo` tag, without checks.
+
+## Localization
+
+User-visible texts live in `internal/i18n/locales/<lang>.json` (English is the fallback) and are taken with `i18n.T` / `i18n.N` in `internal/ui` only; a test fails on a string literal with Cyrillic in UI code, another one on a key missing from any language. The language is chosen once at startup (`ui.language` setting, otherwise the system language, otherwise English) before the screens are built; a change applies after a restart. Service packages don't know the language: their errors carry a kind and parameters, `err.Error()` is English technical text for the log, and the UI translates known kinds (`screens.ErrorText`, `screens.ProblemText`). Logs are in English. Fyne's own texts are switched to the app language by loading its translations under the system locale tag (`i18n.ApplyToFyne`). The Android browser gets the language in its settings and takes its strings from `res/values*/strings.xml` in that language.
+
+A new language: `internal/i18n/locales/<lang>.json`, a copy of Fyne's `base.<lang>.json` in `internal/i18n/fyne/`, `android/app/src/main/res/values-<lang>/strings.xml`.
 
 ## Built-in browser
 
