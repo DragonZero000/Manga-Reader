@@ -1,12 +1,12 @@
 package library
 
 import (
+	"archive/zip"
 	"fmt"
 	"image"
 	_ "image/gif"  // регистрация декодеров для DecodeConfig
 	_ "image/jpeg" //
 	_ "image/png"  //
-	"io/fs"
 
 	_ "golang.org/x/image/webp" //
 
@@ -32,22 +32,33 @@ func (s *Source) PageSizes(k model.Key) ([]PageSize, error) {
 	}
 	defer closeFn()
 
+	// записи по сырому имени, как в findEntry: первая запись-файл
+	entries := make(map[string]*zip.File, len(zr.File))
+	for _, f := range zr.File {
+		if _, ok := entries[f.Name]; !ok && !f.FileInfo().IsDir() {
+			entries[f.Name] = f
+		}
+	}
 	out := make([]PageSize, len(g.Pages))
 	for i, p := range g.Pages {
-		out[i] = pageSize(zr.Open, p.Name)
+		out[i] = pageSize(entries[p.Name], p.Name)
 	}
 	return out, nil
 }
 
-func pageSize(open func(string) (fs.File, error), name string) PageSize {
-	f, err := open(name)
+// pageSize читает заголовок изображения записи f (nil — записи нет).
+func pageSize(f *zip.File, name string) PageSize {
+	if f == nil {
+		return PageSize{Err: fmt.Errorf("page %q not found in the archive", name)}
+	}
+	rc, err := f.Open()
 	if err != nil {
 		return PageSize{Err: err}
 	}
-	defer f.Close()
-	cfg, _, err := image.DecodeConfig(f)
+	defer rc.Close()
+	cfg, _, err := image.DecodeConfig(rc)
 	if err != nil {
-		return PageSize{Err: fmt.Errorf("header %s: %w", name, err)}
+		return PageSize{Err: fmt.Errorf("header %q: %w", name, err)}
 	}
 	return PageSize{Width: cfg.Width, Height: cfg.Height}
 }

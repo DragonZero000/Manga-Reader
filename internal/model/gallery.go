@@ -1,15 +1,47 @@
 package model
 
 import (
+	"encoding/json"
 	"path"
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Page — страница произведения. Открытие данных страницы — задача источника.
 type Page struct {
-	Name string // имя файла внутри архива, например "example/1.jpg"
+	// Name — имя записи внутри архива как есть, например "example/1.jpg";
+	// может быть не в UTF-8 (Shift-JIS, CP866 без флага UTF-8 в zip).
+	Name string
+}
+
+// pageJSON — страница в JSON (кэш сканера в каталоге). encoding/json
+// заменил бы байты не в UTF-8 на U+FFFD, и разные имена слились бы в одно,
+// поэтому такое имя хранится в NameRaw (base64); имя в UTF-8 — в Name, как
+// прежде.
+type pageJSON struct {
+	Name    string `json:",omitempty"`
+	NameRaw []byte `json:",omitempty"`
+}
+
+func (p Page) MarshalJSON() ([]byte, error) {
+	if utf8.ValidString(p.Name) {
+		return json.Marshal(pageJSON{Name: p.Name})
+	}
+	return json.Marshal(pageJSON{NameRaw: []byte(p.Name)})
+}
+
+func (p *Page) UnmarshalJSON(b []byte) error {
+	var v pageJSON
+	if err := json.Unmarshal(b, &v); err != nil {
+		return err
+	}
+	p.Name = v.Name
+	if v.NameRaw != nil {
+		p.Name = string(v.NameRaw)
+	}
+	return nil
 }
 
 // FileInfo — сведения о файле произведения в папке библиотеки.

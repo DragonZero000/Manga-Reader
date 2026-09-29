@@ -6,8 +6,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
+	"strconv"
 	"time"
 
 	"mangareader/internal/library"
@@ -89,8 +91,36 @@ func (s ScanStore) Save(d library.ScanDelta) error {
 				return err
 			}
 		}
+		if d.ParseRevision > 0 {
+			if _, err := tx.Exec(`INSERT INTO meta(key, value) VALUES(?, ?)
+				ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+				keyParseRevision, strconv.Itoa(d.ParseRevision)); err != nil {
+				return err
+			}
+		}
 		return nil
 	})
+}
+
+// keyParseRevision — ключ meta: ревизия правил разбора, по которым получены
+// сохранённые результаты (library.ParseRevision). Reset её не трогает: после
+// очистки перепроверять нечего.
+const keyParseRevision = "parse_rev"
+
+func (s ScanStore) ParseRevision() (int, error) {
+	var v string
+	err := s.c.db.QueryRow(`SELECT value FROM meta WHERE key = ?`, keyParseRevision).Scan(&v)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, fmt.Errorf("parse revision %q: %w", v, err)
+	}
+	return n, nil
 }
 
 func (s ScanStore) StoredLink(rel string) string {

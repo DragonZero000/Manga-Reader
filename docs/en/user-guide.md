@@ -66,6 +66,7 @@ example.zip
 ```
 
 - Pages are ordered by name in natural order: `2.jpg` comes before `10.jpg`. Subfolders inside the archive are allowed.
+- File names inside the archive may be in any encoding (for example, Shift-JIS from Japanese archivers), and folders may be separated by `/` or `\`. Service files (`__MACOSX`, names starting with `.`) are ignored; if several files have exactly the same name, the first one is used.
 - The first page is the cover.
 - Without `meta.json` the file name becomes the title, and there are no tags or details.
 

@@ -361,14 +361,18 @@ func (s *Source) OpenPage(k model.Key, page string) (io.ReadCloser, error) {
 		return nil, err
 	}
 	defer closeFn()
-	f, err := zr.Open(page)
+	zf := findEntry(zr, page)
+	if zf == nil {
+		return nil, fmt.Errorf("page %q not found in the archive of %s", page, k)
+	}
+	f, err := zf.Open()
 	if err != nil {
-		return nil, fmt.Errorf("opening %s: %w", page, err)
+		return nil, fmt.Errorf("opening %q: %w", page, err)
 	}
 	defer f.Close()
 	data, err := io.ReadAll(io.LimitReader(f, maxPageSize))
 	if err != nil {
-		return nil, fmt.Errorf("reading %s: %w", page, err)
+		return nil, fmt.Errorf("reading %q: %w", page, err)
 	}
 	return io.NopCloser(bytes.NewReader(data)), nil
 }

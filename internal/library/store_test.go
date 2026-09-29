@@ -15,10 +15,12 @@ import (
 
 // memStore — ScanStore в памяти, как каталог между «запусками».
 type memStore struct {
-	mu      sync.Mutex
-	entries map[string]StoredEntry
-	links   map[string]string
-	saves   []ScanDelta
+	mu       sync.Mutex
+	entries  map[string]StoredEntry
+	links    map[string]string
+	rev      int // ревизия правил разбора
+	saves    []ScanDelta
+	failSave bool // Save возвращает ошибку
 }
 
 func newMemStore() *memStore {
@@ -39,10 +41,22 @@ func (m *memStore) Load() (map[string]StoredEntry, error) {
 	return out, nil
 }
 
+func (m *memStore) ParseRevision() (int, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.rev, nil
+}
+
 func (m *memStore) Save(d ScanDelta) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.failSave {
+		return errors.New("disk is full")
+	}
 	m.saves = append(m.saves, d)
+	if d.ParseRevision > 0 {
+		m.rev = d.ParseRevision
+	}
 	for rel, e := range d.Put {
 		m.entries[rel] = e
 	}

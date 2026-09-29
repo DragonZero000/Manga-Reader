@@ -16,11 +16,21 @@ import (
 type ScanStore interface {
 	// Load — все сохранённые результаты по пути файла.
 	Load() (map[string]StoredEntry, error)
+	// ParseRevision — ревизия правил разбора, по которым получены
+	// сохранённые результаты (0 — не записана).
+	ParseRevision() (int, error)
 	// Save сохраняет изменения одного сканирования (одна транзакция).
 	Save(d ScanDelta) error
 	// StoredLink — сохранённая ссылка скачанного файла («» — нет).
 	StoredLink(rel string) string
 }
+
+// ParseRevision — ревизия правил разбора архивов. Если сохранённые
+// результаты получены по меньшей ревизии, сканер один раз разбирает заново
+// файлы, результат которых мог измениться (needsRecheck), не пересканируя
+// библиотеку целиком. При изменении правил разбора — увеличить и дополнить
+// needsRecheck. 1 — имена записей zip: «\», не UTF-8, «./», повторы.
+const ParseRevision = 1
 
 // StoredEntry — результат разбора файла: галерея или ошибка.
 type StoredEntry struct {
@@ -37,10 +47,15 @@ type ScanDelta struct {
 	// Links — ссылки скачанных файлов, полученные при разборе от хранилища
 	// (links.json на Android, метка загрузки на Windows): вторая копия.
 	Links map[string]string
+	// ParseRevision > 0 — сохранить ревизию правил разбора: все результаты,
+	// которые могли измениться по новым правилам, перепроверены.
+	ParseRevision int
 }
 
 // Empty сообщает, нет ли изменений.
-func (d ScanDelta) Empty() bool { return len(d.Put) == 0 && len(d.Delete) == 0 && len(d.Links) == 0 }
+func (d ScanDelta) Empty() bool {
+	return len(d.Put) == 0 && len(d.Delete) == 0 && len(d.Links) == 0 && d.ParseRevision == 0
+}
 
 func newDelta() ScanDelta {
 	return ScanDelta{Put: map[string]StoredEntry{}, Links: map[string]string{}}

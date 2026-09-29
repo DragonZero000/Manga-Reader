@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"mangareader/internal/model"
 	"mangareader/internal/storage"
@@ -55,6 +56,11 @@ type Scanner struct {
 	// BusyAsError — занятые файлы попадают в ошибки («Файл занят другой
 	// программой»), иначе пропускаются до следующего сканирования.
 	BusyAsError bool
+
+	// revPending — сохранённые результаты получены по правилам разбора
+	// старше ParseRevision: ревизия сохраняется сканированием, после
+	// которого не осталось записей с recheck.
+	revPending bool
 }
 
 type cacheEntry struct {
@@ -65,6 +71,10 @@ type cacheEntry struct {
 	// transient — результат временный (файл был занят): при следующем
 	// сканировании файл проверяется заново, даже если не изменился.
 	transient bool
+	// recheck — результат получен по прежним правилам разбора и может
+	// измениться: файл разбирается заново, даже если не изменился. В отличие
+	// от transient, до перепроверки запись показывается (Cached).
+	recheck bool
 }
 
 // NewScanner — сканер без хранилища: результаты только в памяти.
@@ -82,10 +92,44 @@ func NewScannerWithStore(st storage.Storage, store ScanStore) *Scanner {
 		log.Printf("catalog: scan results not loaded: %v", err)
 		return s
 	}
+	rev, err := store.ParseRevision()
+	if err != nil {
+		log.Printf("catalog: parse revision: %v", err)
+		rev = 0 // перепроверить лишнее безопаснее, чем пропустить
+	}
+	s.revPending = rev < ParseRevision
+	recheck := 0
 	for rel, e := range stored {
-		s.cache[rel] = cacheEntry{size: e.Size, modTime: e.ModTime, gallery: e.Gallery, err: e.Err}
+		ce := cacheEntry{size: e.Size, modTime: e.ModTime, gallery: e.Gallery, err: e.Err}
+		if s.revPending && needsRecheck(e) {
+			ce.recheck = true
+			recheck++
+		}
+		s.cache[rel] = ce
+	}
+	if recheck > 0 {
+		log.Printf("catalog: parse rules revision %d → %d: %d files will be parsed again", rev, ParseRevision, recheck)
 	}
 	return s
+}
+
+// needsRecheck — сохранённый результат мог измениться с ревизией правил
+// разбора ParseRevision: ошибка «нет изображений» (записи «./»); страницы с
+// «\» в имени в UTF-8 (теперь разделитель), с U+FFFD (имя не в UTF-8,
+// искажённое прежним сохранением в каталог) и с повторяющимися именами.
+func needsRecheck(e StoredEntry) bool {
+	if e.Err != nil {
+		return errors.Is(e.Err, ErrNoImages)
+	}
+	seen := make(map[string]bool, len(e.Gallery.Pages))
+	for _, p := range e.Gallery.Pages {
+		n := p.Name
+		if seen[n] || strings.Contains(n, "�") || (strings.Contains(n, `\`) && utf8.ValidString(n)) {
+			return true
+		}
+		seen[n] = true
+	}
+	return false
 }
 
 // Cached — результаты из кэша без обхода папки (галереи — новые сверху,
@@ -150,9 +194,18 @@ func (s *Scanner) Scan(ctx context.Context) (ScanResult, error) {
 			delta.Delete = append(delta.Delete, rel)
 		}
 	}
+	// ревизия — в той же транзакции, что и результаты перепроверки
+	if s.revPending && !s.anyRecheck() {
+		delta.ParseRevision = ParseRevision
+	}
 	if s.store != nil && !delta.Empty() {
 		if err := s.store.Save(delta); err != nil {
 			log.Printf("catalog: scan results not saved: %v", err)
+			// результаты перепроверки могли не сохраниться: ревизию в этом
+			// запуске не записываем, следующий перепроверит файлы заново
+			s.revPending = false
+		} else if delta.ParseRevision != 0 {
+			s.revPending = false
 		}
 	}
 	for rel, e := range s.cache {
@@ -167,10 +220,20 @@ func (s *Scanner) Scan(ctx context.Context) (ScanResult, error) {
 	return res, nil
 }
 
+// anyRecheck — остались записи, ожидающие перепроверки по новым правилам.
+func (s *Scanner) anyRecheck() bool {
+	for _, e := range s.cache {
+		if e.recheck {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Scanner) scanFile(e storage.Entry, res *ScanResult, delta *ScanDelta) {
 	rel := e.RelPath
 	prev, known := s.cache[rel]
-	if known && !prev.transient && prev.size == e.Size && prev.modTime.Equal(e.ModTime) {
+	if known && !prev.transient && !prev.recheck && prev.size == e.Size && prev.modTime.Equal(e.ModTime) {
 		return // не изменился
 	}
 	res.Opened++
@@ -187,7 +250,8 @@ func (s *Scanner) scanFile(e storage.Entry, res *ScanResult, delta *ScanDelta) {
 		if known && prev.err == nil {
 			res.Removed = append(res.Removed, prev.gallery.Key)
 		}
-		s.cache[rel] = cacheEntry{size: e.Size, modTime: e.ModTime, err: err, transient: true}
+		// перепроверка не выполнена — ревизия не сохраняется, пока файл занят
+		s.cache[rel] = cacheEntry{size: e.Size, modTime: e.ModTime, err: err, transient: true, recheck: known && prev.recheck}
 		if !(known && prev.transient) {
 			res.NewErrors = append(res.NewErrors, ScanError{rel, e.Size, e.ModTime, err})
 		}
