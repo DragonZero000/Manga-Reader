@@ -27,6 +27,7 @@ MangaReader\
 ├── mangareader.exe
 ├── settings.json   ← settings, created after the first change
 ├── library.db      ← library catalog (created automatically, safe to delete)
+├── user.db         ← your data about works (don't delete)
 ├── manga\          ← put your .zip archives here (created on first start)
 └── browser\
     ├── firefox\    ← built-in browser
@@ -35,6 +36,7 @@ MangaReader\
 
 - You can move the whole application folder, for example to a USB stick. Move it while the app is closed.
 - `library.db` is the library catalog: parsed archives, errors, covers, search data and a copy of the page links of downloaded files. With it the app shows the library right away at startup and opens only new and changed archives. It is a cache: if you delete it, it is created again and the library is scanned from scratch. On Android the catalog lives in the app's private folder.
+- `user.db` is your own data about works that can't be restored from the archives. Unlike the catalog, don't delete it: keep it when updating or moving the app. Records follow an archive when it is renamed or moved to another subfolder of `manga` (the app recognizes the archive by its pages). If the file gets damaged, the app renames it to `user.db.broken-<date-time>`, creates a new one and tells you at startup; the damaged copy stays next to it. On Android `user.db` lives in the app's private folder.
 - Don't put it where you can't write (for example, `Program Files`): the app will show an error with the path.
 - Archives may be arranged in subfolders inside `manga` — they are picked up too.
 
@@ -111,7 +113,7 @@ Every card in the library and in search results has a **⋮** button in the top-
 - **Windows**: the file is moved to the **Recycle Bin** and can be restored from there. If the drive has no Recycle Bin (a USB stick, a network drive), the app says so and offers to delete the file permanently.
 - **Android**: the file is deleted **permanently** — Android folders have no Recycle Bin, and the confirmation says so. Deleting needs write access to the library folder: if the folder was granted read-only, the app asks you to pick it again.
 
-The card disappears from the library and the search results right away; then the library is rescanned. If another program is using the file, the app says so and the file stays. A gallery that is open in the reader can't be deleted — close it first.
+The card disappears from the library and the search results right away; then the library is rescanned. Your data about the work is kept for the period set in **Settings → Data retention**: if the file is restored (for example, from the Recycle Bin), the data comes back. If another program is using the file, the app says so and the file stays. A gallery that is open in the reader can't be deleted — close it first.
 
 ## Gallery page
 
@@ -123,10 +125,23 @@ Everything about one gallery:
 - cover, title and alternative title;
 - the **Read** button;
 - the **Open in browser** button — when a link to the work is known: from `meta.json`, or the page the file was downloaded from with the built-in browser;
-- tags grouped by type: "Artist", "Group", "Parody", "Character", "Language", "Category", "Tags", then groups of other types. **Tapping a tag searches for it**;
+- tags grouped by type: "Artist", "Group", "Parody", "Character", "Language", "Category", "Tags", then groups of other types. Your own tags come after the original ones in their group and have a yellow background. **Tapping a tag searches for it**;
 - details: "Pages", "Uploaded", "Favorites", "Scanlator", "File", "Size", "Modified". Empty fields are hidden. Dates, numbers and sizes follow the interface language.
 
 The **⋮** button on the right of the top bar holds the actions that are not on the page itself: **Copy title**, **Show in folder** (Windows) and **Delete…**. After deleting, the page closes and you return to the grid.
+
+### Editing tags
+
+Tags from `meta.json` are set by the site. You can add your own tags of any type and hide the ones you don't need; the archive and `meta.json` are not changed. Press **Edit tags** under the details; **Done** leaves the edit mode (so does closing the page). Every change is saved right away. In the edit mode:
+
+- **+** in a group adds a tag of that type. Type the name and press Enter or **Add**; Esc or **Cancel** closes the box. While you type, up to 10 suggestions show up below: names of this type from the library and your own tags, the most used first. Tap a suggestion to add it.
+- **Add to another group** adds a tag of a type the work doesn't have yet (for example, "Group").
+- **✕** on your own tag removes it. **✕** on an original tag hides it: in the edit mode it stays in place in red strikethrough text with **↺** to bring it back; outside the edit mode it is not shown, and a group with only hidden tags disappears.
+- **Reset to original…** removes all your tags and shows all hidden ones again, after a confirmation.
+
+Names are stored in lower case with single spaces, like the original tags. A name can't be empty, longer than 100 characters or contain `"`. If the work already has a tag of the same type and name (original, hidden or your own), the app says "This tag is already there" and changes nothing.
+
+Your tags and hidden tags are kept in `user.db` (see [Windows — portable mode](#windows--portable-mode)). They survive restarts and follow the archive when it is renamed or moved inside the library folder. If `user.db` can't be opened, **Edit tags** is inactive and the tags from `meta.json` are shown as usual.
 
 ## Reader
 
@@ -169,6 +184,8 @@ The **✕** button clears the box and keeps the results on screen. The 🎲 butt
 | `tag:"tag 1"` | An exact tag of any type |
 | `artist:"artist 1"` | A tag of a given type: `artist`, `group`, `parody`, `character`, `language`, `category` |
 | `-tag:yuri` | Excludes works with the tag (also `-artist:…` etc.) |
+| `custom-tag:"my fav"` | Your own tag of any type, see [Editing tags](#editing-tags) |
+| `hidden-tag:yuri` | An original tag you hid |
 | `pages:>20` | Page count: `>`, `<`, `>=`, `<=`, range `10..50` |
 | `uploaded:2024` | Upload date on the site: `2024`, `>2024-06`, `2024-01..2024-03` |
 | `added:>=2025-01` | When the file appeared in the folder (file modification time) |
@@ -176,6 +193,8 @@ The **✕** button clears the box and keeps the results on screen. The 🎲 butt
 | `favorites:>100`, `id:535147` | Favorites on the site and ID |
 | `scanlator:name` | Scanlator |
 | `school pages:>20 -tag:yuri` | All together |
+
+Tags are searched as you see them on the gallery page: `tag:`, `artist:` and the other types find the original tags that aren't hidden plus your own ones, and a word in the query doesn't match hidden tags. `custom-tag:` finds only your own tags, `hidden-tag:` only hidden ones; both work with `-`.
 
 Dates: `2024` is the whole year, `2024-06` a month, `2024-06-15` a day; `>period` means after its end, `<period` before its start. If a query has a mistake, "Query error: …" appears below the search box with an explanation. Results refresh on their own when the library changes: the last query that ran is repeated.
 
@@ -233,6 +252,7 @@ The **Settings** tab:
 - **Random pick** — how the 🎲 button picks: **With repeats** (the default) — every press picks from the whole set, so the same gallery can come up again; **No repeats** — a gallery doesn't come up again until every gallery in the set has, and the next round never starts with the one shown last. The library and search keep separate rounds; a round starts over when the set changes (different search results, library contents changed after a rescan) and isn't kept between launches.
 - **Grid** — how dense the card grid is in the library and search; applies immediately, no restart needed. On Android — **Cards per row**: **2**, **3** (the default) or **4**; in portrait the cards split the screen width evenly, in landscape they keep the same size and more fit in a row. On Windows — **Card size**: **Small**, **Medium** (the default) or **Large**; the number of columns follows the window width. After a change, covers are reloaded for the new size.
 - **Display** (Android) — **Limit to 60 Hz** (on by default): on 120 Hz screens the app asks the system for 60 Hz, which makes scrolling smoother. The built-in browser runs at whatever rate the system picks.
+- **Data retention** — **Keep data of deleted works**: **1 day**, **1 week**, **1 month** (the default), **3 months**, **1 year**, **Forever** or **Custom number of days…** (a whole number from 1 to 36500). When a work's file is no longer found in the library folder (deleted, or moved out of the folder), your data about it is kept for this period and comes back if the file returns — even under a different name or in another subfolder. After the period the data is deleted. The check runs after each successful scan: if the folder is unavailable (a USB stick is unplugged, no access) or contains no files at all, nothing is marked or deleted.
 - **About** — the version.
 
 The reader mode is remembered automatically. On Windows, settings are stored in `settings.json` next to the app.

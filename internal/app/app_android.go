@@ -12,6 +12,7 @@ import (
 	"mangareader/internal/catalog"
 	"mangareader/internal/library"
 	"mangareader/internal/storage"
+	"mangareader/internal/userdata"
 )
 
 // New — Android: папка библиотеки выбирается пользователем (SAF), выбор
@@ -21,6 +22,7 @@ func New(version string, a fyne.App) *Services {
 	dir := a.Storage().RootURI().Path() // личная папка приложения
 	tree := settings.String(KeyLibraryTree, "")
 	cat := openCatalog(filepath.Join(dir, catalog.FileName), tree)
+	ud, backup := openUserData(filepath.Join(dir, userdata.FileName))
 	// адреса страниц скачанных файлов: links.json и копия в каталоге —
 	// каждая восстанавливает другую
 	links := library.LoadLinksWithBackup(filepath.Join(dir, "links.json"), linkBackup(cat))
@@ -38,6 +40,11 @@ func New(version string, a fyne.App) *Services {
 	s.CanChooseFolder = true
 	s.MobileBrowser = true
 	s.Links = links
+	// ключ папки в пользовательских данных — tree-URI SAF: повторный выбор
+	// той же папки даёт тот же URI
+	s.attachUserData(ud, backup, tree)
+	// до окна и до первого сканирования: чтение каталога без открытия архивов
+	s.loadCatalog()
 	return s
 }
 
@@ -62,6 +69,15 @@ func (s *Services) SetFolder(tree string) error {
 			log.Printf("catalog: changing folder: %v", err)
 		}
 	}
+	if s.userObs != nil {
+		// сверка идущего сканирования прежней папки не должна попасть под
+		// ключ новой: наблюдатель отключается на время смены папки
+		s.Library.SetObserver(nil)
+	}
 	s.Library.SetStorage(library.WithLinks(storage.NewSAF(tree), s.Links))
+	if s.userObs != nil {
+		s.userObs.setKey(tree)
+		s.Library.SetObserver(s.userObs)
+	}
 	return nil
 }

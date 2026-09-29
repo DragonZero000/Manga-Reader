@@ -27,8 +27,12 @@ const FileName = "library.db"
 
 // schemaVersion — версия схемы; при изменении схемы или формата хранимых
 // данных увеличить. 2 — тексты ошибок на английском (i18n): каталог версии 1
-// хранит их на русском и пересоздаётся.
-const schemaVersion = 2
+// хранит их на русском и пересоздаётся. 3 — галереи с отпечатком содержимого
+// (Gallery.Fingerprint): каталог версии 2 пересоздаётся, библиотека
+// сканируется целиком. 4 — происхождение тегов в индексе (tags.src: свои и
+// скрытые теги); выходит вместе с 3, так что библиотека пересканируется один
+// раз.
+const schemaVersion = 4
 
 // userVersion — PRAGMA user_version: схема и правила нормализации поиска.
 func userVersion() int { return schemaVersion*100 + search.NormVersion }
@@ -60,7 +64,9 @@ var schema = []string{
 		scan_norm TEXT, ext_id INTEGER, pages INTEGER, favorites INTEGER, size INTEGER,
 		uploaded INTEGER, added INTEGER)`,
 	`CREATE VIRTUAL TABLE docs_fts USING fts5(key UNINDEXED, hay, tokenize='trigram')`,
-	`CREATE TABLE tags(key TEXT, type TEXT, name TEXT, name_norm TEXT, PRIMARY KEY(key, type, name))`,
+	// src — происхождение тега: srcMeta, srcCustom, srcHidden
+	`CREATE TABLE tags(key TEXT, type TEXT, name TEXT, name_norm TEXT, src INTEGER NOT NULL,
+		PRIMARY KEY(key, type, name, src))`,
 	`CREATE INDEX tags_norm ON tags(name_norm, type)`,
 	`CREATE TABLE covers(key TEXT PRIMARY KEY, rel TEXT, w INTEGER, h INTEGER, jpeg BLOB)`,
 	`CREATE INDEX covers_rel ON covers(rel)`,
@@ -209,11 +215,38 @@ func (c *Catalog) Reset(root string) error {
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, root); err != nil {
 		return err
 	}
+	if _, err := tx.Exec(`DELETE FROM meta WHERE key = ?`, keyOverlayEpoch); err != nil {
+		return err
+	}
 	if err := tx.Commit(); err != nil {
 		return err
 	}
 	c.fresh = true
 	return nil
+}
+
+// keyOverlayEpoch — ключ meta: эпоха пользовательских данных, с наложением
+// из которых построен индекс поиска.
+const keyOverlayEpoch = "overlay_epoch"
+
+// OverlayEpoch возвращает эпоху пользовательских данных, с которой построен
+// индекс; «» — неизвестна (новый каталог или индекс перестроен без наложения).
+func (c *Catalog) OverlayEpoch() (string, error) {
+	var v string
+	err := c.db.QueryRow(`SELECT value FROM meta WHERE key = ?`, keyOverlayEpoch).Scan(&v)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return v, err
+}
+
+// SetOverlayEpoch запоминает эпоху, с которой построен индекс.
+func (c *Catalog) SetOverlayEpoch(epoch string) error {
+	return c.write(func(tx *sql.Tx) error {
+		_, err := tx.Exec(`INSERT INTO meta(key, value) VALUES(?, ?)
+			ON CONFLICT(key) DO UPDATE SET value = excluded.value`, keyOverlayEpoch, epoch)
+		return err
+	})
 }
 
 // Close закрывает каталог.

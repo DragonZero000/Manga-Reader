@@ -103,7 +103,8 @@ func (s ScanStore) StoredLink(rel string) string {
 
 // checkIndex перестраивает индекс поиска из сохранённых галерей, если они
 // разошлись (например, приложение завершилось между записью файлов и
-// индекса).
+// индекса). Сохранённые галереи без наложения пользователя, поэтому эпоха
+// наложения сбрасывается: приложение переиндексирует библиотеку с ним.
 func (c *Catalog) checkIndex() error {
 	var docs, galleries int
 	if err := c.db.QueryRow(`SELECT COUNT(*) FROM docs`).Scan(&docs); err != nil {
@@ -127,8 +128,9 @@ func (c *Catalog) checkIndex() error {
 	}
 	ctx := context.Background()
 	return c.write(func(tx *sql.Tx) error {
-		for _, t := range []string{"docs", "docs_fts", "tags"} {
-			if _, err := tx.Exec(`DELETE FROM ` + t); err != nil {
+		for _, q := range []string{`DELETE FROM docs`, `DELETE FROM docs_fts`, `DELETE FROM tags`,
+			`DELETE FROM meta WHERE key = '` + keyOverlayEpoch + `'`} {
+			if _, err := tx.Exec(q); err != nil {
 				return err
 			}
 		}

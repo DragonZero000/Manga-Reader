@@ -77,7 +77,7 @@ func TestOpenOldVersionRecreates(t *testing.T) {
 	}
 }
 
-// Каталог предыдущей версии схемы (тексты ошибок на русском) пересоздаётся.
+// Каталог предыдущей версии схемы (теги без происхождения) пересоздаётся.
 func TestOpenPreviousSchemaRecreates(t *testing.T) {
 	path := filepath.Join(t.TempDir(), FileName)
 	c := openTest(t, path, "root")
@@ -107,6 +107,29 @@ func TestOpenOtherRootClears(t *testing.T) {
 	}
 	if count(t, c2, "files") != 0 {
 		t.Fatal("Reset должен очищать данные")
+	}
+}
+
+// Эпоха наложения хранится между открытиями и сбрасывается сменой папки.
+func TestOverlayEpoch(t *testing.T) {
+	path := filepath.Join(t.TempDir(), FileName)
+	c := openTest(t, path, "root")
+	if e, err := c.OverlayEpoch(); err != nil || e != "" {
+		t.Fatalf("новый каталог: %q %v", e, err)
+	}
+	if err := c.SetOverlayEpoch("e1"); err != nil {
+		t.Fatal(err)
+	}
+	c.Close()
+	c = openTest(t, path, "root")
+	if e, _ := c.OverlayEpoch(); e != "e1" {
+		t.Fatalf("после открытия: %q", e)
+	}
+	if err := c.Reset("root 2"); err != nil {
+		t.Fatal(err)
+	}
+	if e, _ := c.OverlayEpoch(); e != "" {
+		t.Fatalf("после смены папки: %q", e)
 	}
 }
 

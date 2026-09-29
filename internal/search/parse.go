@@ -16,6 +16,7 @@ type fieldParser struct {
 	field   Field
 	tagType string // для тегов: тип ("" — любой)
 	isTag   bool
+	scope   TagScope // для тегов: область
 }
 
 // queryFields — поля, распознаваемые в строке запроса.
@@ -29,12 +30,15 @@ var queryFields = map[string]fieldParser{
 	"character": {field: FieldTag, isTag: true, tagType: model.TagTypeCharacter},
 	"language":  {field: FieldTag, isTag: true, tagType: model.TagTypeLanguage},
 	"category":  {field: FieldTag, isTag: true, tagType: model.TagTypeCategory},
-	"id":        {field: FieldID},
-	"pages":     {field: FieldPages},
-	"favorites": {field: FieldFavorites},
-	"size":      {field: FieldSize},
-	"uploaded":  {field: FieldUploaded},
-	"added":     {field: FieldAdded},
+	// свои и скрытые теги — по имени любого типа
+	"custom-tag": {field: FieldTag, isTag: true, scope: ScopeCustom},
+	"hidden-tag": {field: FieldTag, isTag: true, scope: ScopeHidden},
+	"id":         {field: FieldID},
+	"pages":      {field: FieldPages},
+	"favorites":  {field: FieldFavorites},
+	"size":       {field: FieldSize},
+	"uploaded":   {field: FieldUploaded},
+	"added":      {field: FieldAdded},
 }
 
 // Parse разбирает строку запроса: слова и фразы в кавычках ищутся как часть
@@ -141,7 +145,7 @@ func parseFilter(fp fieldParser, value string, neg bool) (Filter, error) {
 		if neg {
 			op = OpNotHas
 		}
-		return Filter{Field: FieldTag, Op: op, Value: Value{Tag: model.Tag{Type: fp.tagType, Name: value}}}, nil
+		return Filter{Field: FieldTag, Op: op, Value: Value{Tag: model.Tag{Type: fp.tagType, Name: value}, Scope: fp.scope}}, nil
 	case fp.field == FieldTitle || fp.field == FieldScanlator:
 		return Filter{Field: fp.field, Op: OpContains, Value: Value{Text: Normalize(value)}}, nil
 	case fp.field == FieldUploaded:

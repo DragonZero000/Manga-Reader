@@ -2,6 +2,7 @@ package app
 
 import (
 	"testing"
+	"time"
 
 	"mangareader/internal/i18n"
 	"mangareader/internal/storage"
@@ -96,5 +97,24 @@ func TestGridSize(t *testing.T) {
 	s.SetString(KeyGridSize, "xl")
 	if v := GridSize(s); v != GridSizeMedium {
 		t.Fatalf("неизвестное значение %q", v)
+	}
+}
+
+func TestRetention(t *testing.T) {
+	s := storage.NewMemSettings()
+	if d := RetentionDays(s); d != 30 || Retention(s) != 30*24*time.Hour {
+		t.Fatalf("по умолчанию %d дней, %v", d, Retention(s))
+	}
+	for _, n := range []int{1, 45, 0, MaxRetentionDays} {
+		SetRetentionDays(s, n)
+		if got := RetentionDays(s); got != n || Retention(s) != time.Duration(n)*24*time.Hour {
+			t.Fatalf("после выбора %d: %d, %v", n, got, Retention(s))
+		}
+	}
+	for _, v := range []string{"-1", "36501", "abc", "1.5", ""} {
+		s.SetString(KeyRetention, v)
+		if d := RetentionDays(s); d != DefaultRetentionDays {
+			t.Fatalf("недопустимое значение %q: %d", v, d)
+		}
 	}
 }

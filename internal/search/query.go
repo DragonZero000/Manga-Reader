@@ -9,11 +9,21 @@ import (
 	"mangareader/internal/model"
 )
 
+// TagScope — область тегов для фильтра по тегу.
+type TagScope uint8
+
+const (
+	ScopeEffective TagScope = iota // действующие: оригинальные без скрытых и свои
+	ScopeCustom                    // только свои
+	ScopeHidden                    // только скрытые оригинальные
+)
+
 // Value — значение фильтра. Используются поля, соответствующие ValueKind поля;
 // Num2/Time2 — верхняя граница для OpBetween.
 type Value struct {
 	Text  string
 	Tag   model.Tag
+	Scope TagScope // для тегов
 	Num   int64
 	Num2  int64
 	Time  time.Time

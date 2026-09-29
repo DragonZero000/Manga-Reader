@@ -1,8 +1,10 @@
 package screens
 
 import (
+	"errors"
 	"log"
 	"strconv"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -31,10 +33,15 @@ type Settings struct {
 	// grid — «Карточек в ряду» (телефон) или «Размер карточек» (ПК)
 	grid *widget.RadioGroup
 	// max60 — флажок «Ограничить 60 Гц» (nil — раздела «Экран» нет)
-	max60   *widget.Check
-	path    *widget.Label
-	copyBtn *widget.Button
-	browser *browserCard // nil — встроенного браузера нет
+	max60 *widget.Check
+	// retention — срок хранения данных удалённых произведений; retentionDays —
+	// поле своего числа дней, retentionErr — ошибка в нём
+	retention     *widget.Select
+	retentionDays *widget.Entry
+	retentionErr  *widget.Label
+	path          *widget.Label
+	copyBtn       *widget.Button
+	browser       *browserCard // nil — встроенного браузера нет
 	// mobileBrowser — раздел «Браузер» на Android (nil — нет)
 	mobileBrowser *widget.Card
 	content       fyne.CanvasObject
@@ -69,7 +76,7 @@ func NewSettings(a fyne.App, win fyne.Window, svc *app.Services, notify func(str
 	libraryCard := widget.NewCard(i18n.T("settings.library.title"), "", container.NewVBox(items...))
 	aboutCard := widget.NewCard(i18n.T("settings.about.title"), "", widget.NewLabel("MangaReader "+svc.Version))
 	cards := container.NewVBox(s.newLanguageCard(), libraryCard, s.newSearchCard(onSearchMode),
-		s.newRandomCard(onRandomMode), s.newGridCard(onGrid))
+		s.newRandomCard(onRandomMode), s.newGridCard(onGrid), s.newRetentionCard())
 	if displaySupported {
 		cards.Add(s.newDisplayCard())
 	}
@@ -250,6 +257,115 @@ func (s *Settings) SelectGrid(label string) { s.grid.SetSelected(label) }
 
 // GridLabel — выбранная плотность сетки (подпись); для тестов.
 func (s *Settings) GridLabel() string { return s.grid.Selected }
+
+// retentionPresets — готовые варианты срока хранения: дни и ключ подписи.
+var retentionPresets = []struct {
+	days int
+	key  string
+}{
+	{1, "settings.userdata.day"},
+	{7, "settings.userdata.week"},
+	{30, "settings.userdata.month"},
+	{90, "settings.userdata.months3"},
+	{365, "settings.userdata.year"},
+	{0, "settings.userdata.forever"},
+}
+
+// errRetentionDays — недопустимое своё число дней.
+var errRetentionDays = errors.New("invalid number of days")
+
+// parseRetentionDays — своё число дней: целое от 1 до app.MaxRetentionDays.
+func parseRetentionDays(text string) (int, error) {
+	n, err := strconv.Atoi(strings.TrimSpace(text))
+	if err != nil || n < 1 || n > app.MaxRetentionDays {
+		return 0, errRetentionDays
+	}
+	return n, nil
+}
+
+// newRetentionCard — раздел «Данные удалённых произведений»: сколько хранить
+// данные произведения, файл которого не найден. Готовые варианты и «Своё
+// число дней…» с полем ввода; сохраняется только допустимое число.
+func (s *Settings) newRetentionCard() *widget.Card {
+	st := s.svc.Settings
+	custom := i18n.T("settings.userdata.custom")
+	labels := make([]string, 0, len(retentionPresets)+1)
+	for _, p := range retentionPresets {
+		labels = append(labels, i18n.T(p.key))
+	}
+	labels = append(labels, custom)
+
+	s.retentionErr = cardNote(i18n.T("settings.userdata.days_invalid", "Max", app.MaxRetentionDays))
+	s.retentionErr.Importance = widget.DangerImportance
+	s.retentionErr.Hide()
+	s.retentionDays = widget.NewEntry()
+	s.retentionDays.SetPlaceHolder(i18n.T("settings.userdata.days_placeholder"))
+	s.retentionDays.Validator = func(text string) error {
+		_, err := parseRetentionDays(text)
+		return err
+	}
+	s.retentionDays.OnChanged = func(text string) {
+		n, err := parseRetentionDays(text)
+		if err != nil {
+			s.retentionErr.Show()
+			return
+		}
+		s.retentionErr.Hide()
+		app.SetRetentionDays(st, n)
+	}
+
+	s.retention = widget.NewSelect(labels, nil)
+	days := app.RetentionDays(st)
+	selected := custom
+	for i, p := range retentionPresets {
+		if p.days == days {
+			selected = labels[i]
+		}
+	}
+	s.retention.SetSelected(selected)
+	if selected == custom {
+		s.retentionDays.SetText(strconv.Itoa(days))
+	} else {
+		s.retentionDays.Hide()
+	}
+	s.retention.OnChanged = func(v string) {
+		if v == custom {
+			if d := app.RetentionDays(st); d > 0 {
+				s.retentionDays.SetText(strconv.Itoa(d))
+			}
+			s.retentionDays.Show()
+			return
+		}
+		s.retentionDays.Hide()
+		s.retentionErr.Hide()
+		for i, p := range retentionPresets {
+			if labels[i] == v {
+				app.SetRetentionDays(st, p.days)
+			}
+		}
+	}
+	return widget.NewCard(i18n.T("settings.userdata.title"), "", container.NewVBox(
+		cardNote(i18n.T("settings.userdata.keep")), s.retention, s.retentionDays, s.retentionErr,
+		cardNote(i18n.T("settings.userdata.hint"))))
+}
+
+// SelectRetention выбирает срок хранения так, как пользователь: подпись
+// варианта (для тестов).
+func (s *Settings) SelectRetention(label string) { s.retention.SetSelected(label) }
+
+// RetentionLabel — выбранный вариант срока хранения (подпись); для тестов.
+func (s *Settings) RetentionLabel() string { return s.retention.Selected }
+
+// RetentionDaysEntry — поле своего числа дней; для тестов.
+func (s *Settings) RetentionDaysEntry() *widget.Entry { return s.retentionDays }
+
+// RetentionError — ошибка своего числа дней («» — нет); для тестов.
+func (s *Settings) RetentionError() string {
+	if !s.retentionErr.Visible() {
+		return ""
+	}
+	return s.retentionErr.Text
+}
 
 // Частота экрана; подменяются в тестах.
 var (

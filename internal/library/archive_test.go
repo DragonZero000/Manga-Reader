@@ -172,3 +172,69 @@ func TestFlexInt(t *testing.T) {
 		t.Error("ожидалась ошибка")
 	}
 }
+
+func TestFingerprint(t *testing.T) {
+	dir := t.TempDir()
+	fp := func(p, rel string) string {
+		t.Helper()
+		g, _, err := readArchivePath(t, p, rel, stat(t, p))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(g.Fingerprint) != 64 {
+			t.Fatalf("%s: отпечаток %q", rel, g.Fingerprint)
+		}
+		return g.Fingerprint
+	}
+
+	// переименованная копия
+	a := copyExample(t, dir, "example.zip")
+	b := copyExample(t, dir, "other/copy.zip")
+	if fp(a, "example.zip") != fp(b, "other/copy.zip") {
+		t.Error("копия под другим именем: отпечатки различаются")
+	}
+
+	img1, img2 := pngBytes(t, 2, 2), pngBytes(t, 3, 3)
+	base := fp(writeZip(t, dir, "base.zip",
+		file{"g/meta.json", []byte(`{"id":1,"title":{"english":"A"}}`)},
+		file{"g/1.jpg", img1}, file{"g/2.jpg", img2},
+	), "base.zip")
+
+	// изменён только meta.json
+	if got := fp(writeZip(t, dir, "meta.zip",
+		file{"g/meta.json", []byte(`{"id":999,"title":{"english":"B"},"tags":[]}`)},
+		file{"g/1.jpg", img1}, file{"g/2.jpg", img2},
+	), "meta.zip"); got != base {
+		t.Error("изменён meta.json: отпечаток изменился")
+	}
+
+	// служебные и не-изображения не влияют
+	if got := fp(writeZip(t, dir, "junk.zip",
+		file{"g/1.jpg", img1}, file{"g/2.jpg", img2},
+		file{"__MACOSX/g/._1.jpg", []byte("junk")}, file{"g/notes.txt", []byte("x")},
+	), "junk.zip"); got != base {
+		t.Error("служебные файлы: отпечаток изменился")
+	}
+
+	// другой порядок записей в оглавлении
+	if got := fp(writeZip(t, dir, "order.zip",
+		file{"g/2.jpg", img2}, file{"g/1.jpg", img1}, file{"g/meta.json", []byte(`{}`)},
+	), "order.zip"); got != base {
+		t.Error("другой порядок записей: отпечаток изменился")
+	}
+
+	// заменена страница
+	if got := fp(writeZip(t, dir, "page.zip",
+		file{"g/meta.json", []byte(`{"id":1,"title":{"english":"A"}}`)},
+		file{"g/1.jpg", img1}, file{"g/2.jpg", pngBytes(t, 4, 4)},
+	), "page.zip"); got == base {
+		t.Error("заменена страница: отпечаток не изменился")
+	}
+
+	// переименована страница внутри архива
+	if got := fp(writeZip(t, dir, "renamed.zip",
+		file{"g/1.jpg", img1}, file{"g/3.jpg", img2},
+	), "renamed.zip"); got == base {
+		t.Error("переименована страница: отпечаток не изменился")
+	}
+}

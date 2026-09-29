@@ -80,6 +80,9 @@ func TestErrorText(t *testing.T) {
 		{browser.ErrUnsupported, "Встроенный браузер на этой платформе недоступен", "The built-in browser is unavailable on this platform"},
 		{mobilebrowser.ErrUnsupported, "Встроенный браузер на этой платформе недоступен", "The built-in browser is unavailable on this platform"},
 		{app.ErrChooseNotSupported, "Выбор папки не поддерживается", "Folder selection is not supported"},
+		{app.ErrTagExists, "Такой тег уже есть", "This tag is already there"},
+		{app.ErrTagInvalid, `Имя тега: от 1 до 100 символов, без кавычек "`, `Tag name: 1 to 100 characters, no " quotes`},
+		{app.ErrUserDataUnavailable, "Пользовательские данные недоступны", "User data is unavailable"},
 		{library.ErrEmpty, "Пустой файл", "Empty file"},
 		{errors.New("open x: The system cannot find the file"), "open x: The system cannot find the file", "open x: The system cannot find the file"},
 	}

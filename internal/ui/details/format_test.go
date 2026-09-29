@@ -38,8 +38,8 @@ func exampleGallery(t *testing.T) model.Gallery {
 func TestTagGroupsExample(t *testing.T) {
 	g := exampleGallery(t)
 	var got []string
-	for _, gr := range TagGroups(g.Tags) {
-		got = append(got, gr.Label+": "+strings.Join(gr.Names, ", "))
+	for _, gr := range TagGroups(g.TagViews(), false) {
+		got = append(got, gr.Label+": "+strings.Join(gr.Names(), ", "))
 	}
 	want := []string{
 		"Автор: artist 1",
@@ -62,15 +62,54 @@ func TestTagGroupsUnknownAndEmpty(t *testing.T) {
 		model.NewTag("circle", "c2"),
 		model.NewTag("artist", "   "), // пустое имя — группа не появляется
 	}
-	got := TagGroups(tags)
+	got := TagGroups(model.Gallery{Tags: tags}.TagViews(), false)
 	if len(got) != 3 || got[0].Label != "Теги" || got[1].Label != "circle" || got[2].Label != "zeta" {
 		t.Fatalf("группы: %+v", got)
 	}
-	if !reflect.DeepEqual(got[1].Names, []string{"c1", "c2"}) {
-		t.Errorf("порядок внутри группы: %v", got[1].Names)
+	if !reflect.DeepEqual(got[1].Names(), []string{"c1", "c2"}) {
+		t.Errorf("порядок внутри группы: %v", got[1].Names())
 	}
-	if len(TagGroups(nil)) != 0 {
+	if len(TagGroups(nil, true)) != 0 {
 		t.Error("без тегов групп быть не должно")
+	}
+}
+
+// Свои теги — после оригинальных своей группы; скрытые — только в режиме
+// редактирования; группа только из скрытых вне режима не показывается.
+func TestTagGroupsOverlay(t *testing.T) {
+	g := exampleGallery(t)
+	g.Custom = []model.Tag{model.NewTag("character", "alice"), model.NewTag("group", "circle x")}
+	g.Hidden = []model.Tag{model.NewTag("tag", "tag 2"), model.NewTag("language", "japanese")}
+	want := []string{
+		"Автор: artist 1",
+		"Группа: circle x+",
+		"Пародия: parody 1",
+		"Персонаж: character 1, alice+",
+		"Категория: doujinshi",
+		"Теги: tag 1, tag 3",
+	}
+	if got := showGroups(TagGroups(g.TagViews(), false)); !reflect.DeepEqual(got, want) {
+		t.Fatalf("вне режима:\n got %q\nwant %q", got, want)
+	}
+	want = []string{
+		"Автор: artist 1",
+		"Группа: circle x+",
+		"Пародия: parody 1",
+		"Персонаж: character 1, alice+",
+		"Язык: japanese-",
+		"Категория: doujinshi",
+		"Теги: tag 1, tag 2-, tag 3",
+	}
+	if got := showGroups(TagGroups(g.TagViews(), true)); !reflect.DeepEqual(got, want) {
+		t.Fatalf("в режиме:\n got %q\nwant %q", got, want)
+	}
+	// пустая группа для поля ввода — на своём месте
+	got := TagGroups(model.Gallery{Tags: []model.Tag{model.NewTag("tag", "a")}}.TagViews(), true, "circle", "artist")
+	if len(got) != 3 || got[0].Type != "artist" || got[1].Type != "tag" || got[2].Type != "circle" || len(got[0].Tags) != 0 {
+		t.Fatalf("группы с полем ввода: %+v", got)
+	}
+	if m := missingTypes(got); !reflect.DeepEqual(m, []string{"group", "parody", "character", "language", "category"}) {
+		t.Fatalf("недостающие типы: %v", m)
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"log"
 	"net/url"
+	"path/filepath"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -81,6 +82,7 @@ func NewShell(a fyne.App, svc *app.Services) *Shell {
 	s.Details = details.New(s.Window, svc.Library, svc.Thumbs, s.Reader.Open, s.SearchFor)
 	s.actions = s.newActions()
 	s.Details.SetMenu(s.actions.DetailsMenu)
+	s.Details.SetTagEditor(shellTags{s}, s.Toast.Show)
 	s.grid = screens.NewGridMetrics(svc.Settings)
 	s.library = screens.NewLibrary(svc, s.grid, s.Toast.Show, s.actions, choose)
 	s.search = screens.NewSearch(svc, s.grid, s.actions)
@@ -153,6 +155,9 @@ func NewShell(a fyne.App, svc *app.Services) *Shell {
 
 	if svc.LibraryErr != nil {
 		s.Toast.ShowFor(i18n.T("shell.library_prepare_failed", "Error", screens.ErrorText(svc.LibraryErr)), DefaultToastDuration*2)
+	}
+	if svc.UserDataBackup != "" {
+		s.Toast.ShowFor(i18n.T("shell.userdata_recovered", "File", filepath.Base(svc.UserDataBackup)), DefaultToastDuration*3)
 	}
 	return s
 }

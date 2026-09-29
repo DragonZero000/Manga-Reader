@@ -46,15 +46,18 @@ func upsertDoc(ctx context.Context, tx *sql.Tx, g model.Gallery) error {
 	}
 	add(g.Title)
 	add(g.AltTitle)
-	for _, t := range g.Tags {
-		t = model.NewTag(t.Type, t.Name)
+	for _, tv := range g.TagViews() {
+		t := model.NewTag(tv.Type, tv.Name)
 		if t.Name == "" {
 			continue
 		}
-		add(t.Name)
-		add(t.String())
-		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO tags(key, type, name, name_norm) VALUES(?, ?, ?, ?)`,
-			key, t.Type, t.Name, search.Normalize(t.Name)); err != nil {
+		src := tagSrc(tv.Origin)
+		if src != srcHidden { // скрытые не участвуют в словах
+			add(t.Name)
+			add(t.String())
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO tags(key, type, name, name_norm, src) VALUES(?, ?, ?, ?, ?)`,
+			key, t.Type, t.Name, search.Normalize(t.Name), src); err != nil {
 			return err
 		}
 	}
@@ -72,6 +75,30 @@ func upsertDoc(ctx context.Context, tx *sql.Tx, g model.Gallery) error {
 		search.Normalize(strings.TrimSpace(g.Scanlator)), g.ExternalID, len(g.Pages), g.Favorites,
 		g.File.Size, nanos(g.Uploaded), nanos(g.File.ModTime))
 	return err
+}
+
+// Происхождение тега в tags.src.
+const (
+	srcMeta   = 0 // оригинальный видимый
+	srcCustom = 1 // свой
+	srcHidden = 2 // оригинальный скрытый
+)
+
+func tagSrc(o model.TagOrigin) int {
+	switch o {
+	case model.OriginCustom:
+		return srcCustom
+	case model.OriginHidden:
+		return srcHidden
+	}
+	return srcMeta
+}
+
+// scopeCond — условие на tags.src для области тегов фильтра.
+var scopeCond = map[search.TagScope]string{
+	search.ScopeEffective: ` AND t.src IN (0, 1)`,
+	search.ScopeCustom:    ` AND t.src = 1`,
+	search.ScopeHidden:    ` AND t.src = 2`,
 }
 
 func removeDoc(ctx context.Context, tx *sql.Tx, key string) error {
@@ -176,7 +203,11 @@ func filterCond(f search.Filter) (string, []any, error) {
 	v := f.Value
 	switch f.Field {
 	case search.FieldTag:
-		cond := `EXISTS (SELECT 1 FROM tags t WHERE t.key = d.key AND t.name_norm = ?`
+		scope, ok := scopeCond[v.Scope]
+		if !ok {
+			return "", nil, fmt.Errorf("search: unknown tag scope %d", v.Scope)
+		}
+		cond := `EXISTS (SELECT 1 FROM tags t WHERE t.key = d.key AND t.name_norm = ?` + scope
 		args := []any{search.Normalize(v.Tag.Name)}
 		if v.Tag.Type != "" {
 			cond += ` AND t.type = ?`
@@ -256,10 +287,11 @@ func escapeClause(s string) string {
 	return ""
 }
 
+// SuggestTags — подсказки по действующим тегам (оригинальные видимые и свои).
 func (x Index) SuggestTags(ctx context.Context, tagType, prefix string, limit int) ([]search.TagCount, error) {
 	prefix = search.Normalize(strings.TrimSpace(prefix))
 	tagType = strings.ToLower(strings.TrimSpace(tagType))
-	cond := `name_norm LIKE ?` + escapeClause(prefix)
+	cond := `src IN (0, 1) AND name_norm LIKE ?` + escapeClause(prefix)
 	args := []any{escapeLike(prefix) + "%"}
 	if tagType != "" {
 		cond += ` AND type = ?`
@@ -268,7 +300,7 @@ func (x Index) SuggestTags(ctx context.Context, tagType, prefix string, limit in
 	if limit <= 0 {
 		limit = -1
 	}
-	rows, err := x.c.db.QueryContext(ctx, `SELECT type, name, COUNT(*) AS n FROM tags WHERE `+cond+
+	rows, err := x.c.db.QueryContext(ctx, `SELECT type, name, COUNT(DISTINCT key) AS n FROM tags WHERE `+cond+
 		` GROUP BY type, name ORDER BY n DESC, type || ':' || name ASC LIMIT ?`, append(args, limit)...)
 	if err != nil {
 		return nil, fmt.Errorf("tag suggestions: %w", err)

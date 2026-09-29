@@ -76,7 +76,7 @@ func TestCatalogRestart(t *testing.T) {
 	if !errors.As(cached.Errors[0].Err, &ue) || ue.Kind != library.KindHTML {
 		t.Fatalf("причина ошибки: %v", cached.Errors[0].Err)
 	}
-	if g, ok := src.Get(model.LocalKey("a.zip")); !ok || g.Title != "english name" || len(g.Pages) != 2 {
+	if g, ok := src.Get(model.LocalKey("a.zip")); !ok || g.Title != "english name" || len(g.Pages) != 2 || g.Fingerprint == "" {
 		t.Fatalf("галерея из каталога: %+v", g)
 	}
 	if got := findKeys(t, c2.Index(), "english"); len(got) != 2 {
@@ -112,6 +112,9 @@ func TestCatalogRebuildsIndex(t *testing.T) {
 	if _, err := sourceOver(c1, dir).Scan(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	if err := c1.SetOverlayEpoch("e1"); err != nil {
+		t.Fatal(err)
+	}
 	c1.db.Exec(`DELETE FROM docs`)
 	c1.db.Exec(`DELETE FROM docs_fts`)
 	c1.Close()
@@ -119,6 +122,10 @@ func TestCatalogRebuildsIndex(t *testing.T) {
 	c2 := openTest(t, db, dir)
 	if got := findKeys(t, c2.Index(), "english"); len(got) != 1 {
 		t.Fatalf("индекс не перестроен: %v", got)
+	}
+	// перестроен без наложения — эпоха сброшена
+	if e, _ := c2.OverlayEpoch(); e != "" {
+		t.Fatalf("эпоха после перестройки: %q", e)
 	}
 }
 

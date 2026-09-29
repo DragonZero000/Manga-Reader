@@ -9,6 +9,7 @@ MangaReader is a single Go application built with [Fyne](https://fyne.io) for Wi
 - [Package boundaries](#package-boundaries)
 - [Platforms and build tags](#platforms-and-build-tags)
 - [Threads and UI](#threads-and-ui)
+- [User data](#user-data)
 - [Built-in browser](#built-in-browser)
 - [Version, build and CI](#version-build-and-ci)
 - [OpenSpec](#openspec)
@@ -36,7 +37,7 @@ FyneApp.toml         app metadata and the single source of the version
 | `internal/paths` | Application folder on PC (portable mode): next to the exe, the working directory under `go run` |
 | `internal/storage` | Access to library files and settings: the file system on PC, Storage Access Framework (JNI) on Android; download source marks (NTFS stream, `Zone.Identifier`) |
 | `internal/library` | Folder scanning, zip and `meta.json` parsing, file type detection, change watching (fsnotify), page sizes |
-| `internal/model` | Model: `Gallery`, `Tag`, `Key`, natural sorting |
+| `internal/model` | Model: `Gallery`, `Tag`, `Key`, the user's tag overlay (`EffectiveTags`, `TagViews`), natural sorting |
 | `internal/search` | Search fields, query parsing, `Query`, the `Index` interface and the in-memory index |
 | `internal/problems` | The list of library errors and their seen status |
 | `internal/thumbs` | Cover thumbnails: background decoding, downscaling, in-memory cache |
@@ -44,6 +45,7 @@ FyneApp.toml         app metadata and the single source of the version
 | `internal/browser` | Windows built-in browser: Firefox profile, bridge extension, launching, window attachment, registry cleanup |
 | `internal/mobilebrowser` | Bridge to the Android browser (JNI): open, clear data, receive download messages |
 | `internal/catalog` | Library catalog in SQLite (`library.db`, FTS5, `sqlite_fts5` tag): scan results across launches, the search index (`search.Index`), covers on disk, a copy of the page links of downloaded files; a recoverable cache |
+| `internal/userdata` | User data about works in SQLite (`user.db`): work records with a stable `uid`, schema migrations, backup of a damaged file, reconciliation with scans and moving records by content fingerprint, the user's own and hidden tags |
 | `internal/i18n` | Interface language: translations from `locales/<lang>.json` (go-i18n), plural forms, date, number and size formats, language choice at startup, Fyne built-in texts in the app language |
 | `internal/display` | Refresh rate of the app window on Android (JNI, `DisplayRate.kt`): the 60 Hz limit; a stub on other platforms |
 | `internal/appversion` | The version from `FyneApp.toml` and the Android build number |
@@ -79,6 +81,44 @@ Linux is not supported yet.
 ## Threads and UI
 
 The app is migrated to `fyne.Do` (`[Migrations] fyneDo = true` in `FyneApp.toml`): widgets are changed **only** from the main thread. Scanning, thumbnail and page decoding, search and browser events run in goroutines and hand results to the UI through `fyne.Do`. `make run` starts the app with Fyne thread checks; release builds use the `migrated_fynedo` tag, without checks.
+
+## User data
+
+The app keeps two SQLite files next to each other (next to the exe on PC, in the app's private folder on Android):
+
+| File | Package | Nature |
+|---|---|---|
+| `library.db` | `internal/catalog` | Cache: rebuilt from the archives. Recreated on a schema version change or damage, cleared when the library folder changes |
+| `user.db` | `internal/userdata` | User data (own and hidden tags; later groups, reading progress): cannot be restored from the archives. Never recreated: the schema changes by migrations (`PRAGMA user_version`); a damaged file is renamed to `user.db.broken-<YYYYMMDD-HHMMSS>` and a new one is created; a file from a newer app version is left untouched and user data is unavailable in that run |
+
+A work record (`works`) stores a stable `uid`, the library folder key, the path relative to it, the content fingerprint and the "orphan" time (the file is not found). User data refers to `uid`, not to the path. Records are created only when data about a work is first saved. The folder key is `app:manga` on PC (moving the portable folder keeps the data) and the SAF tree URI on Android.
+
+The fingerprint (`Gallery.Fingerprint`) is a SHA-256 of the page list from the zip directory (path, CRC32, size), computed while parsing the archive without unpacking; `meta.json` and the archive's file name don't affect it.
+
+Reconciliation: `library.Source` notifies an `Observer` after every successful scan (before the list and index are published) and after a delete through the app; the adapter in `internal/app` calls `userdata.Store.Reconcile` in one transaction:
+
+1. records whose file is found lose the orphan mark (a changed fingerprint is updated);
+2. a new file takes the record of a missing one if exactly one missing record and exactly one new file share the fingerprint (rename or move);
+3. other missing records become orphans — unless the scan found no files at all;
+4. orphans older than the retention period (`userdata.retention` setting, 30 days by default, 0 — forever) are deleted along with their data.
+
+A failed scan changes nothing; only records of the current folder are touched. Files that failed to parse or are busy count as found.
+
+### Tag overlay
+
+`Gallery.Tags` holds the tags from `meta.json` and is cached in `library.db` as before. The user's changes are an overlay kept separately: `Gallery.Custom` (own tags in the order they were added) and `Gallery.Hidden` (hidden original tags), both `json:"-"`, so they never reach the scanner cache. Their source is the `user_tags(uid, kind, type, name, seq)` table in `user.db`, removed together with the work record. `EffectiveTags()` is the original tags without hidden ones plus own tags; `TagViews()` returns every tag with its origin for the edit mode. A hidden record for a tag that is no longer in `meta.json` is ignored.
+
+`library.Source` applies the overlay through the `library.Overlay` interface (the adapter in `internal/app` reads `userdata.Store.Overlays` for the current folder key):
+
+- `Scan`: walk → `Observer.Scanned` (reconciliation, moving by fingerprint) → `Overlay.Apply` to all, added and changed galleries → publish and update the index. A file moved by fingerprint comes as added and is indexed with its own tags in the same scan;
+- `LoadCatalog`: `Apply` to the galleries from the catalog; the index already stores the overlay;
+- `Refresh(k)` after an edit rereads one gallery's overlay, replaces it in the list (copy on write) and upserts it into the index; `Reindex` does the same for all galleries. Both take the scan lock, so a stale scan result can't overwrite an edit; a scan that starts meanwhile waits for them instead of being skipped.
+
+`Services.EditTags` (always off the UI thread) checks the name (empty, over 100 characters, `"` → `ErrTagInvalid`) and duplicates against original tags, hidden ones included, and own tags (`ErrTagExists`), then calls `userdata.Ensure`, the operation and `Source.Refresh`. The gallery page talks to it through the `details.TagEditor` interface implemented in `Shell`; after a successful edit the current search is repeated.
+
+In the search index a tag has an origin: `tags.src` is 0 for a visible original, 1 for an own tag, 2 for a hidden one. Words (`docs_fts.hay`) and suggestions use only 0 and 1. `search.Value.Scope` picks the area of a tag filter: effective tags for `tag:` and the type fields, own ones for `custom-tag:`, hidden ones for `hidden-tag:`. `MemIndex` keeps the same three sets and passes the same `search/indextest` checks.
+
+The index in `library.db` stores the result of the overlay, so it must match `user.db`. `user.db` gets a random epoch when it is created (`meta.epoch`); `library.db` remembers the epoch its index was built with (`meta.overlay_epoch`, `none` without user data). At startup, if they differ (`user.db` restored from a backup, recreated after damage, unavailable), the library is reindexed in the background after `LoadCatalog` and the epoch is saved. Rebuilding the index from the scanner cache and changing the library folder reset the saved epoch.
 
 ## Localization
 

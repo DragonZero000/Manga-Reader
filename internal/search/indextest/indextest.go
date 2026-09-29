@@ -25,6 +25,7 @@ func Run(t *testing.T, newIndex NewIndex) {
 	t.Run("Remove", func(t *testing.T) { testRemove(t, newIndex) })
 	t.Run("Upsert", func(t *testing.T) { testUpsertReplaces(t, newIndex) })
 	t.Run("SuggestTags", func(t *testing.T) { testSuggestTags(t, newIndex) })
+	t.Run("Overlay", func(t *testing.T) { testOverlay(t, newIndex) })
 	t.Run("Normalize", func(t *testing.T) { testNormalize(t, newIndex) })
 	t.Run("SpecialChars", func(t *testing.T) { testSpecialChars(t, newIndex) })
 	t.Run("Concurrent", func(t *testing.T) { testConcurrent(t, newIndex) })
@@ -281,6 +282,80 @@ func testSuggestTags(t *testing.T, newIndex NewIndex) {
 	got, _ = idx.SuggestTags(ctx, "tag", "tag", 10)
 	if len(got) != 3 || got[0].Tag.Name != "tag 2" || got[0].Count != 2 {
 		t.Fatalf("счётчики: %v", got)
+	}
+}
+
+// OverlayG — ExampleG со своим тегом character:alice и скрытыми
+// tag:tag 3 и category:doujinshi.
+func OverlayG() model.Gallery {
+	g := ExampleG()
+	g.Custom = []model.Tag{model.NewTag("character", "alice")}
+	g.Hidden = []model.Tag{model.NewTag("tag", "tag 3"), model.NewTag("category", "doujinshi")}
+	return g
+}
+
+// testOverlay: действующие, свои и скрытые теги в словах, фильтрах и подсказках.
+func testOverlay(t *testing.T, newIndex NewIndex) {
+	plain := PlainG("plain.zip", time.Date(2026, 1, 1, 0, 0, 0, 0, time.Local))
+	idx := fill(t, newIndex(t), OverlayG(), plain)
+	ex := []string{"example.zip"}
+	pl := []string{"plain.zip"}
+	none := []string{}
+	cases := map[string][]string{
+		"doujin":                       none, // скрытый тег не находится словом
+		"category:doujinshi":           none, // фильтр типа видит только действующие
+		"alic":                         ex,   // свой тег находится словом
+		"character:alic":               none, // фильтр — точное имя
+		`tag:"tag 3"`:                  none,
+		`-tag:"tag 3"`:                 {"example.zip", "plain.zip"},
+		`hidden-tag:"tag 3"`:           ex,
+		`hidden-tag:doujinshi`:         ex,
+		`-hidden-tag:"tag 3"`:          pl,
+		`hidden-tag:"tag 1"`:           none,
+		"character:alice":              ex,
+		"tag:alice":                    ex,
+		"custom-tag:alice":             ex,
+		"custom-tag:ALICE":             ex,
+		`custom-tag:"tag 1"`:           none,
+		`-custom-tag:alice`:            pl,
+		`tag:"tag 1" custom-tag:alice`: ex,
+		"language:alice":               none,
+	}
+	for q, want := range cases {
+		if got := Find(t, idx, q); !reflect.DeepEqual(got, want) {
+			t.Errorf("%q → %v, want %v", q, got, want)
+		}
+	}
+
+	ctx := context.Background()
+	got, err := idx.SuggestTags(ctx, "character", "ali", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []search.TagCount{{Tag: model.NewTag("character", "alice"), Count: 1}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("подсказка своего тега: %v", got)
+	}
+	if got, _ := idx.SuggestTags(ctx, "category", "", 10); len(got) != 0 {
+		t.Errorf("подсказка скрытого тега: %v", got)
+	}
+	if got, _ := idx.SuggestTags(ctx, "tag", "tag", 10); len(got) != 2 {
+		t.Errorf("подсказки без скрытого tag 3: %v", got)
+	}
+
+	// Upsert с новым наложением заменяет прежнее
+	g := OverlayG()
+	g.Custom, g.Hidden = nil, nil
+	fill(t, idx, g)
+	for q, want := range map[string][]string{
+		"doujin":             ex,
+		`tag:"tag 3"`:        ex,
+		`hidden-tag:"tag 3"`: none,
+		"custom-tag:alice":   none,
+		"alic":               none,
+	} {
+		if got := Find(t, idx, q); !reflect.DeepEqual(got, want) {
+			t.Errorf("после сброса наложения: %q → %v, want %v", q, got, want)
+		}
 	}
 }
 

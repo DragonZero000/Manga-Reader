@@ -69,6 +69,29 @@ func TestParseTags(t *testing.T) {
 	}
 }
 
+func TestParseTagScopes(t *testing.T) {
+	q := mustParse(t, `Custom-Tag:"My  Fav" hidden-tag:yuri -custom-tag:"my fav" -HIDDEN-TAG:x`)
+	want := []Filter{
+		{FieldTag, OpHas, Value{Tag: model.Tag{Name: "my fav"}, Scope: ScopeCustom}},
+		{FieldTag, OpHas, Value{Tag: model.Tag{Name: "yuri"}, Scope: ScopeHidden}},
+		{FieldTag, OpNotHas, Value{Tag: model.Tag{Name: "my fav"}, Scope: ScopeCustom}},
+		{FieldTag, OpNotHas, Value{Tag: model.Tag{Name: "x"}, Scope: ScopeHidden}},
+	}
+	if !reflect.DeepEqual(q.Filters, want) {
+		t.Fatalf("фильтры:\n got %+v\nwant %+v", q.Filters, want)
+	}
+	if len(q.Terms) != 0 {
+		t.Fatalf("лишние слова: %q", q.Terms)
+	}
+	// обычные поля тегов — действующие теги
+	if f := mustParse(t, "tag:x").Filters[0]; f.Value.Scope != ScopeEffective {
+		t.Fatalf("tag: область %v", f.Value.Scope)
+	}
+	if pe := parseErr(t, `custom-tag:""`); pe.Reason.Code != ReasonNoValue {
+		t.Fatalf("пустое значение: %v", pe.Reason.Code)
+	}
+}
+
 func TestParseCombined(t *testing.T) {
 	q := mustParse(t, "school pages:>20 language:japanese")
 	if !reflect.DeepEqual(q.Terms, []string{"school"}) || len(q.Filters) != 2 {

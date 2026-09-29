@@ -39,6 +39,12 @@ func ErrorText(err error) string {
 		return i18n.T("error.browser_unsupported")
 	case errors.Is(err, app.ErrChooseNotSupported):
 		return i18n.T("error.choose_unsupported")
+	case errors.Is(err, app.ErrTagExists):
+		return i18n.T("error.tag_exists")
+	case errors.Is(err, app.ErrTagInvalid):
+		return i18n.T("error.tag_invalid", "Max", app.MaxTagName)
+	case errors.Is(err, app.ErrUserDataUnavailable):
+		return i18n.T("error.userdata_unavailable")
 	case errors.Is(err, storage.ErrUnsupported):
 		return i18n.T("error.unsupported")
 	case errors.Is(err, storage.ErrNoWriteAccess):

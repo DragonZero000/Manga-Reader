@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"mangareader/internal/model"
@@ -22,17 +23,32 @@ var ErrScanInProgress = errors.New("a scan is already running")
 // maxPageSize ограничивает размер читаемой страницы (защита от «zip-бомб»).
 const maxPageSize = 256 << 20
 
+// Observer получает события источника в горутине сканирования или удаления
+// (не в UI-потоке).
+type Observer interface {
+	// Scanned — успешный обход папки: вызывается под блокировкой сканирования
+	// до публикации списка галерей и обновления индекса.
+	Scanned(res ScanResult)
+	// Deleted — архив rel удалён через Source.Delete.
+	Deleted(rel string)
+}
+
 // Source — источник «локальная папка библиотеки»: список галерей и
 // доступ к страницам. Методы безопасны для вызова из разных горутин.
 type Source struct {
 	index search.Index
 	store ScanStore // nil — результаты сканирования только в памяти
 
-	stMu    sync.RWMutex
-	st      storage.Storage // nil — папка не выбрана (Android)
-	scanner *Scanner
+	stMu     sync.RWMutex
+	st       storage.Storage // nil — папка не выбрана (Android)
+	scanner  *Scanner
+	observer Observer // nil — нет
+	overlay  Overlay  // nil — без наложения пользователя
 
 	scanMu sync.Mutex // занят на время сканирования
+	// edits — сколько правок (Refresh, Reindex) ждут или держат scanMu:
+	// сканирование, начатое в это время, ждёт их, а не отменяется
+	edits atomic.Int32
 	// busyAsError — занятые файлы попадают в ошибки (под scanMu)
 	busyAsError bool
 
@@ -105,6 +121,22 @@ func (s *Source) SetStorage(st storage.Storage) {
 	}
 }
 
+// SetObserver подписывает o на успешные сканирования и удаления (nil —
+// отписать). Ждёт окончания идущего сканирования.
+func (s *Source) SetObserver(o Observer) {
+	s.scanMu.Lock()
+	defer s.scanMu.Unlock()
+	s.stMu.Lock()
+	s.observer = o
+	s.stMu.Unlock()
+}
+
+func (s *Source) getObserver() Observer {
+	s.stMu.RLock()
+	defer s.stMu.RUnlock()
+	return s.observer
+}
+
 // SetBusyAsError включает режим, в котором файлы, занятые другим процессом,
 // попадают в ошибки; без него они пропускаются (ScanResult.Busy). Действует
 // со следующего сканирования.
@@ -173,6 +205,9 @@ func (s *Source) Delete(k model.Key, permanent bool) error {
 	if err := s.index.Remove(context.Background(), k); err != nil {
 		log.Printf("index: removing %s: %v", k, err)
 	}
+	if o := s.getObserver(); o != nil {
+		o.Deleted(k.ID)
+	}
 	return nil
 }
 
@@ -192,8 +227,9 @@ func (s *Source) deleter(k model.Key) (storage.Deleter, error) {
 }
 
 // LoadCatalog показывает результаты прошлых сканирований из хранилища без
-// обхода папки: галереи доступны сразу при запуске. Индекс не трогается —
-// он хранится вместе с результатами. Ждёт идущего сканирования.
+// обхода папки: галереи доступны сразу при запуске. К ним применяется
+// наложение пользователя. Индекс не трогается — он хранится вместе с
+// результатами (с наложением). Ждёт идущего сканирования.
 func (s *Source) LoadCatalog() ScanResult {
 	s.scanMu.Lock()
 	defer s.scanMu.Unlock()
@@ -205,6 +241,7 @@ func (s *Source) LoadCatalog() ScanResult {
 	}
 	start := time.Now()
 	res := scanner.Cached()
+	applyOverlay(s.getOverlay(), res.Galleries)
 	byKey := make(map[model.Key]int, len(res.Galleries))
 	for i, g := range res.Galleries {
 		byKey[g.Key] = i
@@ -218,15 +255,19 @@ func (s *Source) LoadCatalog() ScanResult {
 }
 
 // Scan сканирует папку и обновляет список галерей и индекс.
-// Если сканирование уже идёт, сразу возвращает ErrScanInProgress.
+// Если сканирование уже идёт, сразу возвращает ErrScanInProgress; идущую
+// правку наложения (Refresh, Reindex) — ждёт.
 func (s *Source) Scan(ctx context.Context) (ScanResult, error) {
 	if !s.scanMu.TryLock() {
-		return ScanResult{}, ErrScanInProgress
+		if s.edits.Load() == 0 {
+			return ScanResult{}, ErrScanInProgress
+		}
+		s.scanMu.Lock()
 	}
 	defer s.scanMu.Unlock()
 
 	s.stMu.RLock()
-	scanner := s.scanner
+	scanner, observer, overlay := s.scanner, s.observer, s.overlay
 	s.stMu.RUnlock()
 	if scanner == nil {
 		return ScanResult{}, fmt.Errorf("%w: library folder is not selected", storage.ErrUnavailable)
@@ -240,6 +281,12 @@ func (s *Source) Scan(ctx context.Context) (ScanResult, error) {
 	log.Printf("library: %d galleries, %d new/changed, %d errors, %d files opened, in %v",
 		len(res.Galleries), len(res.Added)+len(res.Changed), len(res.Errors), res.Opened, time.Since(start).Round(time.Millisecond))
 
+	// порядок: сверка пользовательских данных (перенос по отпечатку) →
+	// наложение → публикация и индекс
+	if observer != nil {
+		observer.Scanned(res)
+	}
+	applyOverlay(overlay, res.Galleries, res.Added, res.Changed)
 	byKey := make(map[model.Key]int, len(res.Galleries))
 	for i, g := range res.Galleries {
 		byKey[g.Key] = i

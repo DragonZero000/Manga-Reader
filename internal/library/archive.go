@@ -2,10 +2,13 @@ package library
 
 import (
 	"archive/zip"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"path"
+	"sort"
 	"strings"
 
 	"mangareader/internal/model"
@@ -42,6 +45,7 @@ func ReadArchive(f storage.File, relPath string, e storage.Entry, display string
 	}
 
 	var metaFile *zip.File
+	var pageFiles []*zip.File
 	for _, f := range zr.File {
 		if f.FileInfo().IsDir() || isServicePath(f.Name) {
 			continue
@@ -55,12 +59,14 @@ func ReadArchive(f storage.File, relPath string, e storage.Entry, display string
 		}
 		if imageExts[strings.ToLower(pathExt(base))] {
 			g.Pages = append(g.Pages, model.Page{Name: f.Name})
+			pageFiles = append(pageFiles, f)
 		}
 	}
 	if len(g.Pages) == 0 {
 		return model.Gallery{}, nil, ErrNoImages
 	}
 	g.SortPages()
+	g.Fingerprint = fingerprint(pageFiles)
 
 	var warnings []string
 	var meta *metaJSON
@@ -73,6 +79,19 @@ func ReadArchive(f storage.File, relPath string, e storage.Entry, display string
 	}
 	applyMeta(&g, meta, relPath)
 	return g, warnings, nil
+}
+
+// fingerprint — отпечаток содержимого по оглавлению архива, без распаковки:
+// SHA-256 строк «путь\x00crc32\x00размер\n» страниц, упорядоченных по пути
+// побайтно. Порядок записей в архиве, meta.json и служебные файлы не влияют.
+func fingerprint(pages []*zip.File) string {
+	sorted := append([]*zip.File(nil), pages...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
+	h := sha256.New()
+	for _, f := range sorted {
+		fmt.Fprintf(h, "%s\x00%d\x00%d\n", f.Name, f.CRC32, f.UncompressedSize64)
+	}
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 func readMeta(f *zip.File) (*metaJSON, error) {

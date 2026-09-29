@@ -5,6 +5,8 @@ package details
 import (
 	"errors"
 	"image"
+	"image/color"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -18,6 +20,7 @@ import (
 	"mangareader/internal/model"
 	"mangareader/internal/pages"
 	"mangareader/internal/thumbs"
+	"mangareader/internal/ui/screens"
 )
 
 const (
@@ -32,6 +35,7 @@ const (
 // Details — слой страницы произведения.
 type Details struct {
 	win    fyne.Window
+	src    *library.Source
 	thumbs *thumbs.Cache
 	loader *pages.Loader
 	onRead func(model.Gallery)
@@ -43,6 +47,13 @@ type Details struct {
 	menu func(model.Gallery) *fyne.Menu
 	// do выполняет функцию в UI-потоке (fyne.Do); подменяется в тестах.
 	do func(func())
+	// tags — правка тегов; nil — недоступна. notify — уведомление (toast).
+	tags   TagEditor
+	notify func(string)
+	// confirm показывает диалог подтверждения; подменяется в тестах.
+	confirm func(title, text, confirm string, cb func(bool))
+	// suggestDelay — пауза перед запросом подсказок; подменяется в тестах.
+	suggestDelay time.Duration
 
 	g       model.Gallery
 	visible bool
@@ -53,6 +64,11 @@ type Details struct {
 	body   *fyne.Container
 	cover  *cover
 	layer  *fyne.Container
+	// tagsBox — раздел тегов (пересобирается отдельно от страницы), ts — его
+	// состояние; spacer — место под клавиатуру при открытом поле ввода.
+	tagsBox *fyne.Container
+	ts      tagsState
+	spacer  *canvas.Rectangle
 	// linkBtn — кнопка «Открыть в браузере» текущей страницы (nil — нет ссылки).
 	linkBtn *widget.Button
 	// menuBtn — кнопка «⋮» справа в верхней полосе.
@@ -64,6 +80,7 @@ type Details struct {
 func New(win fyne.Window, src *library.Source, th *thumbs.Cache, onRead func(model.Gallery), onSearch func(string)) *Details {
 	d := &Details{
 		win:      win,
+		src:      src,
 		thumbs:   th,
 		loader:   pages.NewLoader(src.OpenPage, coverCache, 1),
 		onRead:   onRead,
@@ -71,6 +88,13 @@ func New(win fyne.Window, src *library.Source, th *thumbs.Cache, onRead func(mod
 		do:       fyne.Do,
 		title:    widget.NewLabel(""),
 		body:     container.NewVBox(),
+		tagsBox:  container.NewVBox(),
+		spacer:   canvas.NewRectangle(color.Transparent),
+
+		suggestDelay: suggestDelay,
+	}
+	d.confirm = func(title, text, confirm string, cb func(bool)) {
+		screens.Confirm(title, text, confirm, cb, win)
 	}
 	d.title.Truncation = fyne.TextTruncateEllipsis
 	d.title.TextStyle.Bold = true
@@ -142,7 +166,12 @@ func (d *Details) Gallery() model.Gallery { return d.g }
 // Open показывает страницу произведения с начала.
 func (d *Details) Open(g model.Gallery) {
 	d.token++
+	// свои и скрытые теги могли измениться после того, как сетка получила галерею
+	if cur, ok := d.src.Get(g.Key); ok {
+		g.Custom, g.Hidden = cur.Custom, cur.Hidden
+	}
 	d.g = g
+	d.resetTags()
 	d.visible = true
 	d.win.Canvas().Unfocus()
 	d.loader.NewGeneration()
@@ -162,6 +191,7 @@ func (d *Details) Close() {
 	}
 	d.token++
 	d.visible = false
+	d.resetTags()
 	d.layer.Hide()
 	d.win.Canvas().Refresh(d.layer)
 	d.cover.reset()
@@ -201,16 +231,9 @@ func (d *Details) build() {
 	}
 	objs = append(objs, buttons)
 
-	if groups := TagGroups(g.Tags); len(groups) > 0 {
-		objs = append(objs, widget.NewSeparator())
-		form := container.New(layout.NewFormLayout())
-		for _, gr := range groups {
-			caption := widget.NewLabelWithStyle(gr.Label, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-			form.Add(caption)
-			form.Add(d.tagChips(gr))
-		}
-		objs = append(objs, form)
-	}
+	// раздел тегов есть всегда: без тегов — только кнопка «Изменить теги»
+	d.buildTags()
+	objs = append(objs, widget.NewSeparator(), d.tagsBox)
 
 	if rows := InfoRows(g); len(rows) > 0 {
 		objs = append(objs, widget.NewSeparator())
@@ -224,6 +247,8 @@ func (d *Details) build() {
 		}
 		objs = append(objs, form)
 	}
+	d.updateSpacer()
+	objs = append(objs, d.spacer)
 	d.body.Objects = objs
 	d.body.Refresh()
 	// RowWrapLayout узнаёт свою высоту только после первой раскладки —
@@ -234,20 +259,6 @@ func (d *Details) build() {
 			d.body.Refresh()
 		}
 	})
-}
-
-// tagChips — «чипы» тегов группы с переносом по строкам.
-func (d *Details) tagChips(gr Group) fyne.CanvasObject {
-	chips := container.New(layout.NewRowWrapLayout())
-	for _, name := range gr.Names {
-		query := TagQuery(gr.Type, name)
-		chip := widget.NewButton(name, func() { d.onSearch(query) })
-		chip.Importance = widget.LowImportance
-		bg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
-		bg.CornerRadius = theme.InputRadiusSize() * 2
-		chips.Add(container.NewStack(bg, chip))
-	}
-	return chips
 }
 
 // repaint перерисовывает объект через canvas окна: Container.Show сам не

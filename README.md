@@ -19,7 +19,7 @@ An offline manga reader for zip archives on **Windows** and **Android**, with a 
 ## Features
 
 - **Library** — a grid of covers from a folder of `.zip` archives; new files show up on their own, no restart needed.
-- **Metadata** — titles, tags grouped by type (artist, group, character, language…), upload date and more from a `meta.json` inside the archive.
+- **Metadata** — titles, tags grouped by type (artist, group, character, language…), upload date and more from a `meta.json` inside the archive; add your own tags and hide unwanted ones without touching the archive.
 - **Reader** — paged mode (tap zones, swipe, keyboard, ×2 zoom) and a continuous strip.
 - **Search** — by words and phrases, tags, excluded tags, page count, dates, file size; tapping a tag searches for it.
 - **Built-in browser** — Firefox ESR on Windows, GeckoView on Android; downloads are saved right into the library, and the app remembers the page each file came from.
@@ -42,7 +42,7 @@ Ready-made builds are on the [Releases](https://github.com/DragonZero000/Manga-R
 2. Run `MangaReader\mangareader.exe`.
 3. Put `.zip` archives into the `manga` folder next to the app, or download them with the **Браузер** (Browser) button.
 
-To update, replace `mangareader.exe` and the `browser\firefox` folder with the ones from the new zip; `manga`, `settings.json`, `library.db` and `browser\profile` are kept.
+To update, replace `mangareader.exe` and the `browser\firefox` folder with the ones from the new zip; `manga`, `settings.json`, `library.db`, `user.db` and `browser\profile` are kept.
 
 ### Installing on Android
 

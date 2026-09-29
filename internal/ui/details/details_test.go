@@ -103,6 +103,8 @@ func texts(o fyne.CanvasObject) []string {
 			out = append(out, w.Text)
 		case *widget.Button:
 			out = append(out, w.Text)
+		case *tagChip:
+			out = append(out, w.name)
 		case *fyne.Container:
 			for _, c := range w.Objects {
 				walk(c)
@@ -138,6 +140,22 @@ func findButton(o fyne.CanvasObject, text string) *widget.Button {
 	return nil
 }
 
+func findChip(o fyne.CanvasObject, name string) *tagChip {
+	switch w := o.(type) {
+	case *tagChip:
+		if w.name == name {
+			return w
+		}
+	case *fyne.Container:
+		for _, c := range w.Objects {
+			if ch := findChip(c, name); ch != nil {
+				return ch
+			}
+		}
+	}
+	return nil
+}
+
 func TestOpenExample(t *testing.T) {
 	f := setup(t, map[string][]byte{"example.zip": exampleData(t)})
 	g, _ := f.src.Get(model.LocalKey("example.zip"))
@@ -167,8 +185,8 @@ func TestOpenExample(t *testing.T) {
 		t.Fatalf("«Читать» и обложка должны открывать читалку: %v", f.reads)
 	}
 
-	test.Tap(findButton(f.d.body, "artist 1"))
-	test.Tap(findButton(f.d.body, "tag 2"))
+	test.Tap(findChip(f.d.body, "artist 1"))
+	test.Tap(findChip(f.d.body, "tag 2"))
 	if want := []string{`artist:"artist 1"`, `tag:"tag 2"`}; len(f.searches) != 2 ||
 		f.searches[0] != want[0] || f.searches[1] != want[1] {
 		t.Fatalf("нажатие на тег: %q, ожидалось %q", f.searches, want)

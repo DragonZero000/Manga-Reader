@@ -156,3 +156,77 @@ func TestGridCardMobile(t *testing.T) {
 		t.Fatalf("после перезапуска %q", got)
 	}
 }
+
+// Срок хранения данных удалённых произведений: по умолчанию «1 месяц»,
+// выбор варианта и своё число сохраняются, недопустимое число — ошибка
+// в поле и прежнее значение.
+func TestRetentionCard(t *testing.T) {
+	st := storage.NewMemSettings()
+	s := newTestSettings(t, st)
+	entry := s.RetentionDaysEntry()
+	if got := s.RetentionLabel(); got != "1 месяц" || entry.Visible() {
+		t.Fatalf("по умолчанию %q, поле видно: %v", got, entry.Visible())
+	}
+
+	s.SelectRetention("1 неделя")
+	if d := app.RetentionDays(st); d != 7 {
+		t.Fatalf("1 неделя: сохранено %d", d)
+	}
+	s.SelectRetention("Бессрочно")
+	if d := app.RetentionDays(st); d != 0 || st.String(app.KeyRetention, "") != "0" {
+		t.Fatalf("бессрочно: сохранено %d", d)
+	}
+
+	s.SelectRetention("Своё число дней…")
+	if !entry.Visible() {
+		t.Fatal("поле своего числа не показано")
+	}
+	entry.SetText("45") // как ввод пользователя
+	if d := app.RetentionDays(st); d != 45 || s.RetentionError() != "" {
+		t.Fatalf("своё число: сохранено %d, ошибка %q", d, s.RetentionError())
+	}
+	for _, bad := range []string{"0", "abc", "36501", "-3"} {
+		entry.SetText(bad)
+		if d := app.RetentionDays(st); d != 45 {
+			t.Fatalf("%q: сохранено %d, должно остаться 45", bad, d)
+		}
+		if s.RetentionError() == "" || entry.Validate() == nil {
+			t.Fatalf("%q: нет ошибки в поле", bad)
+		}
+	}
+	entry.SetText("45")
+	if s.RetentionError() != "" {
+		t.Fatal("ошибка не скрылась после исправления")
+	}
+
+	// сохранённое своё число показывается в поле после перезапуска
+	s2 := newTestSettings(t, st)
+	if s2.RetentionLabel() != "Своё число дней…" || !s2.RetentionDaysEntry().Visible() || s2.RetentionDaysEntry().Text != "45" {
+		t.Fatalf("после перезапуска: %q, поле %q", s2.RetentionLabel(), s2.RetentionDaysEntry().Text)
+	}
+	// готовый вариант выбирается, если число с ним совпадает
+	app.SetRetentionDays(st, 90)
+	if got := newTestSettings(t, st).RetentionLabel(); got != "3 месяца" {
+		t.Fatalf("90 дней показаны как %q", got)
+	}
+	s3 := newTestSettings(t, st)
+	s3.SelectRetention("1 год")
+	if d := app.RetentionDays(st); d != 365 || s3.RetentionDaysEntry().Visible() {
+		t.Fatalf("1 год: %d", d)
+	}
+}
+
+// Раздел срока хранения с полем и ошибкой не шире узкого телефона.
+func TestRetentionCardFitsPhoneWidth(t *testing.T) {
+	setMobile(t, true)
+	st := storage.NewMemSettings()
+	s := newTestSettings(t, st)
+	s.SelectRetention("Своё число дней…")
+	s.RetentionDaysEntry().SetText("abc")
+	if s.RetentionError() == "" {
+		t.Fatal("ошибка не показана")
+	}
+	if w := s.Content().MinSize().Width; w > phoneWidth {
+		t.Fatalf("минимальная ширина экрана настроек %.0f > %d", w, phoneWidth)
+	}
+}

@@ -3,10 +3,13 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"log"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"mangareader/internal/browser"
 	"mangareader/internal/catalog"
@@ -17,6 +20,7 @@ import (
 	"mangareader/internal/search"
 	"mangareader/internal/storage"
 	"mangareader/internal/thumbs"
+	"mangareader/internal/userdata"
 )
 
 // KeyLibraryTree — настройка с деревом SAF выбранной папки (Android).
@@ -52,6 +56,17 @@ type Services struct {
 	MobileBrowser bool
 	// Links — адреса страниц скачанных файлов (Android); nil — нет.
 	Links *library.Links
+	// UserData — пользовательские данные о произведениях (user.db); nil —
+	// недоступны (ошибка открытия или база новее приложения).
+	UserData *userdata.Store
+	// UserDataBackup — резервная копия повреждённой базы, созданная при
+	// запуске; «» — база была в порядке.
+	UserDataBackup string
+
+	userObs *userDataObserver // nil — без пользовательских данных
+	// bg — фоновые задачи сервисов (переиндексация); stopBg их отменяет
+	bg     sync.WaitGroup
+	stopBg context.CancelFunc
 }
 
 // Настройки встроенного браузера.
@@ -201,6 +216,36 @@ func RequestBrowserClear(s storage.Settings, c string) {
 	s.SetString(KeyBrowserClear, strings.Join(append(clear, c), ","))
 }
 
+// KeyRetention — сколько дней хранить данные произведений, файлы которых не
+// найдены (сирот): число строкой, «0» — бессрочно.
+const KeyRetention = "userdata.retention"
+
+// Срок хранения сирот в днях.
+const (
+	DefaultRetentionDays = 30
+	MaxRetentionDays     = 36500
+)
+
+// RetentionDays — срок хранения сирот в днях (0 — бессрочно); недопустимое
+// значение — DefaultRetentionDays.
+func RetentionDays(s storage.Settings) int {
+	n, err := strconv.Atoi(s.String(KeyRetention, ""))
+	if err != nil || n < 0 || n > MaxRetentionDays {
+		return DefaultRetentionDays
+	}
+	return n
+}
+
+// Retention — срок хранения сирот (0 — бессрочно).
+func Retention(s storage.Settings) time.Duration {
+	return time.Duration(RetentionDays(s)) * 24 * time.Hour
+}
+
+// SetRetentionDays сохраняет срок хранения сирот в днях (0 — бессрочно).
+func SetRetentionDays(s storage.Settings, days int) {
+	s.SetString(KeyRetention, strconv.Itoa(days))
+}
+
 // thumbsConfig — объём кэша миниатюр и число декодеров (0 — по умолчанию).
 type thumbsConfig struct {
 	limit   int64
@@ -219,6 +264,90 @@ func openCatalog(path, root string) *catalog.Catalog {
 		log.Printf("catalog %s created, the library will be scanned in full", path)
 	}
 	return c
+}
+
+// openUserData открывает пользовательские данные path; nil — недоступны
+// (приложение работает без них). backup — резервная копия повреждённой базы.
+func openUserData(path string) (store *userdata.Store, backup string) {
+	store, rec, err := userdata.Open(path)
+	if err != nil {
+		log.Printf("user data unavailable: %v", err)
+		return nil, ""
+	}
+	if rec.Backup != "" {
+		log.Printf("user data %s is damaged (%v): moved to %s, a new one is created", path, rec.Cause, rec.Backup)
+	}
+	return store, rec.Backup
+}
+
+// userDataObserver сверяет пользовательские данные папки с каждым успешным
+// сканированием и помечает сиротами удалённые через приложение. Вызывается
+// в горутинах сканирования и удаления.
+type userDataObserver struct {
+	store    *userdata.Store
+	settings storage.Settings
+
+	mu   sync.Mutex
+	root string // ключ папки библиотеки
+}
+
+func (o *userDataObserver) key() string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.root
+}
+
+func (o *userDataObserver) setKey(root string) {
+	o.mu.Lock()
+	o.root = root
+	o.mu.Unlock()
+}
+
+// Scanned: найденные файлы — галереи с отпечатком, а также ошибочные и
+// занятые (файл есть, но не разобран — отпечаток пустой).
+func (o *userDataObserver) Scanned(res library.ScanResult) {
+	files := make(map[string]string, len(res.Galleries)+len(res.Errors)+len(res.Busy))
+	for _, g := range res.Galleries {
+		files[g.Key.ID] = g.Fingerprint
+	}
+	for _, e := range res.Errors {
+		files[e.RelPath] = ""
+	}
+	for _, rel := range res.Busy {
+		if _, ok := files[rel]; !ok {
+			files[rel] = ""
+		}
+	}
+	if err := o.store.Reconcile(o.key(), files, time.Now(), Retention(o.settings)); err != nil {
+		log.Printf("user data: reconciling: %v", err)
+	}
+}
+
+func (o *userDataObserver) Deleted(rel string) {
+	if err := o.store.MarkOrphan(o.key(), rel, time.Now()); err != nil {
+		log.Printf("user data: %s: %v", rel, err)
+	}
+}
+
+// attachUserData подключает пользовательские данные к библиотеке папки
+// с ключом root (store == nil — без пользовательских данных).
+func (s *Services) attachUserData(store *userdata.Store, backup, root string) {
+	s.UserData, s.UserDataBackup = store, backup
+	if store == nil {
+		return
+	}
+	s.userObs = &userDataObserver{store: store, settings: s.Settings, root: root}
+	s.Library.SetObserver(s.userObs)
+	s.Library.SetOverlay(userDataOverlay{s.userObs})
+}
+
+// UserDataKey — ключ текущей папки библиотеки в пользовательских данных
+// («» — пользовательских данных нет).
+func (s *Services) UserDataKey() string {
+	if s.userObs == nil {
+		return ""
+	}
+	return s.userObs.key()
 }
 
 // linkBackup — каталог как вторая копия ссылок (nil — нет каталога).
@@ -243,8 +372,6 @@ func newServices(version string, st storage.Storage, settings storage.Settings, 
 	s.Thumbs = thumbs.New(s.Library.OpenPage, tc.limit, tc.workers)
 	if cat != nil {
 		s.Thumbs.SetStore(cat.Covers())
-		// до окна и до первого сканирования: чтение каталога без открытия архивов
-		s.Cached = s.Library.LoadCatalog()
 	}
 	if root := s.Library.Root(); root != "" {
 		log.Printf("library folder: %s", root)
@@ -258,6 +385,14 @@ func newServices(version string, st storage.Storage, settings storage.Settings, 
 func NewForTest(src *library.Source, idx search.Index, settings storage.Settings) *Services {
 	return &Services{Version: "test", Settings: settings, Index: idx, Library: src,
 		Thumbs: thumbs.New(src.OpenPage, 1<<20, 1), Problems: problems.New(settings)}
+}
+
+// NewForTestWithUserData — NewForTest с пользовательскими данными store
+// (ключ папки «test»; для тестов UI).
+func NewForTestWithUserData(src *library.Source, idx search.Index, settings storage.Settings, store *userdata.Store) *Services {
+	s := NewForTest(src, idx, settings)
+	s.attachUserData(store, "", "test")
+	return s
 }
 
 // MobileBrowserSettings — настройки браузера Android из Settings.
@@ -309,11 +444,21 @@ func (s *Services) PruneLinks() {
 	}
 }
 
-// Close закрывает каталог (при выходе из приложения).
+// Close закрывает каталог и пользовательские данные (при выходе из приложения).
 func (s *Services) Close() {
+	if s.stopBg != nil {
+		s.stopBg()
+	}
+	s.bg.Wait()
 	if s.Catalog != nil {
 		if err := s.Catalog.Close(); err != nil {
 			log.Printf("catalog: %v", err)
+		}
+	}
+	if s.UserData != nil {
+		s.Library.SetObserver(nil)
+		if err := s.UserData.Close(); err != nil {
+			log.Printf("user data: %v", err)
 		}
 	}
 }

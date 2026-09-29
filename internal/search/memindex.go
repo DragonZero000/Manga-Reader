@@ -21,13 +21,34 @@ type MemIndex struct {
 
 // doc — произведение с подготовленными для поиска данными.
 type doc struct {
-	g     model.Gallery
-	hay   []string           // Normalize: названия, теги, сканлейтор, файл, ID
-	tags  map[model.Tag]bool // теги как в model.NewTag (для подсказок)
-	ntags map[model.Tag]bool // теги с именем через Normalize (для сравнения)
+	g      model.Gallery
+	hay    []string           // Normalize: названия, действующие теги, сканлейтор, файл, ID
+	tags   map[model.Tag]bool // действующие теги как в model.NewTag (для подсказок)
+	scopes [3]tagSet          // теги по областям (индекс — TagScope)
+	title  string             // основное и альтернативное название, Normalize
+	scan   string             // сканлейтор, Normalize
+}
+
+// tagSet — теги одной области для сравнения.
+type tagSet struct {
+	ntags map[model.Tag]bool // теги с именем через Normalize
 	names map[string]bool    // имена тегов без типа, Normalize
-	title string             // основное и альтернативное название, Normalize
-	scan  string             // сканлейтор, Normalize
+}
+
+func (s *tagSet) add(t model.Tag) {
+	if s.ntags == nil {
+		s.ntags, s.names = map[model.Tag]bool{}, map[string]bool{}
+	}
+	s.ntags[normTag(t)] = true
+	s.names[Normalize(t.Name)] = true
+}
+
+func (s *tagSet) has(t model.Tag) bool {
+	t = normTag(t)
+	if t.Type == "" {
+		return s.names[t.Name]
+	}
+	return s.ntags[t]
 }
 
 var _ Index = (*MemIndex)(nil)
@@ -37,7 +58,7 @@ func NewMemIndex() *MemIndex {
 }
 
 func newDoc(g model.Gallery) *doc {
-	d := &doc{g: g, tags: map[model.Tag]bool{}, ntags: map[model.Tag]bool{}, names: map[string]bool{}}
+	d := &doc{g: g, tags: map[model.Tag]bool{}}
 	add := func(s string) {
 		if s = Normalize(strings.TrimSpace(s)); s != "" {
 			d.hay = append(d.hay, s)
@@ -45,11 +66,17 @@ func newDoc(g model.Gallery) *doc {
 	}
 	add(g.Title)
 	add(g.AltTitle)
-	for _, t := range g.Tags {
-		t = model.NewTag(t.Type, t.Name)
+	for _, tv := range g.TagViews() {
+		t := model.NewTag(tv.Type, tv.Name)
+		switch tv.Origin {
+		case model.OriginHidden:
+			d.scopes[ScopeHidden].add(t)
+			continue // скрытые не участвуют в словах и подсказках
+		case model.OriginCustom:
+			d.scopes[ScopeCustom].add(t)
+		}
+		d.scopes[ScopeEffective].add(t)
 		d.tags[t] = true
-		d.ntags[normTag(t)] = true
-		d.names[Normalize(t.Name)] = true
 		add(t.Name)
 		add(t.String())
 	}
@@ -146,7 +173,7 @@ func (d *doc) match(f Filter) bool {
 	v := f.Value
 	switch f.Field {
 	case FieldTag:
-		has := d.hasTag(v.Tag)
+		has := int(v.Scope) < len(d.scopes) && d.scopes[v.Scope].has(v.Tag)
 		if f.Op == OpNotHas {
 			return !has
 		}
@@ -176,14 +203,6 @@ func (d *doc) match(f Filter) bool {
 		return cmpTime(g.File.ModTime, f)
 	}
 	return false
-}
-
-func (d *doc) hasTag(t model.Tag) bool {
-	t = normTag(t)
-	if t.Type == "" {
-		return d.names[t.Name]
-	}
-	return d.ntags[t]
 }
 
 // normTag — тег для сравнения: имя через Normalize, тип как есть.
@@ -266,8 +285,9 @@ func cmp64(a, b int64) int {
 	return 0
 }
 
-// SuggestTags возвращает теги с именем, начинающимся с prefix (без учёта
-// регистра), и числом произведений; при заданном типе — только этого типа.
+// SuggestTags возвращает действующие теги с именем, начинающимся с prefix
+// (без учёта регистра), и числом произведений; при заданном типе — только
+// этого типа.
 func (m *MemIndex) SuggestTags(_ context.Context, tagType, prefix string, limit int) ([]TagCount, error) {
 	prefix = Normalize(strings.TrimSpace(prefix))
 	tagType = strings.ToLower(strings.TrimSpace(tagType))

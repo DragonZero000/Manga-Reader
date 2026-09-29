@@ -15,7 +15,13 @@ import (
 	"mangareader/internal/library"
 	"mangareader/internal/paths"
 	"mangareader/internal/storage"
+	"mangareader/internal/userdata"
 )
+
+// desktopLibraryKey — ключ папки библиотеки ПК в пользовательских данных:
+// папка всегда <папка приложения>/manga, и перенос портативной папки не
+// должен отвязывать данные от произведений.
+const desktopLibraryKey = "app:manga"
 
 // New — портативный режим ПК: всё в папке приложения (архивы в manga,
 // настройки в settings.json). Вне папки приложения ничего не пишется.
@@ -24,11 +30,8 @@ func New(version string, _ fyne.App) *Services {
 	if err != nil {
 		log.Printf("app folder: %v", err)
 	}
+	s := newPortable(version, dir)
 	lib := filepath.Join(dir, paths.LibraryDirName)
-	settings := storage.NewFileSettings(filepath.Join(dir, paths.SettingsFileName))
-	// каталог — рядом с settings.json (портативно)
-	cat := openCatalog(filepath.Join(dir, catalog.FileName), lib)
-	s := newServices(version, storage.NewFS(lib), settings, thumbsConfig{limit: 64 << 20}, cat)
 	if err := paths.EnsureDir(lib); err != nil {
 		s.LibraryErr = err
 		log.Printf("library folder: %v", err)
@@ -41,8 +44,23 @@ func New(version string, _ fyne.App) *Services {
 		s.Watcher = w
 	}
 	if runtime.GOOS == "windows" {
-		s.Browser = newBrowser(dir, lib, settings)
+		s.Browser = newBrowser(dir, lib, s.Settings)
 	}
+	return s
+}
+
+// newPortable — сервисы над папкой приложения dir: настройки, каталог
+// и пользовательские данные рядом с исполняемым файлом, архивы в manga.
+func newPortable(version, dir string) *Services {
+	lib := filepath.Join(dir, paths.LibraryDirName)
+	settings := storage.NewFileSettings(filepath.Join(dir, paths.SettingsFileName))
+	// каталог и пользовательские данные — рядом с settings.json (портативно)
+	cat := openCatalog(filepath.Join(dir, catalog.FileName), lib)
+	ud, backup := openUserData(filepath.Join(dir, userdata.FileName))
+	s := newServices(version, storage.NewFS(lib), settings, thumbsConfig{limit: 64 << 20}, cat)
+	s.attachUserData(ud, backup, desktopLibraryKey)
+	// до окна и до первого сканирования: чтение каталога без открытия архивов
+	s.loadCatalog()
 	return s
 }
 

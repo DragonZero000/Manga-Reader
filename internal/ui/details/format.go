@@ -21,30 +21,52 @@ var knownTypeOrder = []struct{ typ, label string }{
 	{model.TagTypeTag, "tags.tag"},
 }
 
+// GroupTag — тег группы с происхождением.
+type GroupTag struct {
+	Name   string
+	Origin model.TagOrigin
+}
+
 // Group — теги одного типа.
 type Group struct {
 	Type  string
 	Label string
-	Names []string
+	Tags  []GroupTag
+}
+
+// Names — имена тегов группы по порядку.
+func (g Group) Names() []string {
+	out := make([]string, len(g.Tags))
+	for i, t := range g.Tags {
+		out[i] = t.Name
+	}
+	return out
 }
 
 // TagGroups группирует теги по типам: сначала известные типы в фиксированном
-// порядке, затем неизвестные по алфавиту. Внутри группы — порядок тегов
-// галереи. Пустые группы не возвращаются.
-func TagGroups(tags []model.Tag) []Group {
-	byType := map[string][]string{}
-	for _, t := range tags {
-		if strings.TrimSpace(t.Name) == "" {
+// порядке, затем неизвестные по алфавиту. Внутри группы — оригинальные теги
+// в порядке meta.json, затем свои в порядке добавления. Скрытые теги
+// показываются только при editing. Группы без тегов не возвращаются, кроме
+// типов extra (поле ввода новой группы).
+func TagGroups(views []model.TagView, editing bool, extra ...string) []Group {
+	byType := map[string][]GroupTag{}
+	for _, t := range views {
+		if strings.TrimSpace(t.Name) == "" || (t.Origin == model.OriginHidden && !editing) {
 			continue
 		}
-		byType[t.Type] = append(byType[t.Type], t.Name)
+		byType[t.Type] = append(byType[t.Type], GroupTag{t.Name, t.Origin})
+	}
+	for _, typ := range extra {
+		if _, ok := byType[typ]; !ok {
+			byType[typ] = nil
+		}
 	}
 	var out []Group
 	known := map[string]bool{}
 	for _, k := range knownTypeOrder {
 		known[k.typ] = true
-		if names := byType[k.typ]; len(names) > 0 {
-			out = append(out, Group{Type: k.typ, Label: i18n.T(k.label), Names: names})
+		if tags, ok := byType[k.typ]; ok {
+			out = append(out, Group{Type: k.typ, Label: i18n.T(k.label), Tags: tags})
 		}
 	}
 	var unknown []string
@@ -55,11 +77,36 @@ func TagGroups(tags []model.Tag) []Group {
 	}
 	sort.Strings(unknown)
 	for _, typ := range unknown {
-		label := typ
-		if label == "" {
-			label = i18n.T("tags.other")
+		out = append(out, Group{Type: typ, Label: groupLabel(typ), Tags: byType[typ]})
+	}
+	return out
+}
+
+// groupLabel — подпись группы тегов типа typ.
+func groupLabel(typ string) string {
+	for _, k := range knownTypeOrder {
+		if k.typ == typ {
+			return i18n.T(k.label)
 		}
-		out = append(out, Group{Type: typ, Label: label, Names: byType[typ]})
+	}
+	if typ == "" {
+		return i18n.T("tags.other")
+	}
+	return typ
+}
+
+// missingTypes — известные типы, групп которых нет среди groups (для
+// «Добавить в другую группу»), в порядке групп.
+func missingTypes(groups []Group) []string {
+	shown := map[string]bool{}
+	for _, g := range groups {
+		shown[g.Type] = true
+	}
+	var out []string
+	for _, k := range knownTypeOrder {
+		if !shown[k.typ] {
+			out = append(out, k.typ)
+		}
 	}
 	return out
 }
