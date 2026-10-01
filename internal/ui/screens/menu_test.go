@@ -227,3 +227,30 @@ func TestGridRemove(t *testing.T) {
 var _ fyne.Tappable = (*galleryCard)(nil)
 var _ fyne.SecondaryTappable = (*galleryCard)(nil)
 var _ fyne.Tappable = (*widget.Button)(nil)
+
+// «Сбросить прогресс» — перед разделителем и только при наличии прогресса.
+func TestResetProgressItem(t *testing.T) {
+	act := allActions()
+	reset := ""
+	act.ResetProgress = func(g model.Gallery) { reset = g.Key.ID }
+	read := galleryOf("read.zip")
+	act.HasProgress = func(g model.Gallery) bool { return g.Key == read.Key }
+
+	want := labels("menu.copy_title", "menu.show_in_folder", "-", "menu.delete")
+	if got := menuLabels(act.DetailsMenu(galleryOf("new.zip"))); !slices.Equal(got, want) {
+		t.Fatalf("без прогресса: %v", got)
+	}
+	want = labels("menu.copy_title", "menu.show_in_folder", "menu.reset_progress", "-", "menu.delete")
+	if got := menuLabels(act.DetailsMenu(read)); !slices.Equal(got, want) {
+		t.Fatalf("страница с прогрессом: %v", got)
+	}
+	m := act.CardMenu(read)
+	for _, it := range m.Items {
+		if it.Label == i18n.T("menu.reset_progress") {
+			it.Action()
+		}
+	}
+	if reset != "read.zip" {
+		t.Fatalf("пункт карточки сбросил %q", reset)
+	}
+}

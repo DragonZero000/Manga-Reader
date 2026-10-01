@@ -191,6 +191,9 @@ func (l *Loader) Clear() {
 	l.mu.Unlock()
 }
 
+// Decodes — число выполненных декодирований (для тестов).
+func (l *Loader) Decodes() int64 { return l.decodes.Load() }
+
 // Bytes возвращает объём кэша в байтах.
 func (l *Loader) Bytes() int64 {
 	l.mu.Lock()

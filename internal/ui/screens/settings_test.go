@@ -230,3 +230,40 @@ func TestRetentionCardFitsPhoneWidth(t *testing.T) {
 		t.Fatalf("минимальная ширина экрана настроек %.0f > %d", w, phoneWidth)
 	}
 }
+
+// Направление чтения: по умолчанию «Слева направо», выбор сохраняется и
+// показывается после перезапуска.
+func TestReaderDirectionCard(t *testing.T) {
+	st := storage.NewMemSettings()
+	s := newTestSettings(t, st)
+	if got := s.ReaderDirectionLabel(); got != i18n.T("settings.reader.ltr") {
+		t.Fatalf("по умолчанию %q", got)
+	}
+	s.SelectReaderDirection(app.ReaderDirectionRTL)
+	if app.ReaderDirection(st) != app.ReaderDirectionRTL {
+		t.Fatal("выбор не сохранён")
+	}
+	if got := newTestSettings(t, st).ReaderDirectionLabel(); got != i18n.T("settings.reader.rtl") {
+		t.Fatalf("после перезапуска %q", got)
+	}
+}
+
+// Двойной тап: по умолчанию 200%, выбор сохраняется и показывается после перезапуска.
+func TestDoubleTapCard(t *testing.T) {
+	st := storage.NewMemSettings()
+	s := newTestSettings(t, st)
+	if got := s.DoubleTapLabel(); got != "200%" {
+		t.Fatalf("по умолчанию %q", got)
+	}
+	s.SelectDoubleTap(app.ReaderDoubleTapOff)
+	if app.ReaderDoubleTap(st) != 0 {
+		t.Fatal("«Выключен» не сохранён")
+	}
+	if got := newTestSettings(t, st).DoubleTapLabel(); got != i18n.T("settings.reader.double_tap_off") {
+		t.Fatalf("после перезапуска %q", got)
+	}
+	s.SelectDoubleTap("300")
+	if app.ReaderDoubleTap(st) != 3 {
+		t.Fatal("300% не сохранено")
+	}
+}

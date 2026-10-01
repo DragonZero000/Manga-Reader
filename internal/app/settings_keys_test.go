@@ -118,3 +118,37 @@ func TestRetention(t *testing.T) {
 		}
 	}
 }
+
+func TestReaderDirection(t *testing.T) {
+	s := storage.NewMemSettings()
+	if d := ReaderDirection(s); d != ReaderDirectionLTR {
+		t.Fatalf("по умолчанию %q", d)
+	}
+	SetReaderDirection(s, ReaderDirectionRTL)
+	if d := ReaderDirection(s); d != ReaderDirectionRTL || s.String(KeyReaderDirection, "") != ReaderDirectionRTL {
+		t.Fatalf("после выбора %q", d)
+	}
+	s.SetString(KeyReaderDirection, "что-то")
+	if d := ReaderDirection(s); d != ReaderDirectionLTR {
+		t.Fatalf("неизвестное значение %q", d)
+	}
+}
+
+func TestReaderDoubleTap(t *testing.T) {
+	s := storage.NewMemSettings()
+	if v, d := ReaderDoubleTapValue(s), ReaderDoubleTap(s); v != "200" || d != 2 {
+		t.Fatalf("по умолчанию %q %v", v, d)
+	}
+	SetReaderDoubleTap(s, "250")
+	if d := ReaderDoubleTap(s); d != 2.5 {
+		t.Fatalf("250: %v", d)
+	}
+	SetReaderDoubleTap(s, ReaderDoubleTapOff)
+	if d := ReaderDoubleTap(s); d != 0 {
+		t.Fatalf("выключен: %v", d)
+	}
+	s.SetString(KeyReaderDoubleTap, "999")
+	if v := ReaderDoubleTapValue(s); v != "200" {
+		t.Fatalf("неизвестное значение %q", v)
+	}
+}

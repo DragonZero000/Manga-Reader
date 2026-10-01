@@ -105,6 +105,7 @@ Every card in the library and in search results has a **⋮** button in the top-
 - **Open in browser** — only when a link to the work is known; works like the button on the gallery page;
 - **Copy title** — copies the main title to the clipboard;
 - **Show in folder** (Windows only) — opens File Explorer in the archive's folder with the file selected;
+- **Reset progress** — only if the work has been read: forget where you stopped (and the "finished" mark);
 - **Delete…** — deletes the archive after confirmation (see below).
 
 ### Deleting an archive
@@ -124,12 +125,12 @@ Everything about one gallery:
 
 
 - cover, title and alternative title;
-- the **Read** button;
+- the **Read** button — from page 1, and **Continue · p. N** — from the page where you stopped (see [Reader](#reader));
 - the **Open in browser** button — when a link to the work is known: from `meta.json`, or the page the file was downloaded from with the built-in browser;
 - tags grouped by type: "Artist", "Group", "Parody", "Character", "Language", "Category", "Tags", then groups of other types. Your own tags come after the original ones in their group and have a yellow background. **Tapping a tag searches for it**;
 - details: "Pages", "Uploaded", "Favorites", "Scanlator", "File", "Size", "Modified". Empty fields are hidden. Dates, numbers and sizes follow the interface language.
 
-The **⋮** button on the right of the top bar holds the actions that are not on the page itself: **Copy title**, **Show in folder** (Windows) and **Delete…**. After deleting, the page closes and you return to the grid.
+The **⋮** button on the right of the top bar holds the actions that are not on the page itself: **Copy title**, **Show in folder** (Windows), **Reset progress** (if the work has been read) and **Delete…**. After deleting, the page closes and you return to the grid.
 
 ### Editing tags
 
@@ -148,24 +149,41 @@ Your tags and hidden tags are kept in `user.db` (see [Windows — portable mode]
 
 **Read** opens the reader on top of all tabs. Close it with ✕ on the panel, Esc (PC) or Back (Android). Esc and Back close the reader first, then the gallery page.
 
+**Where you stopped.** The reader remembers the page (in the strip — the one at the top of the screen), and the gallery page shows a **Continue · p. N** button. The position is saved only after you have turned at least one page: opening **Read**, looking at the cover and closing it keeps the previous position. When you finish (confirm "next" on the last page or press **Finish reading** in the strip), the work is marked finished and there is no **Continue** button — until pages are added to the archive after the last one you read: then **Continue** opens the first new page. The page is remembered by its file name in the archive, so pages removed or added in the middle do not shift the position; if that page is no longer in the archive, the reader opens the page with the same number and warns that the position may be inaccurate. The position is kept with your other data about the work and survives renaming the file without changing its contents.
+
 ![Reader with the panel shown](../images/reader.png)
 
 Two modes, switched on the panel and remembered:
 
-**Pages** — one page at a time, western order (left to right):
+**Pages** — one page at a time. The default order is western (left to right); for manga you can choose **Right to left** in the settings (see [Settings](#settings)). The table is for left to right:
 
 | Action | PC | Phone |
 |---|---|---|
 | Next page | →, ↓, PageDown, Space, wheel down, click the right third | Tap the right third, swipe right to left |
 | Previous page | ←, ↑, PageUp, wheel up, click the left third | Tap the left third, swipe left to right |
 | First / last | Home / End | Slider on the panel |
-| Zoom ×2 / back | Double click | Double tap |
-| Move a zoomed page | Drag, wheel | Drag |
+| Go to a page by number | G or click the page number on the panel | Tap the page number on the panel |
+| Zoom in / out | Ctrl+wheel (towards the point under the cursor), Ctrl+= or Ctrl++ / Ctrl+− | Pinch with two fingers |
+| Back to 100% | Ctrl+0, click the zoom indicator | Tap the zoom indicator |
+| Zoom to the value from settings / back to 100% | Double click | Double tap |
+| Move a zoomed page | Drag | Drag |
 | Show / hide the panel | Click the middle third | Tap the middle third |
 
-**Strip** — all pages one below another. Scroll with the wheel, ↓/↑, PageDown/PageUp, Space; → and ← jump to the next and previous page; Home/End go to the start and end. A single tap shows and hides the panel.
+**Zoom** — from 100% (the page fits the screen) to 500%, the wheel and key step is ×1.25. An indicator such as "175 %" appears in the bottom right corner: it stays while the page is zoomed and fades out a second and a half after returning to 100%. A moment after the zoom changes, the page is reloaded at a higher resolution. Going to another page (including with the wheel without Ctrl) returns to 100%. The strip mode does not zoom.
 
-The panel has the title, page number "N / total", a slider to jump to a page, the **Pages** / **Strip** switch and a close button. Pages load in the background; neighbouring pages are preloaded.
+With **Right to left** the left and right thirds, the swipe direction and the ← → keys are swapped; the wheel, ↓/↑, PageDown/PageUp and Space work as usual. The wheel also turns a zoomed page (the zoom is reset). A click or tap on an edge acts after a quarter of a second: that is how long the reader waits for a second tap to tell a double tap apart. With double tap turned off in the settings, taps act at once.
+
+**End of the work.** "Next" on the last page shows a hint that the work has ended; "next" again closes the reader and returns to the gallery page. A quick series of wheel scrolls does not close the reader — a short pause is needed.
+
+**Strip** — all pages one below another. Scroll with the wheel, ↓/↑, PageDown/PageUp, Space; → and ← jump to the next and previous page; Home/End go to the start and end. A single tap shows and hides the panel. After the last page there is a **The end** block with a **Finish reading** button; PageDown, ↓ or Space at the end of the strip work like "next" on the last page.
+
+The panel: the title and the ✕ close button at the top; the **Home** button (⌂), page number "N / total", the slider and the **Pages** / **Strip** switch at the bottom.
+
+- **Home** closes the reader and the gallery page: you return to the tab you came from (library, search).
+- **Page number**: tap "N / total" to turn it into an input field (Android shows a numeric keyboard). Type a number and press Enter; a number below 1 opens the first page, above the page count — the last one. Esc, Back or a tap outside the field cancel the input.
+- **Slider**: while you drag it, the chosen page is shown right away with its number above the thumb; the number on the panel changes when you release the slider. With **Right to left** the first page is at the right end.
+
+Pages load in the background; the next two pages in the reading direction and one in the opposite direction are preloaded.
 
 ## Search
 
@@ -252,6 +270,7 @@ The **Settings** tab:
 - **Search** — when a query runs: **While typing** or **On button**; see [Search](#search).
 - **Random pick** — how the 🎲 button picks: **With repeats** (the default) — every press picks from the whole set, so the same gallery can come up again; **No repeats** — a gallery doesn't come up again until every gallery in the set has, and the next round never starts with the one shown last. The library and search keep separate rounds; a round starts over when the set changes (different search results, library contents changed after a rescan) and isn't kept between launches.
 - **Grid** — how dense the card grid is in the library and search; applies immediately, no restart needed. On Android — **Cards per row**: **2**, **3** (the default) or **4**; in portrait the cards split the screen width evenly, in landscape they keep the same size and more fit in a row. On Windows — **Card size**: **Small**, **Medium** (the default) or **Large**; the number of columns follows the window width. After a change, covers are reloaded for the new size.
+- **Reader** — **Reading direction**: **Left to right** (default) or **Right to left (manga)**; **Double tap**: **Off**, **150%**, **200%** (default), **250%** or **300%** — the zoom a double tap enlarges the page to; with double tap off, taps turn pages without waiting for a second tap. Applies the next time the reader opens (see [Reader](#reader)).
 - **Display** (Android) — **Limit to 60 Hz** (on by default): on 120 Hz screens the app asks the system for 60 Hz, which makes scrolling smoother. The built-in browser runs at whatever rate the system picks.
 - **Data retention** — **Keep data of deleted works**: **1 day**, **1 week**, **1 month** (the default), **3 months**, **1 year**, **Forever** or **Custom number of days…** (a whole number from 1 to 36500). When a work's file is no longer found in the library folder (deleted, or moved out of the folder), your data about it is kept for this period and comes back if the file returns — even under a different name or in another subfolder. After the period the data is deleted. The check runs after each successful scan: if the folder is unavailable (a USB stick is unplugged, no access) or contains no files at all, nothing is marked or deleted.
 - **About** — the version.

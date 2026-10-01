@@ -70,6 +70,18 @@ var migrations = []migration{
 		_, err = tx.Exec(`INSERT INTO meta(key, value) VALUES('epoch', ?)`, epoch)
 		return err
 	},
+	// 3: позиция чтения — одна строка на произведение.
+	func(tx *sql.Tx) error {
+		return execAll(tx,
+			`CREATE TABLE progress(
+				uid        INTEGER PRIMARY KEY REFERENCES works(uid) ON DELETE CASCADE,
+				page       TEXT    NOT NULL,
+				page_index INTEGER NOT NULL,
+				total      INTEGER NOT NULL,
+				finished   INTEGER NOT NULL,
+				updated_at INTEGER NOT NULL)`,
+		)
+	},
 }
 
 func execAll(tx *sql.Tx, stmts ...string) error {

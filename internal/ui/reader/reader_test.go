@@ -108,9 +108,9 @@ func TestPagedNavigationAndPanel(t *testing.T) {
 	if r.cur != 1 || r.paged.page != 1 {
 		t.Fatalf("после → страница %d", r.cur)
 	}
-	r.TypedKey(fyne.KeyRight) // граница книги
-	if r.cur != 1 {
-		t.Fatalf("переход за последнюю страницу: %d", r.cur)
+	r.TypedKey(fyne.KeyRight) // граница книги: подсказка о конце, читалка открыта
+	if r.cur != 1 || !r.Visible() {
+		t.Fatalf("переход за последнюю страницу: %d, открыта %v", r.cur, r.Visible())
 	}
 	r.TypedKey(fyne.KeyHome)
 	if r.cur != 0 {
@@ -118,7 +118,7 @@ func TestPagedNavigationAndPanel(t *testing.T) {
 	}
 
 	size := r.paged.Size()
-	test.TapAt(r.paged, fyne.NewPos(size.Width/2, size.Height/2))
+	test.TapAt(r.paged, fyne.NewPos(size.Width/2, size.Height/2)) // панель — после окна двойного тапа
 	eventually(t, r, "панель показана", func() bool { return r.panel.layer.Visible() })
 	if s := r.panel.layer.Size(); s.Width == 0 || s.Height == 0 {
 		t.Fatalf("панель нулевого размера: %v", s)
@@ -130,18 +130,15 @@ func TestPagedNavigationAndPanel(t *testing.T) {
 }
 
 func TestTapZones(t *testing.T) {
+	shortTapWindow(t)
 	r, _, g := setup(t)
 	r.setMode(ModePaged)
 	r.Open(g)
 	size := r.paged.Size()
 	test.TapAt(r.paged, fyne.NewPos(size.Width-10, size.Height/2))
-	if r.cur != 1 {
-		t.Fatalf("правая треть: %d", r.cur)
-	}
+	eventually(t, r, "правая треть", func() bool { return r.cur == 1 })
 	test.TapAt(r.paged, fyne.NewPos(10, size.Height/2))
-	if r.cur != 0 {
-		t.Fatalf("левая треть: %d", r.cur)
-	}
+	eventually(t, r, "левая треть", func() bool { return r.cur == 0 })
 }
 
 func TestCloseReleases(t *testing.T) {

@@ -11,6 +11,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver"
+	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/driver/mobile"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -38,6 +39,8 @@ type Shell struct {
 	actions *screens.GalleryActions
 	// do выполняет функцию в UI-потоке (fyne.Do); подменяется в тестах.
 	do func(func())
+	// progress — отложенное сохранение позиции чтения
+	progress progressState
 	// confirm показывает диалог подтверждения; подменяется в тестах.
 	confirm func(title, text, confirm string, cb func(bool))
 	// needsWriteAccess — к папке библиотеки доступ только на чтение (Android);
@@ -80,6 +83,11 @@ func NewShell(a fyne.App, svc *app.Services) *Shell {
 	}
 	s.Reader = reader.New(a, s.Window, svc.Library, svc.Settings, s.Toast.Show)
 	s.Details = details.New(s.Window, svc.Library, svc.Thumbs, s.Reader.Open, s.SearchFor)
+	// «Домой»: закрыть слои, остаётся вкладка, с которой пользователь пришёл
+	s.Reader.SetOnHome(func() {
+		s.Reader.Close()
+		s.Details.Close()
+	})
 	s.actions = s.newActions()
 	s.Details.SetMenu(s.actions.DetailsMenu)
 	s.Details.SetTagEditor(shellTags{s}, s.Toast.Show)
@@ -125,6 +133,19 @@ func NewShell(a fyne.App, svc *app.Services) *Shell {
 	// уведомления. Вкладки под слоями сохраняют состояние.
 	s.Window.SetContent(container.NewStack(s.Tabs, s.Details.Layer(), s.Reader.Layer(), s.Toast.Layer()))
 	s.Window.Canvas().SetOnTypedKey(s.typedKey)
+	// масштаб страницы: Ctrl+«=», Ctrl+«+», Ctrl+«−», Ctrl+0 — в читалке, если
+	// фокус не в поле ввода номера страницы
+	for _, sc := range s.Reader.ZoomShortcuts() {
+		s.Window.Canvas().AddShortcut(sc, s.zoomShortcut)
+	}
+	// нажатия (без автоповтора) — чтобы читалка ограничивала только автоповтор
+	if dc, ok := s.Window.Canvas().(desktop.Canvas); ok {
+		dc.SetOnKeyDown(func(ev *fyne.KeyEvent) {
+			if s.Reader.Visible() {
+				s.Reader.KeyDown(ev.Name)
+			}
+		})
+	}
 	s.Window.Resize(fyne.NewSize(960, 640))
 
 	// Сканирование при запуске и при возврате на передний план
@@ -145,6 +166,7 @@ func NewShell(a fyne.App, svc *app.Services) *Shell {
 		})
 		s.startWatcher(a)
 	})
+	s.setupProgress(a) // до svc.Close: последняя позиция попадает в базу
 	s.addOnStopped(svc.Close)
 	a.Lifecycle().SetOnEnteredForeground(func() {
 		fyne.Do(func() {
@@ -326,6 +348,13 @@ func (s *Shell) applyDisplay() {
 	}
 	if err := display.SetMax60(app.DisplayMax60(s.svc.Settings)); err != nil {
 		log.Printf("display refresh rate: %v", err)
+	}
+}
+
+// zoomShortcut — сочетание масштаба: только в открытой читалке без фокуса.
+func (s *Shell) zoomShortcut(sc fyne.Shortcut) {
+	if s.Reader.Visible() && s.Window.Canvas().Focused() == nil {
+		s.Reader.ZoomShortcut(sc)
 	}
 }
 

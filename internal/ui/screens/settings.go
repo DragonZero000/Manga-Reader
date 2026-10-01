@@ -32,6 +32,11 @@ type Settings struct {
 	randomMode *widget.RadioGroup
 	// grid — «Карточек в ряду» (телефон) или «Размер карточек» (ПК)
 	grid *widget.RadioGroup
+	// readerDir — направление чтения в читалке; doubleTap — масштаб двойного тапа
+	readerDir *widget.RadioGroup
+	doubleTap *widget.Select
+	// doubleTapValues — подпись → значение настройки двойного тапа
+	doubleTapValues map[string]string
 	// max60 — флажок «Ограничить 60 Гц» (nil — раздела «Экран» нет)
 	max60 *widget.Check
 	// retention — срок хранения данных удалённых произведений; retentionDays —
@@ -76,7 +81,7 @@ func NewSettings(a fyne.App, win fyne.Window, svc *app.Services, notify func(str
 	libraryCard := widget.NewCard(i18n.T("settings.library.title"), "", container.NewVBox(items...))
 	aboutCard := widget.NewCard(i18n.T("settings.about.title"), "", widget.NewLabel("MangaReader "+svc.Version))
 	cards := container.NewVBox(s.newLanguageCard(), libraryCard, s.newSearchCard(onSearchMode),
-		s.newRandomCard(onRandomMode), s.newGridCard(onGrid), s.newRetentionCard())
+		s.newRandomCard(onRandomMode), s.newGridCard(onGrid), s.newReaderCard(), s.newRetentionCard())
 	if displaySupported {
 		cards.Add(s.newDisplayCard())
 	}
@@ -174,6 +179,69 @@ func (s *Settings) newSearchCard(onMode func(string)) *widget.Card {
 	return widget.NewCard(i18n.T("settings.search.title"), "",
 		container.NewVBox(s.searchMode, cardNote(i18n.T("settings.search.hint"))))
 }
+
+// Ключи перевода подписей направления чтения.
+var readerDirKeys = map[string]string{
+	app.ReaderDirectionLTR: "settings.reader.ltr",
+	app.ReaderDirectionRTL: "settings.reader.rtl",
+}
+
+// newReaderCard — раздел «Читалка»: направление чтения и двойной тап.
+// Применяется при следующем открытии читалки.
+func (s *Settings) newReaderCard() *widget.Card {
+	ltr, rtl := i18n.T(readerDirKeys[app.ReaderDirectionLTR]), i18n.T(readerDirKeys[app.ReaderDirectionRTL])
+	s.readerDir = widget.NewRadioGroup([]string{ltr, rtl}, nil)
+	s.readerDir.Required = true
+	s.readerDir.SetSelected(i18n.T(readerDirKeys[app.ReaderDirection(s.svc.Settings)]))
+	s.readerDir.OnChanged = func(v string) {
+		dir := app.ReaderDirectionLTR
+		if v == rtl {
+			dir = app.ReaderDirectionRTL
+		}
+		app.SetReaderDirection(s.svc.Settings, dir)
+	}
+	// двойной тап — выпадающий список: на телефоне пять вариантов в ряд не помещаются
+	labels := make([]string, len(app.ReaderDoubleTapOptions))
+	s.doubleTapValues = map[string]string{}
+	for i, v := range app.ReaderDoubleTapOptions {
+		labels[i] = doubleTapLabel(v)
+		s.doubleTapValues[labels[i]] = v
+	}
+	s.doubleTap = widget.NewSelect(labels, nil)
+	s.doubleTap.SetSelected(doubleTapLabel(app.ReaderDoubleTapValue(s.svc.Settings)))
+	s.doubleTap.OnChanged = func(label string) {
+		if v, ok := s.doubleTapValues[label]; ok {
+			app.SetReaderDoubleTap(s.svc.Settings, v)
+		}
+	}
+	return widget.NewCard(i18n.T("settings.reader.title"), "", container.NewVBox(
+		widget.NewLabel(i18n.T("settings.reader.direction")), s.readerDir,
+		cardNote(i18n.T("settings.reader.hint")),
+		widget.NewLabel(i18n.T("settings.reader.double_tap")), s.doubleTap,
+		cardNote(i18n.T("settings.reader.double_tap_hint"))))
+}
+
+// doubleTapLabel — подпись значения настройки двойного тапа.
+func doubleTapLabel(v string) string {
+	if v == app.ReaderDoubleTapOff {
+		return i18n.T("settings.reader.double_tap_off")
+	}
+	return v + "%"
+}
+
+// SelectDoubleTap выбирает значение двойного тапа так, как пользователь (для тестов).
+func (s *Settings) SelectDoubleTap(v string) { s.doubleTap.SetSelected(doubleTapLabel(v)) }
+
+// DoubleTapLabel — подпись выбранного значения двойного тапа (для тестов).
+func (s *Settings) DoubleTapLabel() string { return s.doubleTap.Selected }
+
+// SelectReaderDirection выбирает направление чтения так, как пользователь (для тестов).
+func (s *Settings) SelectReaderDirection(dir string) {
+	s.readerDir.SetSelected(i18n.T(readerDirKeys[dir]))
+}
+
+// ReaderDirectionLabel — подпись выбранного направления чтения (для тестов).
+func (s *Settings) ReaderDirectionLabel() string { return s.readerDir.Selected }
 
 // Ключи перевода подписей режимов кнопки 🎲.
 var randomModeKeys = map[string]string{

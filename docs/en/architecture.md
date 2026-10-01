@@ -45,7 +45,7 @@ FyneApp.toml         app metadata and the single source of the version
 | `internal/browser` | Windows built-in browser: Firefox profile, bridge extension, launching, window attachment, registry cleanup |
 | `internal/mobilebrowser` | Bridge to the Android browser (JNI): open, clear data, receive download messages |
 | `internal/catalog` | Library catalog in SQLite (`library.db`, FTS5, `sqlite_fts5` tag): scan results across launches, the search index (`search.Index`), covers on disk, a copy of the page links of downloaded files; a recoverable cache |
-| `internal/userdata` | User data about works in SQLite (`user.db`): work records with a stable `uid`, schema migrations, backup of a damaged file, reconciliation with scans and moving records by content fingerprint, the user's own and hidden tags |
+| `internal/userdata` | User data about works in SQLite (`user.db`): work records with a stable `uid`, schema migrations, backup of a damaged file, reconciliation with scans and moving records by content fingerprint, the user's own and hidden tags, reading progress |
 | `internal/i18n` | Interface language: translations from `locales/<lang>.json` (go-i18n), plural forms, date, number and size formats, language choice at startup, Fyne built-in texts in the app language |
 | `internal/display` | Refresh rate of the app window on Android (JNI, `DisplayRate.kt`): the 60 Hz limit; a stub on other platforms |
 | `internal/appversion` | The version from `FyneApp.toml` and the Android build number |
@@ -89,7 +89,7 @@ The app keeps two SQLite files next to each other (next to the exe on PC, in the
 | File | Package | Nature |
 |---|---|---|
 | `library.db` | `internal/catalog` | Cache: rebuilt from the archives. Recreated on a schema version change or damage, cleared when the library folder changes |
-| `user.db` | `internal/userdata` | User data (own and hidden tags; later groups, reading progress): cannot be restored from the archives. Never recreated: the schema changes by migrations (`PRAGMA user_version`); a damaged file is renamed to `user.db.broken-<YYYYMMDD-HHMMSS>` and a new one is created; a file from a newer app version is left untouched and user data is unavailable in that run |
+| `user.db` | `internal/userdata` | User data (own and hidden tags, reading progress; later groups): cannot be restored from the archives. Never recreated: the schema changes by migrations (`PRAGMA user_version`); a damaged file is renamed to `user.db.broken-<YYYYMMDD-HHMMSS>` and a new one is created; a file from a newer app version is left untouched and user data is unavailable in that run |
 
 A work record (`works`) stores a stable `uid`, the library folder key, the path relative to it, the content fingerprint and the "orphan" time (the file is not found). User data refers to `uid`, not to the path. Records are created only when data about a work is first saved. The folder key is `app:manga` on PC (moving the portable folder keeps the data) and the SAF tree URI on Android.
 
@@ -119,6 +119,8 @@ A failed scan changes nothing; only records of the current folder are touched. F
 In the search index a tag has an origin: `tags.src` is 0 for a visible original, 1 for an own tag, 2 for a hidden one. Words (`docs_fts.hay`) and suggestions use only 0 and 1. `search.Value.Scope` picks the area of a tag filter: effective tags for `tag:` and the type fields, own ones for `custom-tag:`, hidden ones for `hidden-tag:`. `MemIndex` keeps the same three sets and passes the same `search/indextest` checks.
 
 The index in `library.db` stores the result of the overlay, so it must match `user.db`. `user.db` gets a random epoch when it is created (`meta.epoch`); `library.db` remembers the epoch its index was built with (`meta.overlay_epoch`, `none` without user data). At startup, if they differ (`user.db` restored from a backup, recreated after damage, unavailable), the library is reindexed in the background after `LoadCatalog` and the epoch is saved. Rebuilding the index from the scanner cache and changing the library folder reset the saved epoch.
+
+Reading progress is the `progress(uid, page, page_index, total, finished, updated_at)` table in `user.db`, one row per work: the page's file name in the archive, its number and the page count when it was saved, and the "finished" mark. `app.ProgressService` keeps the positions of the current folder in memory (the Continue button and the menu read them on the UI thread) and writes to the database from a single background goroutine in order, so "finished" is never overwritten by an earlier position; positions are reloaded after reconciling with a scan and after changing the folder. `app.Resume` picks the page for Continue: by name first, then by number (the position may be inaccurate); for a finished work — the first page after the last one read, if it has appeared. The shell saves the position a second after a page change, when the reader closes and when the app goes to the background.
 
 ## Localization
 

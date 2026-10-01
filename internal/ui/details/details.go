@@ -73,6 +73,12 @@ type Details struct {
 	linkBtn *widget.Button
 	// menuBtn — кнопка «⋮» справа в верхней полосе.
 	menuBtn *widget.Button
+	// contBtn — «Продолжить · стр. N» (скрыта, если продолжать нечего).
+	contBtn *widget.Button
+	// resume — страница для «Продолжить» (ok = false — кнопки нет);
+	// onContinue открывает читалку на ней. nil — прогресса нет.
+	resume     func(model.Gallery) (page int, ok bool)
+	onContinue func(model.Gallery, int)
 }
 
 // New создаёт скрытый слой. onRead открывает читалку, onSearch — поиск
@@ -131,6 +137,39 @@ func (d *Details) SetMenu(menu func(model.Gallery) *fyne.Menu) {
 		d.menuBtn.Show()
 	}
 }
+
+// SetProgress подключает позицию чтения: resume — страница для
+// «Продолжить», onContinue открывает читалку на ней.
+func (d *Details) SetProgress(resume func(model.Gallery) (int, bool), onContinue func(model.Gallery, int)) {
+	d.resume, d.onContinue = resume, onContinue
+}
+
+// RefreshProgress обновляет кнопку «Продолжить» открытой страницы (после
+// закрытия читалки, сброса или перезагрузки прогресса).
+func (d *Details) RefreshProgress() {
+	if !d.visible || d.contBtn == nil {
+		return
+	}
+	page, ok := 0, false
+	if d.resume != nil {
+		page, ok = d.resume(d.g)
+	}
+	if !ok {
+		d.contBtn.Hide()
+	} else {
+		d.contBtn.SetText(i18n.T("details.continue", "Page", page+1))
+		d.contBtn.OnTapped = func() {
+			if d.visible && d.onContinue != nil {
+				d.onContinue(d.g, page)
+			}
+		}
+		d.contBtn.Show()
+	}
+	d.body.Refresh()
+}
+
+// ContinueButton — кнопка «Продолжить» (для тестов; nil до открытия).
+func (d *Details) ContinueButton() *widget.Button { return d.contBtn }
 
 // MenuButton — кнопка «⋮» верхней полосы.
 func (d *Details) MenuButton() *widget.Button { return d.menuBtn }
@@ -223,7 +262,10 @@ func (d *Details) build() {
 
 	readBtn := widget.NewButtonWithIcon(i18n.T("details.read"), theme.MediaPlayIcon(), d.read)
 	readBtn.Importance = widget.HighImportance
-	buttons := container.NewHBox(readBtn)
+	d.contBtn = widget.NewButtonWithIcon("", theme.MediaFastForwardIcon(), nil)
+	d.contBtn.Hide()
+	// с переносом: «Читать», «Продолжить» и «Открыть в браузере» на узком телефоне
+	buttons := container.New(layout.NewRowWrapLayout(), readBtn, d.contBtn)
 	d.linkBtn = nil
 	if u := g.SourceURL; u != "" && d.onOpenURL != nil {
 		d.linkBtn = widget.NewButtonWithIcon(i18n.T("details.open_in_browser"), theme.ComputerIcon(), func() { d.onOpenURL(u) })
@@ -250,6 +292,7 @@ func (d *Details) build() {
 	d.updateSpacer()
 	objs = append(objs, d.spacer)
 	d.body.Objects = objs
+	d.RefreshProgress()
 	d.body.Refresh()
 	// RowWrapLayout узнаёт свою высоту только после первой раскладки —
 	// нужен ещё один проход, чтобы строки тегов не занимали лишнего места

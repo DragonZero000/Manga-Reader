@@ -62,6 +62,9 @@ type Services struct {
 	// UserDataBackup — резервная копия повреждённой базы, созданная при
 	// запуске; «» — база была в порядке.
 	UserDataBackup string
+	// Progress — позиции чтения; nil — пользовательские данные недоступны
+	// (методы nil-безопасны).
+	Progress *ProgressService
 
 	userObs *userDataObserver // nil — без пользовательских данных
 	// bg — фоновые задачи сервисов (переиндексация); stopBg их отменяет
@@ -194,6 +197,61 @@ func SetDisplayMax60(s storage.Settings, on bool) {
 	s.SetString(KeyDisplayMax60, v)
 }
 
+// KeyReaderDirection — направление чтения в постраничном режиме читалки.
+const (
+	KeyReaderDirection = "reader.direction"
+	ReaderDirectionLTR = "ltr" // слева направо (по умолчанию)
+	ReaderDirectionRTL = "rtl" // справа налево
+)
+
+// ReaderDirection — выбранное направление чтения; неизвестное значение — слева направо.
+func ReaderDirection(s storage.Settings) string {
+	if s.String(KeyReaderDirection, "") == ReaderDirectionRTL {
+		return ReaderDirectionRTL
+	}
+	return ReaderDirectionLTR
+}
+
+// SetReaderDirection сохраняет направление чтения.
+func SetReaderDirection(s storage.Settings, dir string) {
+	s.SetString(KeyReaderDirection, dir)
+}
+
+// KeyReaderDoubleTap — масштаб двойного тапа в процентах или ReaderDoubleTapOff.
+const (
+	KeyReaderDoubleTap = "reader.double_tap"
+	ReaderDoubleTapOff = "off"
+)
+
+// ReaderDoubleTapOptions — допустимые значения настройки двойного тапа.
+var ReaderDoubleTapOptions = []string{ReaderDoubleTapOff, "150", "200", "250", "300"}
+
+// ReaderDoubleTapValue — сохранённое значение настройки (неизвестное — «200»).
+func ReaderDoubleTapValue(s storage.Settings) string {
+	v := s.String(KeyReaderDoubleTap, "")
+	for _, o := range ReaderDoubleTapOptions {
+		if v == o {
+			return v
+		}
+	}
+	return "200"
+}
+
+// ReaderDoubleTap — масштаб двойного тапа (2 — 200%); 0 — выключен.
+func ReaderDoubleTap(s storage.Settings) float32 {
+	v := ReaderDoubleTapValue(s)
+	if v == ReaderDoubleTapOff {
+		return 0
+	}
+	n, _ := strconv.Atoi(v)
+	return float32(n) / 100
+}
+
+// SetReaderDoubleTap сохраняет значение настройки двойного тапа.
+func SetReaderDoubleTap(s storage.Settings, v string) {
+	s.SetString(KeyReaderDoubleTap, v)
+}
+
 // BrowserPrefs — настройки браузера из Settings (для browser.Options.Prefs).
 // Поисковик выбирается в настройках самого Firefox и хранится в профиле.
 func BrowserPrefs(s storage.Settings) (home string, clear []string) {
@@ -286,6 +344,8 @@ func openUserData(path string) (store *userdata.Store, backup string) {
 type userDataObserver struct {
 	store    *userdata.Store
 	settings storage.Settings
+	// progress перечитывается после сверки: перенос записи меняет путь
+	progress *ProgressService
 
 	mu   sync.Mutex
 	root string // ключ папки библиотеки
@@ -320,7 +380,9 @@ func (o *userDataObserver) Scanned(res library.ScanResult) {
 	}
 	if err := o.store.Reconcile(o.key(), files, time.Now(), Retention(o.settings)); err != nil {
 		log.Printf("user data: reconciling: %v", err)
+		return
 	}
+	o.progress.Reload()
 }
 
 func (o *userDataObserver) Deleted(rel string) {
@@ -337,6 +399,9 @@ func (s *Services) attachUserData(store *userdata.Store, backup, root string) {
 		return
 	}
 	s.userObs = &userDataObserver{store: store, settings: s.Settings, root: root}
+	s.Progress = newProgressService(store, s.userObs.key)
+	s.userObs.progress = s.Progress
+	s.Progress.Reload()
 	s.Library.SetObserver(s.userObs)
 	s.Library.SetOverlay(userDataOverlay{s.userObs})
 }
@@ -456,6 +521,10 @@ func (s *Services) Close() {
 		}
 	}
 	if s.UserData != nil {
+		// последние позиции чтения — до закрытия базы
+		if !s.Progress.Flush(time.Second) {
+			log.Printf("user data: progress was not saved in time")
+		}
 		s.Library.SetObserver(nil)
 		if err := s.UserData.Close(); err != nil {
 			log.Printf("user data: %v", err)

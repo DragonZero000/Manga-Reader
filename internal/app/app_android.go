@@ -78,6 +78,7 @@ func (s *Services) SetFolder(tree string) error {
 	if s.userObs != nil {
 		s.userObs.setKey(tree)
 		s.Library.SetObserver(s.userObs)
+		go s.Progress.Reload() // позиции новой папки
 	}
 	return nil
 }

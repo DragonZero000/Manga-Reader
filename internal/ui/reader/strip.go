@@ -22,6 +22,8 @@ const (
 	keyScrollShare = 0.9
 	// errorHeight — высота полосы на месте нечитаемой страницы.
 	errorHeight = 120
+	// endHeight — высота блока «Конец» после последней страницы.
+	endHeight = 160
 )
 
 // stripView — лента: страницы подряд по ширине экрана. Виртуализация
@@ -42,8 +44,10 @@ type stripView struct {
 	scroll  *container.Scroll
 	content *stripContent
 	spinner *widget.Activity
-	items   map[int]*stripItem
-	pool    []*stripItem
+	// end — блок «Конец» с кнопкой «Завершить чтение» после последней страницы
+	end   *fyne.Container
+	items map[int]*stripItem
+	pool  []*stripItem
 
 	// Окно размещения [lastFrom, lastTo) и видимые страницы
 	// [lastScreenFrom, lastScreenTo) при последнем updateVisible: прокрутка
@@ -68,6 +72,11 @@ type stripItem struct {
 
 func newStripView(r *Reader) *stripView {
 	v := &stripView{r: r, spinner: widget.NewActivity(), items: map[int]*stripItem{}, lastFrom: -1}
+	endLbl := widget.NewLabelWithStyle(i18n.T("reader.end"), fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	finishBtn := widget.NewButton(i18n.T("reader.finish"), func() { v.r.finish() })
+	finishBtn.Importance = widget.HighImportance
+	v.end = container.NewCenter(container.NewVBox(endLbl, finishBtn))
+	v.end.Hide()
 	v.content = newStripContent(v)
 	v.scroll = container.NewVScroll(v.content)
 	v.scroll.OnScrolled = func(fyne.Position) { v.updateVisible() }
@@ -86,6 +95,7 @@ func (v *stripView) show(g model.Gallery, page int) {
 	v.g = g
 	v.pending = page
 	v.ready = false
+	v.end.Hide()
 	v.heights, v.prefix = nil, pages.Prefix(nil)
 	v.content.Refresh()
 	v.scroll.ScrollToOffset(fyne.Position{})
@@ -120,17 +130,25 @@ func (v *stripView) reset() {
 	v.releaseAll()
 	v.sizes = nil
 	v.ready = false
+	v.end.Hide()
 	v.spinner.Stop()
 	v.spinner.Hide()
 }
 
-func (v *stripView) typedKey(k fyne.KeyName) {
+// preview — при перемещении ползунка лента прокручивается к странице.
+func (v *stripView) preview(page int) { v.goTo(page) }
+
+func (v *stripView) typedKey(k fyne.KeyName, _ bool) {
 	if !v.ready {
 		return
 	}
 	h := v.scroll.Size().Height
 	switch k {
 	case fyne.KeyDown, fyne.KeyPageDown, fyne.KeySpace:
+		if v.atBottom() {
+			v.r.tryFinish() // конец ленты уже на экране
+			return
+		}
 		v.scrollBy(h * keyScrollShare)
 	case fyne.KeyUp, fyne.KeyPageUp:
 		v.scrollBy(-h * keyScrollShare)
@@ -146,11 +164,26 @@ func (v *stripView) typedKey(k fyne.KeyName) {
 }
 
 func (v *stripView) scrollBy(dy float32) {
-	total := v.prefix[len(v.prefix)-1]
-	maxY := max(0, total-v.scroll.Size().Height)
-	y := max(0, min(v.scroll.Offset.Y+dy, maxY))
+	y := max(0, min(v.scroll.Offset.Y+dy, v.maxOffset()))
 	v.scroll.ScrollToOffset(fyne.NewPos(0, y))
 	v.updateVisible()
+}
+
+// contentHeight — высота всех страниц и блока «Конец».
+func (v *stripView) contentHeight() float32 {
+	if len(v.prefix) == 0 {
+		return 0
+	}
+	return v.prefix[len(v.prefix)-1] + endHeight
+}
+
+func (v *stripView) maxOffset() float32 {
+	return max(0, v.contentHeight()-v.scroll.Size().Height)
+}
+
+// atBottom — лента прокручена до конца (блок «Конец» на экране).
+func (v *stripView) atBottom() bool {
+	return v.scroll.Offset.Y >= v.maxOffset()-1
 }
 
 // --- раскладка ---
@@ -172,6 +205,7 @@ func (v *stripView) layout(w float32) {
 	v.prefix = pages.Prefix(v.heights)
 	v.releaseAll() // разрешение изображений зависит от ширины
 	v.ready = true
+	v.end.Show()
 	v.spinner.Stop()
 	v.spinner.Hide()
 	v.content.Refresh()
@@ -407,8 +441,9 @@ func (s *stripRenderer) Objects() []fyne.CanvasObject {
 	return []fyne.CanvasObject{s.v.scroll, s.center}
 }
 
-// stripContent — содержимое прокрутки: общая высота всех страниц,
-// дочерние объекты — только размещённые страницы. Тап переключает панель.
+// stripContent — содержимое прокрутки: общая высота всех страниц и блока
+// «Конец», дочерние объекты — только размещённые страницы и этот блок.
+// Тап переключает панель.
 type stripContent struct {
 	widget.BaseWidget
 	v *stripView
@@ -436,14 +471,14 @@ func (r *contentRenderer) Layout(size fyne.Size) {
 		it.box.Resize(fyne.NewSize(size.Width, v.heights[page]))
 		v.layoutItem(it, size.Width, v.heights[page])
 	}
+	if n := len(v.prefix); n > 0 {
+		v.end.Move(fyne.NewPos(0, v.prefix[n-1]))
+		v.end.Resize(fyne.NewSize(size.Width, endHeight))
+	}
 }
 
 func (r *contentRenderer) MinSize() fyne.Size {
-	v := r.c.v
-	if len(v.prefix) == 0 {
-		return fyne.NewSize(1, 1)
-	}
-	return fyne.NewSize(1, max(1, v.prefix[len(v.prefix)-1]))
+	return fyne.NewSize(1, max(1, r.c.v.contentHeight()))
 }
 
 func (r *contentRenderer) Refresh() {
@@ -452,7 +487,8 @@ func (r *contentRenderer) Refresh() {
 }
 
 func (r *contentRenderer) Objects() []fyne.CanvasObject {
-	objs := make([]fyne.CanvasObject, 0, len(r.c.v.items))
+	objs := make([]fyne.CanvasObject, 0, len(r.c.v.items)+1)
+	objs = append(objs, r.c.v.end)
 	for _, it := range r.c.v.items {
 		objs = append(objs, it.box)
 	}

@@ -22,6 +22,10 @@ type GalleryActions struct {
 	CopyTitle    func(model.Gallery)
 	ShowInFolder func(model.Gallery)
 	Delete       func(model.Gallery)
+	// ResetProgress сбрасывает позицию чтения; пункт — только если
+	// HasProgress(g) (оба nil — пункта нет).
+	ResetProgress func(model.Gallery)
+	HasProgress   func(model.Gallery) bool
 }
 
 // CardMenu — меню карточки: «Открыть», «Читать», «Открыть в браузере»,
@@ -42,10 +46,14 @@ func (a *GalleryActions) DetailsMenu(g model.Gallery) *fyne.Menu {
 	return fyne.NewMenu("", a.tail(nil, g)...)
 }
 
-// tail — общие пункты: копирование, папка, разделитель, удаление.
+// tail — общие пункты: копирование, папка, сброс прогресса, разделитель,
+// удаление.
 func (a *GalleryActions) tail(items []*fyne.MenuItem, g model.Gallery) []*fyne.MenuItem {
 	items = a.add(items, g, "menu.copy_title", theme.ContentCopyIcon(), a.CopyTitle)
 	items = a.add(items, g, "menu.show_in_folder", theme.FolderOpenIcon(), a.ShowInFolder)
+	if a.HasProgress != nil && a.HasProgress(g) {
+		items = a.add(items, g, "menu.reset_progress", theme.HistoryIcon(), a.ResetProgress)
+	}
 	if a.Delete != nil {
 		if len(items) > 0 {
 			items = append(items, fyne.NewMenuItemSeparator())
