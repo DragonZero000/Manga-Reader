@@ -20,7 +20,9 @@ import (
 type galleryCard struct {
 	widget.BaseWidget
 
-	cover *canvas.Image
+	// slot — место обложки: объект изображения из пула сетки (shown) или пусто.
+	slot  *fyne.Container
+	shown *pooledImage
 	bg    *canvas.Rectangle
 	icon  *widget.Icon // заглушка на время загрузки или значок ошибки
 	title *widget.Label
@@ -38,19 +40,24 @@ type galleryCard struct {
 	thumbKey string
 	// cancel отменяет загрузку обложки thumbKey (nil — не грузится).
 	cancel func()
+	// want — ключ пула обложки, которую карточка показывает или ждёт;
+	// ready — готовая миниатюра, пока карточка в очереди показа (nil — не в очереди).
+	want  string
+	ready image.Image
+	// iconRes — значок заглушки, показанный сейчас.
+	iconRes fyne.Resource
 
 	content fyne.CanvasObject
 }
 
 func newGalleryCard(m *GridMetrics) *galleryCard {
 	c := &galleryCard{
-		cover: canvas.NewImageFromImage(nil),
-		bg:    canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground)),
-		icon:  widget.NewIcon(theme.FileImageIcon()),
-		title: widget.NewLabel(""),
+		slot:    container.NewStack(),
+		bg:      canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground)),
+		icon:    widget.NewIcon(theme.FileImageIcon()),
+		iconRes: theme.FileImageIcon(),
+		title:   widget.NewLabel(""),
 	}
-	c.cover.FillMode = canvas.ImageFillContain
-	c.cover.ScaleMode = canvas.ImageScaleFastest // миниатюра уже по размеру карточки
 	c.bg.CornerRadius = theme.InputRadiusSize()
 
 	c.title.Wrapping = fyne.TextWrapWord
@@ -67,7 +74,7 @@ func newGalleryCard(m *GridMetrics) *galleryCard {
 	iconBox := container.NewCenter(container.New(layout.NewGridWrapLayout(fyne.NewSquareSize(48)), c.icon))
 	corner := container.New(topRightLayout{}, c.menu)
 	c.content = container.New(&cardLayout{metrics: m, titleHeight: titleHeight},
-		container.NewStack(c.bg, iconBox, c.cover, corner), c.title)
+		container.NewStack(c.bg, iconBox, c.slot, corner), c.title)
 	c.ExtendBaseWidget(c)
 	return c
 }
@@ -113,25 +120,65 @@ func (c *galleryCard) TappedSecondary(ev *fyne.PointEvent) {
 	}
 }
 
-// showLoading показывает заглушку до загрузки обложки.
-func (c *galleryCard) showLoading() {
-	c.cover.Image = nil
-	c.cover.Hide()
-	c.icon.SetResource(theme.FileImageIcon())
-	c.icon.Show()
+// setTitle меняет название, только если оно другое.
+func (c *galleryCard) setTitle(text string) {
+	if c.title.Text != text {
+		c.title.SetText(text)
+	}
 }
 
-// showCover показывает миниатюру или значок ошибки.
-func (c *galleryCard) showCover(img image.Image, err error) {
-	if err != nil || img == nil {
-		c.cover.Image = nil
-		c.cover.Hide()
-		c.icon.SetResource(theme.ErrorIcon())
+// showLoading показывает заглушку до загрузки обложки.
+func (c *galleryCard) showLoading() { c.showIcon(theme.FileImageIcon()) }
+
+// showError показывает значок ошибки вместо обложки.
+func (c *galleryCard) showError() {
+	c.want = ""
+	c.showIcon(theme.ErrorIcon())
+}
+
+func (c *galleryCard) showIcon(res fyne.Resource) {
+	c.detach()
+	if c.iconRes != res {
+		c.iconRes = res
+		c.icon.SetResource(res)
+	}
+	if !c.icon.Visible() {
 		c.icon.Show()
+	}
+}
+
+// setImage показывает объект пула e. Объект не обновляется (Refresh
+// освободил бы его текстуру), обновляется только место обложки.
+func (c *galleryCard) setImage(e *pooledImage) {
+	if c.shown == e {
 		return
 	}
-	c.icon.Hide()
-	c.cover.Image = img
-	c.cover.Show()
-	c.cover.Refresh()
+	c.detach()
+	c.shown, e.owner = e, c
+	c.slot.Objects = []fyne.CanvasObject{e.img}
+	c.slot.Layout.Layout(c.slot.Objects, c.slot.Size())
+	if c.icon.Visible() {
+		c.icon.Hide()
+	}
+	canvas.Refresh(c.slot)
+}
+
+// detach снимает с карточки объект пула (если он есть).
+func (c *galleryCard) detach() {
+	e := c.shown
+	if e == nil {
+		return
+	}
+	c.shown, e.owner = nil, nil
+	e.seen = e.pool.now()
+	c.slot.Objects = nil
+	canvas.Refresh(c.slot)
+}
+
+// image — изображение обложки на карточке (nil — заглушка или ошибка).
+func (c *galleryCard) image() *canvas.Image {
+	if c.shown == nil {
+		return nil
+	}
+	return c.shown.img
 }

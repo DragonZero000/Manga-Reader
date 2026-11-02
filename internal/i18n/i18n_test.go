@@ -150,11 +150,11 @@ func TestFormats(t *testing.T) {
 	up := time.Date(2024, 3, 5, 23, 30, 0, 0, time.UTC)
 	mod := time.Date(2024, 3, 5, 14, 7, 0, 0, time.Local)
 	cases := []struct {
-		lang                           string
-		date, dateTime, size, big, num string
+		lang                                     string
+		date, dateTime, size, big, num, mb, zero string
 	}{
-		{"ru", "05.03.2024", "05.03.2024 14:07", "1,5 МБ", "512 Б", "12 345"},
-		{"en", "Mar 5, 2024", "Mar 5, 2024 14:07", "1.5 MB", "512 B", "12,345"},
+		{"ru", "05.03.2024", "05.03.2024 14:07", "1,5 МБ", "512 Б", "12 345", "9,8 МБ", "0 МБ"},
+		{"en", "Mar 5, 2024", "Mar 5, 2024 14:07", "1.5 MB", "512 B", "12,345", "9.8 MB", "0 MB"},
 	}
 	for _, c := range cases {
 		use(t, c.lang)
@@ -172,6 +172,12 @@ func TestFormats(t *testing.T) {
 		}
 		if got := Int(12345); got != c.num {
 			t.Errorf("%s Int = %q", c.lang, got)
+		}
+		if got := MB(200 * 50 << 10); got != c.mb { // 200 обложек по 50 КБ
+			t.Errorf("%s MB = %q", c.lang, got)
+		}
+		if got := MB(0); got != c.zero {
+			t.Errorf("%s MB(0) = %q", c.lang, got)
 		}
 	}
 }

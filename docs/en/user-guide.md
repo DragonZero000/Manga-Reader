@@ -264,7 +264,7 @@ Not treated as errors: hidden files and folders (name starts with `.`) — you c
 The **Settings** tab:
 
 - **Язык / Language** — **System** (the default: the system language, or English if the app has no translation for it), **English** or **Русский**. The new language applies after the app restarts; until then a hint in the chosen language is shown.
-- **Library folder** — the folder path; on Windows the **Copy path** button, on Android **Change folder**.
+- **Library folder** — the folder path; on Windows the **Copy path** button, on Android **Change folder**. **Cover cache: N MB** — how much space the reduced covers on disk take: on Android they are in the app cache, and the system shows them as "Cache" (counted each time the tab opens; «…» while counting). **Clear** deletes them without asking; the covers on screen stay, and deleted ones are created again from the archives as cards are shown.
 - **Browser** (Windows) — **Home page**, **Search engine** (opens Firefox search settings), **Extensions**, **Clear cookies and site data**, **Clear history**. Clearing happens the next time the browser opens; bookmarks are kept.
 - **Browser** (Android) — **Home page**, **Search engine**, **Browser toolbar** (**Bottom** / **Top**), clearing cookies and history (immediately; bookmarks and extensions are kept).
 - **Search** — when a query runs: **While typing** or **On button**; see [Search](#search).

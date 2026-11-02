@@ -57,7 +57,7 @@ func newPortable(version, dir string) *Services {
 	// каталог и пользовательские данные — рядом с settings.json (портативно)
 	cat := openCatalog(filepath.Join(dir, catalog.FileName), lib)
 	ud, backup := openUserData(filepath.Join(dir, userdata.FileName))
-	s := newServices(version, storage.NewFS(lib), settings, thumbsConfig{limit: 64 << 20}, cat)
+	s := newServices(version, storage.NewFS(lib), settings, thumbsConfig{limit: 64 << 20, dir: filepath.Join(dir, "cache", "thumbs")}, cat)
 	s.attachUserData(ud, backup, desktopLibraryKey)
 	// до окна и до первого сканирования: чтение каталога без открытия архивов
 	s.loadCatalog()

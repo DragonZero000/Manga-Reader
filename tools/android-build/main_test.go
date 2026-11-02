@@ -85,7 +85,7 @@ func TestFindJDK(t *testing.T) {
 }
 
 func TestKnownABIs(t *testing.T) {
-	if err := run([]string{"mips"}, false, "x.apk", buildTags("")); err == nil || !strings.Contains(err.Error(), "arm64-v8a") {
+	if err := run([]string{"mips"}, false, false, "x.apk", buildTags("")); err == nil || !strings.Contains(err.Error(), "arm64-v8a") {
 		t.Fatalf("неизвестная архитектура: %v", err)
 	}
 }
@@ -100,5 +100,15 @@ func TestBuildTags(t *testing.T) {
 		if got := buildTags(in); got != want {
 			t.Errorf("buildTags(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestGradleArgs(t *testing.T) {
+	base := "assembleDebug --console=plain -PmangareaderAbis=arm64-v8a,x86_64 -PversionName=0.1.3 -PversionCode=103"
+	if got := strings.Join(gradleArgs("assembleDebug", []string{"arm64-v8a", "x86_64"}, "0.1.3", 103, false), " "); got != base {
+		t.Errorf("gradleArgs = %q, want %q", got, base)
+	}
+	if got := strings.Join(gradleArgs("assembleDebug", []string{"arm64-v8a", "x86_64"}, "0.1.3", 103, true), " "); got != base+" -PmangareaderDev=true" {
+		t.Errorf("gradleArgs(dev) = %q", got)
 	}
 }

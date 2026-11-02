@@ -28,6 +28,7 @@ func TestServicePackagesHaveNoWidgets(t *testing.T) {
 		"mangareader/internal/browser",
 		"mangareader/internal/mobilebrowser",
 		"mangareader/internal/display",
+		"mangareader/internal/devreport",
 		"mangareader/internal/catalog",
 		"mangareader/internal/userdata",
 		"mangareader/internal/i18n",

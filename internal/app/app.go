@@ -46,6 +46,9 @@ type Services struct {
 	Index   search.Index
 	Library *library.Source
 	Thumbs  *thumbs.Cache
+	// Covers — кэш обложек на диске (файлы JPEG); nil — папки кэша нет,
+	// миниатюры только в памяти.
+	Covers CoverCache
 	// Problems — ошибочные файлы библиотеки и их статус просмотра.
 	Problems *problems.Tracker
 	// Watcher — наблюдение за папкой библиотеки (ПК); nil — недоступно.
@@ -70,6 +73,17 @@ type Services struct {
 	// bg — фоновые задачи сервисов (переиндексация); stopBg их отменяет
 	bg     sync.WaitGroup
 	stopBg context.CancelFunc
+	// covers — кэш обложек на диске (nil — нет): уборка после сканирования
+	covers *thumbs.DirStore
+}
+
+// CoverCache — кэш обложек на диске (thumbs.DirStore): объём и очистка из
+// настроек. Методы вызываются вне UI-потока.
+type CoverCache interface {
+	// Size — объём миниатюр, байт.
+	Size() (int64, error)
+	// Clear удаляет все миниатюры.
+	Clear() error
 }
 
 // Настройки встроенного браузера.
@@ -304,10 +318,12 @@ func SetRetentionDays(s storage.Settings, days int) {
 	s.SetString(KeyRetention, strconv.Itoa(days))
 }
 
-// thumbsConfig — объём кэша миниатюр и число декодеров (0 — по умолчанию).
+// thumbsConfig — объём кэша миниатюр в памяти, число декодеров (0 — по
+// умолчанию) и папка кэша обложек на диске («» — только память).
 type thumbsConfig struct {
 	limit   int64
 	workers int
+	dir     string
 }
 
 // openCatalog открывает каталог библиотеки path для папки root; nil — не
@@ -435,8 +451,10 @@ func newServices(version string, st storage.Storage, settings storage.Settings, 
 		s.Library = library.NewSource(st, s.Index)
 	}
 	s.Thumbs = thumbs.New(s.Library.OpenPage, tc.limit, tc.workers)
-	if cat != nil {
-		s.Thumbs.SetStore(cat.Covers())
+	if tc.dir != "" {
+		s.covers = thumbs.NewDirStore(tc.dir)
+		s.Thumbs.SetStore(s.covers)
+		s.Covers = s.covers
 	}
 	if root := s.Library.Root(); root != "" {
 		log.Printf("library folder: %s", root)
@@ -507,6 +525,27 @@ func (s *Services) PruneLinks() {
 	if err := s.Links.Prune(func(rel string) bool { return exists[rel] }); err != nil {
 		log.Printf("links: %v", err)
 	}
+}
+
+// PruneCovers удаляет из кэша обложек файлы галерей, которых больше нет в
+// библиотеке (удалённые и изменённые архивы). Вызывать после сканирования;
+// работа с диском идёт в фоне (Close её дожидается).
+func (s *Services) PruneCovers() {
+	if s.covers == nil {
+		return
+	}
+	gs := s.Library.Galleries()
+	keys := make([]string, len(gs))
+	for i, g := range gs {
+		keys[i] = thumbs.CacheKey(g)
+	}
+	s.bg.Add(1)
+	go func() {
+		defer s.bg.Done()
+		if err := s.covers.Prune(keys); err != nil {
+			log.Printf("covers: %v", err)
+		}
+	}()
 }
 
 // Close закрывает каталог и пользовательские данные (при выходе из приложения).

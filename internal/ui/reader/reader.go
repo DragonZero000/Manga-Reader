@@ -19,6 +19,7 @@ import (
 	"mangareader/internal/model"
 	"mangareader/internal/pages"
 	"mangareader/internal/storage"
+	"mangareader/internal/ui/screens"
 )
 
 // Режимы чтения (значения хранятся в Preferences).
@@ -106,12 +107,16 @@ type Reader struct {
 
 	onHome     func()
 	onFinished func(model.Gallery)
-	onPage     func(model.Gallery, int)
+	// onVisibility вызывается после открытия и закрытия читалки (слои оболочки).
+	onVisibility func()
+	onPage       func(model.Gallery, int)
 	// moved — в этом открытии страница менялась; reported — последняя
 	// страница, о которой сообщено onPage (−1 — ни одной).
 	moved    bool
 	reported int
 
+	// warm загружает текстуры страниц заранее, до их появления на экране.
+	warm  *warmer
 	paged *pagedView
 	strip *stripView
 	panel *panel
@@ -140,6 +145,7 @@ func New(a fyne.App, win fyne.Window, src *library.Source, settings storage.Sett
 	if r.mode != ModePaged && r.mode != ModeStrip {
 		r.mode = ModePaged
 	}
+	r.warm = newWarmer(fyne.CurrentDevice().IsMobile())
 	r.paged = newPagedView(r)
 	r.strip = newStripView(r)
 	r.panel = newPanel(r)
@@ -159,6 +165,16 @@ func (r *Reader) SetDispatcher(do func(func())) { r.do = do }
 // SetOnHome задаёт действие кнопки «Домой» (закрыть читалку и страницу
 // произведения); nil — только закрыть читалку.
 func (r *Reader) SetOnHome(f func()) { r.onHome = f }
+
+// SetOnVisibility задаёт действие после открытия и закрытия читалки:
+// оболочка скрывает закрытые слои.
+func (r *Reader) SetOnVisibility(f func()) { r.onVisibility = f }
+
+func (r *Reader) visibilityChanged() {
+	if r.onVisibility != nil {
+		r.onVisibility()
+	}
+}
 
 // SetOnFinished задаёт обработчик «произведение дочитано»: вызывается после
 // закрытия читалки подтверждённым переходом за последнюю страницу.
@@ -210,6 +226,7 @@ func (r *Reader) OpenAt(g model.Gallery, page int) {
 	r.layer.Show()
 	r.repaint(r.layer)
 	r.applyMode()
+	r.visibilityChanged()
 
 	// размеры страниц нужны ленте; читаем заголовки в фоне
 	token := r.token
@@ -246,11 +263,13 @@ func (r *Reader) Close() {
 		r.onPage(r.g, r.cur) // позиция при закрытии
 	}
 	r.layer.Hide()
+	r.warm.clear()
 	r.paged.reset()
 	r.strip.reset()
 	r.loader.Clear()
 	r.g = model.Gallery{}
 	r.sizes = nil
+	r.visibilityChanged()
 	// вернуть освобождённую память системе сразу, а не по таймеру сборщика
 	go debug.FreeOSMemory()
 }
@@ -335,11 +354,28 @@ func (r *Reader) current() view {
 	return r.paged
 }
 
+// Mode — режим чтения (ModePaged или ModeStrip).
+func (r *Reader) Mode() string { return r.mode }
+
+// SetMode переключает режим так, как кнопка панели (для тестов и замера).
+func (r *Reader) SetMode(mode string) { r.setMode(mode) }
+
+// StripScroller — прокрутка ленты (для тестов и замера).
+func (r *Reader) StripScroller() screens.ScrollTarget { return r.strip }
+
 // setMode переключает режим с сохранением текущей страницы.
 func (r *Reader) setMode(mode string) {
 	if mode == r.mode || (mode != ModePaged && mode != ModeStrip) {
 		return
 	}
+	if !r.visible {
+		// читалка закрыта: режим применит OpenAt (вид без галереи не
+		// показывается — иначе индикатор загрузки ленты крутится скрытым)
+		r.mode = mode
+		r.settings.SetString(prefMode, mode)
+		return
+	}
+	r.warm.clear()
 	r.current().reset()
 	r.mode = mode
 	r.settings.SetString(prefMode, mode)

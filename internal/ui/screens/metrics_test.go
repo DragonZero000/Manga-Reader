@@ -189,7 +189,7 @@ func TestGridReloadShowsPlaceholder(t *testing.T) {
 
 	card := visibleCard(t, g)
 	deadline := time.Now().Add(3 * time.Second)
-	for !card.cover.Visible() && time.Now().Before(deadline) {
+	for card.image() == nil && time.Now().Before(deadline) {
 		select {
 		case f := <-q:
 			f()
@@ -197,14 +197,14 @@ func TestGridReloadShowsPlaceholder(t *testing.T) {
 			time.Sleep(5 * time.Millisecond)
 		}
 	}
-	if !card.cover.Visible() {
+	if card.image() == nil {
 		t.Fatal("обложка не загрузилась")
 	}
 
 	app.SetGridColumns(st, 2)
 	m.Reload()
 	card = visibleCard(t, g)
-	if card.cover.Visible() || !card.icon.Visible() {
+	if card.image() != nil || !card.icon.Visible() {
 		t.Fatal("после смены размера видна прежняя миниатюра")
 	}
 }

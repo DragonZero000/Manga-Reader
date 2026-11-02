@@ -86,11 +86,11 @@ func TestGridCardReuseCancels(t *testing.T) {
 		default:
 			time.Sleep(5 * time.Millisecond)
 		}
-		if card.cover.Visible() && card.cover.Image != nil {
+		if card.image() != nil {
 			break
 		}
 	}
-	if !card.cover.Visible() || card.cover.Image == nil {
+	if card.image() == nil {
 		t.Fatal("обложка новой галереи не показана")
 	}
 	if card.thumbKey != thumbs.CacheKey(g.items[2]) {
@@ -99,7 +99,9 @@ func TestGridCardReuseCancels(t *testing.T) {
 	if got := o.list(); slices.Contains(got, "gone.zip") {
 		t.Fatalf("отменённая обложка декодировалась: %v", got)
 	}
-	if _, ok := card.cover.Image.(*image.RGBA); !ok || card.cover.ScaleMode != canvas.ImageScaleFastest {
-		t.Fatalf("обложка %T, ScaleMode %v", card.cover.Image, card.cover.ScaleMode)
+	if img := card.image(); img.ScaleMode != canvas.ImageScaleFastest {
+		t.Fatalf("ScaleMode %v", img.ScaleMode)
+	} else if _, ok := img.Image.(*image.RGBA); !ok {
+		t.Fatalf("обложка %T", img.Image)
 	}
 }

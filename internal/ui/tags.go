@@ -10,7 +10,8 @@ import (
 )
 
 // shellTags — правка тегов страницы произведения поверх сервисов: база и
-// индекс — в горутинах, после успешной правки поиск выполняется заново.
+// индекс — в горутинах; успешная правка — изменение библиотеки (libRev):
+// поиск выполняется заново при открытии вкладки «Поиск».
 type shellTags struct{ s *Shell }
 
 var _ details.TagEditor = shellTags{}
@@ -21,7 +22,7 @@ func (t shellTags) Edit(k model.Key, op app.TagOp, cb func(model.Gallery, error)
 	go func() {
 		g, err := t.s.svc.EditTags(k, op)
 		if err == nil {
-			t.s.do(t.s.search.Rerun) // результат поиска отражает новые теги
+			t.s.do(t.s.libraryChanged) // результат поиска отражает новые теги
 		}
 		cb(g, err)
 	}()

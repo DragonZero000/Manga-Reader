@@ -42,7 +42,7 @@ RM_ZIP     := rm -f $(DIST)/MangaReader.zip
 ZIP_DIST   := cd $(DIST) && zip -qr MangaReader.zip MangaReader
 endif
 
-.PHONY: run test build-windows build-android build-android-release browser package-windows clean
+.PHONY: run test build-windows build-android build-android-dev build-android-release browser package-windows clean
 
 run:
 	go run -tags $(CODE_TAGS)$(if $(EXTRA_TAGS),$(comma)$(EXTRA_TAGS)) $(MAIN)
@@ -62,6 +62,12 @@ ANDROID_ABIS ?= arm64-v8a
 
 build-android:
 	go run ./tools/android-build -abis "$(ANDROID_ABIS)" -tags "$(EXTRA_TAGS)"
+
+# dev-APK: отдельное приложение «MangaReader Dev» (ID io.github.mangareader.app.dev)
+# с замером кадров (тег frameprobe): ставится рядом с основным, через 5 с после
+# запуска прогоняет сценарии прокрутки, сводки — adb logcat | grep frameprobe.
+build-android-dev:
+	go run ./tools/android-build -abis "$(ANDROID_ABIS)" -tags "frameprobe$(if $(EXTRA_TAGS),$(comma)$(EXTRA_TAGS))" -dev -o $(DIST)/mangareader-dev.apk
 
 # release-APK: подпись ключом из MANGAREADER_KEYSTORE, MANGAREADER_KEY_ALIAS,
 # MANGAREADER_KEY_PASSWORD (без них — неподписанный).

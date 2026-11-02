@@ -47,10 +47,11 @@ type Shell struct {
 	// подменяется в тестах.
 	needsWriteAccess func() bool
 
-	searchTab *container.TabItem
-	errorsTab *container.TabItem
-	watching  bool     // наблюдение за папкой запущено
-	onStopped []func() // действия при выходе
+	searchTab   *container.TabItem
+	errorsTab   *container.TabItem
+	settingsTab *container.TabItem
+	watching    bool     // наблюдение за папкой запущено
+	onStopped   []func() // действия при выходе
 
 	library *screens.Library
 	search  *screens.Search
@@ -58,6 +59,19 @@ type Shell struct {
 	// grid — размер карточек, общий для библиотеки и поиска
 	grid     *screens.GridMetrics
 	settings *screens.Settings
+	// libRev — номер изменения библиотеки: растёт после сканирования с
+	// изменённым списком галерей, удаления из приложения и правки своих или
+	// скрытых тегов. Поиск повторяет запрос только при новом номере.
+	libRev int
+}
+
+// libraryChanged отмечает изменение библиотеки помимо сканирования; если
+// открыта вкладка «Поиск», запрос выполняется заново сразу.
+func (s *Shell) libraryChanged() {
+	s.libRev++
+	if s.Tabs.Selected() == s.searchTab {
+		s.search.Rerun()
+	}
 }
 
 // NewShell создаёт окно и все экраны. Экраны создаются один раз и
@@ -95,11 +109,16 @@ func NewShell(a fyne.App, svc *app.Services) *Shell {
 	s.library = screens.NewLibrary(svc, s.grid, s.Toast.Show, s.actions, choose)
 	s.search = screens.NewSearch(svc, s.grid, s.actions)
 	s.errors = screens.NewErrors(svc.Problems)
+	s.search.SetRevision(func() int { return s.libRev })
 	// поиск и ошибки отражают содержимое папки после каждого сканирования
-	s.library.OnScanned = func() {
+	s.library.OnScanned = func(changed bool) {
+		if changed {
+			s.libRev++
+		}
 		s.search.Rerun()
 		s.updateErrors()
 		s.svc.PruneLinks()
+		s.svc.PruneCovers()
 	}
 	s.settings = screens.NewSettings(a, s.Window, svc, s.Toast.Show, choose, s.search.SetMode, func(mode string) {
 		s.library.SetRandomMode(mode)
@@ -109,11 +128,12 @@ func NewShell(a fyne.App, svc *app.Services) *Shell {
 
 	s.searchTab = container.NewTabItemWithIcon(i18n.T("tab.search"), theme.SearchIcon(), s.search.Content())
 	s.errorsTab = container.NewTabItemWithIcon(i18n.T("tab.errors"), theme.ErrorIcon(), s.errors.Content())
+	s.settingsTab = container.NewTabItemWithIcon(i18n.T("tab.settings"), theme.SettingsIcon(), s.settings.Content())
 	s.Tabs = container.NewAppTabs(
 		container.NewTabItemWithIcon(i18n.T("tab.library"), theme.StorageIcon(), s.library.Content()),
 		s.searchTab,
 		s.errorsTab,
-		container.NewTabItemWithIcon(i18n.T("tab.settings"), theme.SettingsIcon(), s.settings.Content()),
+		s.settingsTab,
 	)
 	s.Tabs.OnSelected = func(item *container.TabItem) {
 		switch item {
@@ -121,6 +141,8 @@ func NewShell(a fyne.App, svc *app.Services) *Shell {
 			s.search.Rerun()
 		case s.errorsTab:
 			s.updateErrors()
+		case s.settingsTab:
+			s.settings.UpdateCoverCache()
 		}
 	}
 	if mobile {
@@ -132,6 +154,8 @@ func NewShell(a fyne.App, svc *app.Services) *Shell {
 	// Слои поверх вкладок: страница произведения, над ней читалка, сверху
 	// уведомления. Вкладки под слоями сохраняют состояние.
 	s.Window.SetContent(container.NewStack(s.Tabs, s.Details.Layer(), s.Reader.Layer(), s.Toast.Layer()))
+	s.Details.SetOnVisibility(s.updateLayers)
+	s.Reader.SetOnVisibility(s.updateLayers)
 	s.Window.Canvas().SetOnTypedKey(s.typedKey)
 	// масштаб страницы: Ctrl+«=», Ctrl+«+», Ctrl+«−», Ctrl+0 — в читалке, если
 	// фокус не в поле ввода номера страницы
@@ -162,7 +186,7 @@ func NewShell(a fyne.App, svc *app.Services) *Shell {
 			s.library.AutoRefresh()
 			s.attachBrowser()
 			s.applyDisplay()
-			startFrameProbe()
+			s.startProbe()
 		})
 		s.startWatcher(a)
 	})
@@ -330,6 +354,41 @@ func (s *Shell) updateErrors() {
 
 // Errors — экран ошибок и его вкладка (для тестов).
 func (s *Shell) Errors() (*screens.Errors, *container.TabItem) { return s.errors, s.errorsTab }
+
+// updateLayers скрывает слои, полностью закрытые слоем выше: вкладки — под
+// страницей произведения и читалкой, страницу произведения — под читалкой.
+// Скрытый слой не получает ввод (нажатия не проходят сквозь фон верхнего
+// слоя) и не рисуется; вкладки сохраняют выбранную вкладку, прокрутку и
+// текст поиска. Вызывается после открытия и закрытия слоёв.
+func (s *Shell) updateLayers() {
+	layer := s.Details.Layer()
+	switch {
+	case s.Reader.Visible():
+		s.hideLayer(s.Tabs)
+		s.hideLayer(layer)
+	case s.Details.Visible():
+		s.hideLayer(s.Tabs)
+		s.showLayer(layer)
+	default:
+		s.showLayer(s.Tabs)
+	}
+}
+
+func (s *Shell) hideLayer(o fyne.CanvasObject) {
+	if o.Visible() {
+		o.Hide()
+	}
+}
+
+// showLayer показывает слой. Container.Show не перерисовывает, а Refresh
+// контейнера освободил бы текстуры изображений — только canvas.Refresh.
+func (s *Shell) showLayer(o fyne.CanvasObject) {
+	if o.Visible() {
+		return
+	}
+	o.Show()
+	s.Window.Canvas().Refresh(o)
+}
 
 // SearchFor открывает вкладку «Поиск» с запросом text: закрывает слои
 // (страницу произведения, читалку) и сразу выполняет поиск.

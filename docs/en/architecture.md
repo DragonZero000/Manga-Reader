@@ -44,9 +44,10 @@ FyneApp.toml         app metadata and the single source of the version
 | `internal/pages` | Prioritized page loading for the reader and display geometry |
 | `internal/browser` | Windows built-in browser: Firefox profile, bridge extension, launching, window attachment, registry cleanup |
 | `internal/mobilebrowser` | Bridge to the Android browser (JNI): open, clear data, receive download messages |
-| `internal/catalog` | Library catalog in SQLite (`library.db`, FTS5, `sqlite_fts5` tag): scan results across launches, the search index (`search.Index`), covers on disk, a copy of the page links of downloaded files; a recoverable cache |
+| `internal/catalog` | Library catalog in SQLite (`library.db`, FTS5, `sqlite_fts5` tag): scan results across launches, the search index (`search.Index`), a copy of the page links of downloaded files; a recoverable cache |
 | `internal/userdata` | User data about works in SQLite (`user.db`): work records with a stable `uid`, schema migrations, backup of a damaged file, reconciliation with scans and moving records by content fingerprint, the user's own and hidden tags, reading progress |
 | `internal/i18n` | Interface language: translations from `locales/<lang>.json` (go-i18n), plural forms, date, number and size formats, language choice at startup, Fyne built-in texts in the app language |
+| `internal/devreport` | Performance report of the dev build: on Android, saving to `.perf` in the library folder and Share (JNI, `DevReport.kt`); on other platforms, a file in the `perf` folder |
 | `internal/display` | Refresh rate of the app window on Android (JNI, `DisplayRate.kt`): the 60 Hz limit; a stub on other platforms |
 | `internal/appversion` | The version from `FyneApp.toml` and the Android build number |
 | `internal/ui` | Shell: window, tabs, toast notifications, wiring screens to services |
@@ -72,7 +73,7 @@ Platform code is split by build tags and file suffixes:
 |---|---|---|
 | `windows` / `!windows` | `*_windows.go`, `*_other.go` / `stub_other.go` | browser window and registry, NTFS streams |
 | `android` / `!android` | `*_android.go`, `other.go`, `*_other.go` | SAF, JNI bridge to GeckoView, refresh rate, app metadata |
-| `frameprobe` / `!frameprobe` | `frameprobe_on.go`, `frameprobe_off.go` | frame measurement for development (`make … EXTRA_TAGS=frameprobe`) |
+| `frameprobe` / `!frameprobe` | `frameprobe_on.go`, `probe_on.go`, `probe_off.go` | frame measurement, the Development section in Settings and the autoscroll scenarios (`make … EXTRA_TAGS=frameprobe`, `make build-android-dev`) |
 
 Where a feature doesn't exist, a stub takes over: for example, `internal/browser` on Android reports that the browser is unsupported, and the UI doesn't show the Windows browser settings. A new platform feature always comes with a stub for the other platforms.
 
@@ -81,6 +82,18 @@ Linux is not supported yet.
 ## Threads and UI
 
 The app is migrated to `fyne.Do` (`[Migrations] fyneDo = true` in `FyneApp.toml`): widgets are changed **only** from the main thread. Scanning, thumbnail and page decoding, search and browser events run in goroutines and hand results to the UI through `fyne.Do`. `make run` starts the app with Fyne thread checks; release builds use the `migrated_fynedo` tag, without checks.
+
+## Layers, covers and page textures
+
+Fyne uploads an image to the GPU on the UI thread the first time the image object is drawn inside the visible area, and keeps the texture per `canvas.Image` object: `Refresh` and `Resize` to a new size free it, `Move`, `Hide` and `Show` don't, and a texture not drawn for a minute is freed. What follows from that:
+
+- **Layers.** The gallery page and the reader are layers in a `Stack` above the tabs. A layer fully covered by the one above is hidden (`Shell.updateLayers`): the tabs while the gallery page or the reader is open, the gallery page while the reader is open. A hidden layer gets no taps, hovers or wheel and isn't drawn; the tabs keep the selected tab, grid scroll and search text.
+- **Covers** (`screens/covers.go`). Each grid has a pool of `canvas.Image` objects keyed by the thumbnail (gallery, file time, cover area), three screens of cards in size. A card shows a pool object; an object seen on screen less than 30 s ago is put into a card at once, without a new upload. A new cover goes through a queue: rows in the scroll direction, left to right within a row, at a budget of covers per second counted from the actual time between frames (60/s on the phone, 120/s on the PC), so screens of any refresh rate behave the same. A grid refresh that changes nothing (scan, search, tab switch) doesn't touch the covers.
+- **Cover cache on disk** (`thumbs.DirStore`). Ready thumbnails are JPEG files `<key hash>_<w>x<h>.jpg`: on Android in the app's system cache (`getCacheDir()/covers`, which the system counts as "Cache"), on the PC in `cache/thumbs`. After a scan, covers of galleries that are gone are deleted in the background.
+- **Thumbnail prefetch** (`thumbs.Cache.Prefetch`). A second job stack with lower priority: a screen of cards above and below the visible ones, two screens in the scroll direction. Visible cards are always decoded first; prefetch jobs that left the window are dropped without decoding.
+- **Reader page textures** (`reader/warmer.go`). Ready page images that aren't on screen yet — strip chunks in the layout window and the neighbouring pages of paged mode — are uploaded ahead of time at a budget of pixels per second (40 Mpx/s on the phone, 120 Mpx/s on the PC): on one frame the object is moved to touch the screen by one pixel row under the visible page, on the next it returns. Paged mode keeps up to four image objects, each at its own fit-to-screen size, so a flip only switches visibility. Visible images never wait for the budget.
+- **Mouse wheel** (PC). A `WheelSmoother` above the grids, the gallery page and the strip takes only wheel events and scrolls to the target in a 100 ms animation; taps, hovers and scroll-bar drags pass through it.
+- **Search** reruns the last query on opening the tab or after a scan only if the library changed since (`libRev` in the shell: a scan with a changed list, a delete, an edit of own or hidden tags).
 
 ## User data
 

@@ -13,6 +13,7 @@ import (
 	"mangareader/internal/library"
 	"mangareader/internal/model"
 	"mangareader/internal/pages"
+	"mangareader/internal/ui/screens"
 )
 
 const (
@@ -41,7 +42,9 @@ type stripView struct {
 	pending int  // страница, которую показать после построения раскладки
 	top     int
 
-	scroll  *container.Scroll
+	scroll *container.Scroll
+	// view — scroll со сглаживанием колеса (ПК)
+	view    fyne.CanvasObject
 	content *stripContent
 	spinner *widget.Activity
 	// end — блок «Конец» с кнопкой «Завершить чтение» после последней страницы
@@ -80,6 +83,7 @@ func newStripView(r *Reader) *stripView {
 	v.content = newStripContent(v)
 	v.scroll = container.NewVScroll(v.content)
 	v.scroll.OnScrolled = func(fyne.Position) { v.updateVisible() }
+	v.view = screens.WithWheel(v, v.scroll)
 	v.ExtendBaseWidget(v)
 	return v
 }
@@ -163,9 +167,19 @@ func (v *stripView) typedKey(k fyne.KeyName, _ bool) {
 	}
 }
 
-func (v *stripView) scrollBy(dy float32) {
-	y := max(0, min(v.scroll.Offset.Y+dy, v.maxOffset()))
-	v.scroll.ScrollToOffset(fyne.NewPos(0, y))
+func (v *stripView) scrollBy(dy float32) { v.ScrollToOffset(v.scroll.Offset.Y + dy) }
+
+// ScrollOffset — смещение ленты (screens.ScrollTarget).
+func (v *stripView) ScrollOffset() float32 { return v.scroll.Offset.Y }
+
+// MaxScrollOffset — наибольшее смещение ленты (screens.ScrollTarget).
+func (v *stripView) MaxScrollOffset() float32 { return v.maxOffset() }
+
+// ScrollToOffset прокручивает ленту к смещению y и обновляет окно
+// размещённых страниц: программное смещение не вызывает OnScrolled
+// (screens.ScrollTarget).
+func (v *stripView) ScrollToOffset(y float32) {
+	v.scroll.ScrollToOffset(fyne.NewPos(0, max(0, min(y, v.maxOffset()))))
 	v.updateVisible()
 }
 
@@ -354,7 +368,60 @@ func (v *stripView) apply(it *stripItem, req pages.Request, res pages.Result) {
 	if s := v.sizes[it.page]; s.Width <= 0 || s.Height <= 0 {
 		v.setHeight(it.page, v.width*float32(res.H)/float32(res.W))
 	}
-	v.content.Refresh()
+	v.content.Refresh() // раскладка: куски получают итоговый размер
+	v.warmParts(it)
+}
+
+// warmParts ставит куски страницы, которых нет на экране, в очередь
+// заблаговременной загрузки текстур; куски на экране рисуются сразу.
+func (v *stripView) warmParts(it *stripItem) {
+	for i, img := range it.parts {
+		if i >= len(it.res.Parts) {
+			break
+		}
+		if _, st := v.warmSpot(it, img); st == warmDrop {
+			continue
+		}
+		v.r.warm.add(img, func() (fyne.Position, warmState) { return v.warmSpot(it, img) }, nil)
+	}
+}
+
+// warmSpot — куда сдвинуть кусок img страницы it, чтобы он касался экрана
+// одной строкой пикселей у ближнего края: кусок ниже экрана — верхним
+// краем к нижней строке экрана, выше — нижним краем к верхней. Край экрана
+// должен быть занят загруженной страницей (она рисуется поверх куска);
+// иначе прогрев откладывается. Кусок на экране или освобождённый не
+// прогревается.
+func (v *stripView) warmSpot(it *stripItem, img *canvas.Image) (fyne.Position, warmState) {
+	if !v.r.visible || !v.Visible() || !v.ready || v.items[it.page] != it || !it.loaded || img.Image == nil || !img.Visible() {
+		return fyne.Position{}, warmDrop
+	}
+	off, h := v.scroll.Offset.Y, v.scroll.Size().Height
+	base := v.prefix[it.page]
+	top := base + img.Position().Y
+	bottom := top + img.Size().Height
+	px := 1 / v.r.scale()
+	switch {
+	case top >= off+h: // ниже экрана
+		if !v.coveredAt(off + h - px) {
+			return fyne.Position{}, warmLater
+		}
+		return fyne.NewPos(img.Position().X, off+h-px-base), warmNow
+	case bottom <= off: // выше экрана
+		if !v.coveredAt(off) {
+			return fyne.Position{}, warmLater
+		}
+		return fyne.NewPos(img.Position().X, off+px-img.Size().Height-base), warmNow
+	}
+	return fyne.Position{}, warmDrop // на экране
+}
+
+// coveredAt — строка y содержимого занята загруженной страницей.
+func (v *stripView) coveredAt(y float32) bool {
+	page := pages.TopPage(v.prefix, y)
+	it, ok := v.items[page]
+	return ok && it.loaded && it.res.Err == nil && len(it.res.Parts) > 0 &&
+		y >= v.prefix[page] && y < v.prefix[page]+v.heights[page]
 }
 
 // setHeight меняет высоту страницы; если она выше текущей позиции,
@@ -375,6 +442,7 @@ func (v *stripView) setHeight(page int, h float32) {
 
 func (v *stripView) release(it *stripItem) {
 	for _, img := range it.parts {
+		v.r.warm.remove(img)
 		img.Image = nil
 		img.Hide()
 	}
@@ -425,7 +493,7 @@ type stripRenderer struct {
 }
 
 func (s *stripRenderer) Layout(size fyne.Size) {
-	s.v.scroll.Resize(size)
+	s.v.view.Resize(size)
 	s.center.Resize(size)
 	if size.Width > 0 && size.Width != s.v.width && s.v.sizes != nil {
 		s.v.layout(size.Width)
@@ -438,7 +506,7 @@ func (s *stripRenderer) MinSize() fyne.Size { return fyne.NewSize(1, 1) }
 func (s *stripRenderer) Refresh()           { s.Layout(s.v.Size()) }
 func (s *stripRenderer) Destroy()           {}
 func (s *stripRenderer) Objects() []fyne.CanvasObject {
-	return []fyne.CanvasObject{s.v.scroll, s.center}
+	return []fyne.CanvasObject{s.v.view, s.center}
 }
 
 // stripContent — содержимое прокрутки: общая высота всех страниц и блока
@@ -486,11 +554,21 @@ func (r *contentRenderer) Refresh() {
 	r.c.v.r.win.Canvas().Refresh(r.c)
 }
 
+// Objects: страницы вне экрана — раньше (под) страниц на экране: куски,
+// сдвинутые для прогрева текстур, рисуются под видимой страницей.
 func (r *contentRenderer) Objects() []fyne.CanvasObject {
-	objs := make([]fyne.CanvasObject, 0, len(r.c.v.items)+1)
-	objs = append(objs, r.c.v.end)
-	for _, it := range r.c.v.items {
-		objs = append(objs, it.box)
+	v := r.c.v
+	objs := make([]fyne.CanvasObject, 1, len(v.items)+1)
+	objs[0] = v.end
+	for page, it := range v.items {
+		if page < v.lastScreenFrom || page >= v.lastScreenTo {
+			objs = append(objs, it.box)
+		}
+	}
+	for page, it := range v.items {
+		if page >= v.lastScreenFrom && page < v.lastScreenTo {
+			objs = append(objs, it.box)
+		}
 	}
 	return objs
 }

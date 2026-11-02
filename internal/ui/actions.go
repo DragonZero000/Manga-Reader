@@ -124,6 +124,7 @@ func (s *Shell) removed(k model.Key) {
 	}
 	s.library.Remove(k)
 	s.search.Remove(k)
+	s.libRev++ // результаты уже без галереи; запрос — при следующем открытии вкладки
 	s.library.RequestScan()
 }
 

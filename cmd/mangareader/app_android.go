@@ -11,8 +11,10 @@ import (
 	"mangareader/internal/paths"
 )
 
-// mobileMemoryLimit — мягкий лимит кучи Go на телефонах.
-const mobileMemoryLimit = 192 << 20
+// mobileMemoryLimit — мягкий лимит кучи Go на телефонах. В открытой читалке
+// живая куча около 220 МБ (кэш страниц, миниатюры, пул обложек): при лимите
+// ниже неё сборщик работает почти непрерывно — тысячи пауз за минуту.
+const mobileMemoryLimit = 384 << 20
 
 // newFyneApp — Android: приложение с ID (метаданные — metadata_android.go).
 func newFyneApp() fyne.App {

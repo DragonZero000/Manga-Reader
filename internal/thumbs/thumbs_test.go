@@ -364,3 +364,67 @@ func TestStoreBrokenNotSaved(t *testing.T) {
 		t.Fatal("ошибки в хранилище не сохраняются")
 	}
 }
+
+// waitDecodes ждёт n декодирований.
+func waitDecodes(t *testing.T, c *Cache, n int64) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for c.decodes.Load() < n {
+		if time.Now().After(deadline) {
+			t.Fatalf("декодирований %d, ждали %d", c.decodes.Load(), n)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// Видимые карточки грузятся раньше предзагрузки; предзагрузка — в порядке
+// набора и в кэш.
+func TestPrefetchAfterVisible(t *testing.T) {
+	o := &orderedOpen{data: pngOf(t, 8, 8), release: make(chan struct{})}
+	c := New(o.open, 1<<20, 1)
+	c.Load(gallery("busy.zip"), func(image.Image, error) {})
+	waitOpened(t, o, 1)
+	c.Prefetch([]model.Gallery{gallery("near.zip"), gallery("far.zip")})
+	c.Load(gallery("visible.zip"), func(image.Image, error) {})
+	close(o.release)
+	waitDecodes(t, c, 4)
+	if got := o.opened(); !slices.Equal(got, []string{"busy.zip", "visible.zip", "near.zip", "far.zip"}) {
+		t.Fatalf("порядок %v", got)
+	}
+	if _, _, ok := c.Cached(gallery("far.zip")); !ok {
+		t.Fatal("предзагруженной миниатюры нет в кэше")
+	}
+	// уже в кэше — повторная предзагрузка ничего не декодирует
+	c.Prefetch([]model.Gallery{gallery("near.zip")})
+	if r := load(c, gallery("after.zip")); r.err != nil {
+		t.Fatal(r.err)
+	}
+	if c.decodes.Load() != 5 {
+		t.Fatalf("декодирований %d", c.decodes.Load())
+	}
+}
+
+// Выпавшие из нового набора задания не декодируются; отменённый запрос
+// видимой карточки, оставшийся в наборе, выполняется как предзагрузка.
+func TestPrefetchReplacesSet(t *testing.T) {
+	o := &orderedOpen{data: pngOf(t, 8, 8), release: make(chan struct{})}
+	c := New(o.open, 1<<20, 1)
+	c.Load(gallery("busy.zip"), func(image.Image, error) {})
+	waitOpened(t, o, 1)
+	c.Prefetch([]model.Gallery{gallery("old1.zip"), gallery("old2.zip")})
+	cancel := c.Load(gallery("left.zip"), func(image.Image, error) {})
+	cancel() // карточка ушла с экрана, но осталась в окне предзагрузки
+	c.Prefetch([]model.Gallery{gallery("new.zip"), gallery("left.zip")})
+	close(o.release)
+	waitDecodes(t, c, 3)
+	if r := load(c, gallery("after.zip")); r.err != nil {
+		t.Fatal(r.err)
+	}
+	got := o.opened()
+	if slices.Contains(got, "old1.zip") || slices.Contains(got, "old2.zip") {
+		t.Fatalf("выпавшие из набора декодированы: %v", got)
+	}
+	if !slices.Contains(got, "new.zip") || !slices.Contains(got, "left.zip") || c.decodes.Load() != 4 {
+		t.Fatalf("открыто %v, декодирований %d", got, c.decodes.Load())
+	}
+}

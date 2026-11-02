@@ -38,8 +38,9 @@ type Library struct {
 	src      *library.Source
 	problems *problems.Tracker
 	notify   func(string)
-	// OnScanned вызывается в UI-потоке после каждого успешного сканирования.
-	OnScanned func()
+	// OnScanned вызывается в UI-потоке после каждого успешного сканирования;
+	// changed — список галерей изменился (новые, изменённые, удалённые файлы).
+	OnScanned func(changed bool)
 	// do выполняет функцию в UI-потоке (fyne.Do); подменяется в тестах.
 	do func(func())
 
@@ -95,7 +96,10 @@ func NewLibrary(svc *app.Services, metrics *GridMetrics, notify func(string), ac
 func (l *Library) Content() fyne.CanvasObject { return l.content }
 
 // SetDispatcher задаёт функцию выполнения в UI-потоке (для тестов).
-func (l *Library) SetDispatcher(do func(func())) { l.do = do }
+func (l *Library) SetDispatcher(do func(func())) {
+	l.do = do
+	l.grid.do = do
+}
 
 // AddTool добавляет кнопку на панель библиотеки (после 🎲, перед «Обновить»).
 func (l *Library) AddTool(o fyne.CanvasObject) {
@@ -152,6 +156,12 @@ func (l *Library) Remove(k model.Key) {
 		l.show(l.empty)
 	}
 }
+
+// Scroller — прокрутка сетки (для тестов и замера).
+func (l *Library) Scroller() ScrollTarget { return l.grid }
+
+// GridWidget — объект сетки на экране (для тестов).
+func (l *Library) GridWidget() fyne.CanvasObject { return l.grid.Widget() }
 
 // Galleries — галереи в сетке (для тестов).
 func (l *Library) Galleries() []model.Gallery { return l.grid.Items() }
@@ -223,7 +233,11 @@ func (l *Library) applyScan(res library.ScanResult, err error) {
 	}
 	l.scanned = true
 	l.retryBusy(len(res.Busy))
-	l.grid.SetItems(res.Galleries)
+	// без изменений сетка не обновляется: карточки не перезагружают обложки
+	changed := !sameGalleries(l.grid.Items(), res.Galleries)
+	if changed {
+		l.grid.SetItems(res.Galleries)
+	}
 	l.updateCount()
 	l.updateEmptyDir()
 	if len(res.Galleries) == 0 {
@@ -236,8 +250,23 @@ func (l *Library) applyScan(res library.ScanResult, err error) {
 		l.notify(i18n.T("library.new_errors", "Count", n))
 	}
 	if l.OnScanned != nil {
-		l.OnScanned()
+		l.OnScanned(changed)
 	}
+}
+
+// sameGalleries — списки из тех же файлов в том же порядке: ключ, время
+// изменения и размер совпадают.
+func sameGalleries(a, b []model.Gallery) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		fa, fb := a[i].File, b[i].File
+		if a[i].Key != b[i].Key || !fa.ModTime.Equal(fb.ModTime) || fa.Size != fb.Size {
+			return false
+		}
+	}
+	return true
 }
 
 // retryBusy планирует повтор, пока есть занятые файлы; после busyRetries

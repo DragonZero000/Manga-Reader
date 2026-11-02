@@ -76,6 +76,7 @@ make build-windows          # dist/mangareader.exe
 make package-windows        # dist/MangaReader/ with the browser and licenses, and dist/MangaReader.zip
 make build-android          # dist/mangareader.apk (debug, arm64; needs Android Studio and NDK 27+)
 make build-android-release  # dist/mangareader-release.apk (signing key: see building.md)
+make build-android-dev      # dist/mangareader-dev.apk (separate "MangaReader Dev" app with the frame probe)
 make browser                # portable Firefox ESR in browser/firefox (for make run, Windows only)
 make clean                  # delete dist/
 ```

@@ -74,7 +74,8 @@ func TestShellEditTags(t *testing.T) {
 	if !reflect.DeepEqual(got.Custom, []model.Tag{model.NewTag("character", "alice")}) {
 		t.Fatalf("галерея после правки: %v", got.Custom)
 	}
-	// текущий поиск выполнен заново и видит новый тег
+	// при возврате на «Поиск» запрос выполнен заново и видит новый тег
+	s.Tabs.Select(s.searchTab)
 	waitUI(t, pump, "поиск повторён", func() bool { return len(s.Search().Results()) == 1 })
 
 	names := make(chan []string, 1)

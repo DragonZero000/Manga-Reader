@@ -5,6 +5,7 @@ package app
 import (
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 
 	"fyne.io/fyne/v2"
@@ -14,6 +15,9 @@ import (
 	"mangareader/internal/storage"
 	"mangareader/internal/userdata"
 )
+
+// coversDirName — папка кэша обложек в системном кэше приложения.
+const coversDirName = "covers"
 
 // New — Android: папка библиотеки выбирается пользователем (SAF), выбор
 // хранится в настройках Fyne (внутреннее хранилище приложения).
@@ -35,8 +39,9 @@ func New(version string, a fyne.App) *Services {
 	if tree != "" {
 		st = library.WithLinks(storage.NewSAF(tree), links)
 	}
-	// телефон: меньше памяти и ядер под миниатюры, чтобы не мешать UI
-	s := newServices(version, st, settings, thumbsConfig{limit: 48 << 20, workers: 2}, cat)
+	// телефон: меньше памяти и ядер под миниатюры, чтобы не мешать UI; обложки
+	// на диске — в системном кэше приложения (TMPDIR = getCacheDir())
+	s := newServices(version, st, settings, thumbsConfig{limit: 48 << 20, workers: 2, dir: filepath.Join(os.TempDir(), coversDirName)}, cat)
 	s.CanChooseFolder = true
 	s.MobileBrowser = true
 	s.Links = links
@@ -63,6 +68,11 @@ func (s *Services) SetFolder(tree string) error {
 		return fmt.Errorf("could not keep access to the folder: %w", err)
 	}
 	s.Settings.SetString(KeyLibraryTree, tree)
+	if s.Covers != nil {
+		if err := s.Covers.Clear(); err != nil {
+			log.Printf("covers: changing folder: %v", err)
+		}
+	}
 	if s.Catalog != nil {
 		// каталог — одной папки: прежние галереи, обложки и ссылки не нужны
 		if err := s.Catalog.Reset(tree); err != nil {

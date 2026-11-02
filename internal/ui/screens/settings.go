@@ -49,7 +49,19 @@ type Settings struct {
 	browser       *browserCard // nil — встроенного браузера нет
 	// mobileBrowser — раздел «Браузер» на Android (nil — нет)
 	mobileBrowser *widget.Card
-	content       fyne.CanvasObject
+	// coverSize — «Кэш обложек: N МБ», coverClear — «Очистить»;
+	// coverSeq отбрасывает устаревшие подсчёты, clearing — идёт очистка.
+	coverSize  *widget.Label
+	coverClear *widget.Button
+	coverSeq   int
+	clearing   bool
+	notify     func(string)
+	// do выполняет функцию в UI-потоке (fyne.Do); подменяется в тестах.
+	do     func(func())
+	scroll *container.Scroll
+	// cards — разделы; последний — «О программе»
+	cards   *fyne.Container
+	content fyne.CanvasObject
 }
 
 // NewSettings создаёт экран; choose открывает выбор папки (Android, иначе nil),
@@ -57,7 +69,7 @@ type Settings struct {
 // кнопки 🎲, onGrid вызывается после смены плотности сетки. win — окно для
 // диалогов.
 func NewSettings(a fyne.App, win fyne.Window, svc *app.Services, notify func(string), choose func(), onSearchMode, onRandomMode func(string), onGrid func()) *Settings {
-	s := &Settings{svc: svc}
+	s := &Settings{svc: svc, notify: notify, do: fyne.Do}
 	s.path = widget.NewLabelWithStyle("", fyne.TextAlignLeading, fyne.TextStyle{Monospace: true})
 	s.path.Wrapping = fyne.TextWrapBreak
 
@@ -77,6 +89,7 @@ func NewSettings(a fyne.App, win fyne.Window, svc *app.Services, notify func(str
 		errLabel.Importance = widget.DangerImportance
 		items = append(items, errLabel)
 	}
+	items = append(items, s.newCoverCache()...)
 
 	libraryCard := widget.NewCard(i18n.T("settings.library.title"), "", container.NewVBox(items...))
 	aboutCard := widget.NewCard(i18n.T("settings.about.title"), "", widget.NewLabel("MangaReader "+svc.Version))
@@ -94,10 +107,93 @@ func NewSettings(a fyne.App, win fyne.Window, svc *app.Services, notify func(str
 		cards.Add(s.mobileBrowser)
 	}
 	cards.Add(aboutCard)
-	s.content = container.NewVScroll(cards)
+	s.cards = cards
+	s.scroll = container.NewVScroll(cards)
+	s.content = s.scroll
 	s.Update()
 	return s
 }
+
+// AddCard добавляет раздел перед «О программе» (раздел «Разработка»
+// dev-сборки).
+func (s *Settings) AddCard(c fyne.CanvasObject) {
+	objs := s.cards.Objects
+	last := objs[len(objs)-1]
+	s.cards.Objects = append(append(objs[:len(objs)-1:len(objs)-1], c), last)
+	s.cards.Refresh()
+}
+
+// newCoverCache — строка «Кэш обложек: N МБ» с кнопкой «Очистить» и
+// пояснение. Без кэша на диске — «0 МБ», кнопка недоступна.
+func (s *Settings) newCoverCache() []fyne.CanvasObject {
+	s.coverSize = widget.NewLabel("")
+	s.coverSize.Wrapping = fyne.TextWrapWord
+	s.coverClear = widget.NewButtonWithIcon(i18n.T("settings.covers.clear"), theme.DeleteIcon(), s.clearCovers)
+	if s.svc.Covers == nil {
+		s.coverSize.SetText(i18n.T("settings.covers.size", "Size", i18n.MB(0)))
+		s.coverClear.Disable()
+	} else {
+		s.coverSize.SetText(i18n.T("settings.covers.size", "Size", "…"))
+	}
+	return []fyne.CanvasObject{container.NewBorder(nil, nil, nil, s.coverClear, s.coverSize),
+		cardNote(i18n.T("settings.covers.hint"))}
+}
+
+// UpdateCoverCache пересчитывает объём кэша обложек вне UI-потока; пока
+// идёт подсчёт — «…». Вызывать из UI-потока (открытие вкладки «Настройки»).
+func (s *Settings) UpdateCoverCache() {
+	covers := s.svc.Covers
+	if covers == nil {
+		return
+	}
+	s.coverSeq++
+	seq := s.coverSeq
+	s.coverSize.SetText(i18n.T("settings.covers.size", "Size", "…"))
+	go func() {
+		n, err := covers.Size()
+		if err != nil {
+			log.Printf("cover cache size: %v", err)
+		}
+		s.do(func() {
+			if seq == s.coverSeq {
+				s.coverSize.SetText(i18n.T("settings.covers.size", "Size", i18n.MB(n)))
+			}
+		})
+	}()
+}
+
+// clearCovers удаляет файлы кэша обложек вне UI-потока, без подтверждения;
+// миниатюры в памяти остаются, видимые карточки не меняются.
+func (s *Settings) clearCovers() {
+	covers := s.svc.Covers
+	if covers == nil || s.clearing {
+		return
+	}
+	s.clearing = true
+	s.coverClear.Disable()
+	go func() {
+		err := covers.Clear()
+		s.do(func() {
+			s.clearing = false
+			s.coverClear.Enable()
+			if err != nil {
+				log.Printf("cover cache: %v", err)
+				s.notify(i18n.T("settings.covers.clear_failed", "Error", ErrorText(err)))
+			} else {
+				s.notify(i18n.T("settings.covers.cleared"))
+			}
+			s.UpdateCoverCache()
+		})
+	}()
+}
+
+// SetDispatcher задаёт функцию выполнения в UI-потоке (для тестов).
+func (s *Settings) SetDispatcher(do func(func())) { s.do = do }
+
+// CoverCacheText — строка кэша обложек; CoverClearButton — «Очистить» (для тестов).
+func (s *Settings) CoverCacheText() string { return s.coverSize.Text }
+
+func (s *Settings) CoverClearButton() *widget.Button { return s.coverClear }
 
 // cardNote — пояснение раздела настроек с переносом по словам. Подзаголовок
 // widget.Card не переносится: длинный растягивает весь экран настроек шире
@@ -489,6 +585,9 @@ func (s *Settings) LanguageHint() string {
 }
 
 func (s *Settings) Content() fyne.CanvasObject { return s.content }
+
+// Scroller — прокрутка экрана настроек (для замера).
+func (s *Settings) Scroller() ScrollTarget { return ScrollOf(s.scroll) }
 
 // SetBrowserRunning отражает, открыт ли встроенный браузер. Вызывать из UI-потока.
 func (s *Settings) SetBrowserRunning(running bool) {

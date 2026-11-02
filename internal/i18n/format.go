@@ -58,3 +58,13 @@ func Size(n int64) string {
 	num := strings.Replace(strconv.FormatFloat(v, 'f', 1, 64), ".", T("number.decimal"), 1)
 	return num + " " + T(units[i])
 }
+
+// MB — размер в мегабайтах (основание 1024) с одной цифрой после
+// десятичного разделителя языка: «9,8 МБ» / «9.8 MB»; ноль — «0 МБ».
+func MB(n int64) string {
+	if n <= 0 {
+		return "0 " + T("size.mb")
+	}
+	num := strconv.FormatFloat(float64(n)/(1<<20), 'f', 1, 64)
+	return strings.Replace(num, ".", T("number.decimal"), 1) + " " + T("size.mb")
+}

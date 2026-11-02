@@ -146,30 +146,3 @@ func TestStoreLinks(t *testing.T) {
 	}
 }
 
-// Обложки: сохраняются для области; обложки изменённых и удалённых файлов
-// удаляются при сохранении сканирования.
-func TestCovers(t *testing.T) {
-	c := openTest(t, filepath.Join(t.TempDir(), FileName), "root")
-	cv := c.Covers()
-	cv.Save("local:a.zip@1", "a.zip", 200, 300, []byte("jpeg-a"))
-	cv.Save("local:b.zip@1", "b.zip", 200, 300, []byte("jpeg-b"))
-	if d, ok := cv.Load("local:a.zip@1", 200, 300); !ok || string(d) != "jpeg-a" {
-		t.Fatalf("обложка: %q %v", d, ok)
-	}
-	if _, ok := cv.Load("local:a.zip@1", 100, 150); ok {
-		t.Fatal("обложка для другой области не должна подходить")
-	}
-	st := c.ScanStore()
-	if err := st.Save(library.ScanDelta{
-		Put:    map[string]library.StoredEntry{"a.zip": {Size: 1, Err: library.ErrEmpty}},
-		Delete: []string{"b.zip"},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := cv.Load("local:a.zip@1", 200, 300); ok {
-		t.Fatal("обложка изменённого файла осталась")
-	}
-	if _, ok := cv.Load("local:b.zip@1", 200, 300); ok {
-		t.Fatal("обложка удалённого файла осталась")
-	}
-}

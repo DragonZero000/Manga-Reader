@@ -3,7 +3,7 @@
 // Java-классы Fyne — из модуля Fyne той версии, что в go.mod, затем
 // gradlew assembleDebug/assembleRelease в папке android/ и копия APK в dist/.
 //
-//	go run ./tools/android-build [-abis arm64-v8a,armeabi-v7a] [-release [-require-signing]] [-tags frameprobe]
+//	go run ./tools/android-build [-abis arm64-v8a,armeabi-v7a] [-release [-require-signing]] [-tags frameprobe] [-dev]
 package main
 
 import (
@@ -51,12 +51,13 @@ func main() {
 	requireSigning := flag.Bool("require-signing", false, "с -release: ошибка, если ключ не задан (для релизов)")
 	out := flag.String("o", filepath.Join("dist", "mangareader.apk"), "куда положить APK")
 	extraTags := flag.String("tags", "", "дополнительные теги сборки через запятую (например, frameprobe)")
+	dev := flag.Bool("dev", false, "отдельное приложение «MangaReader Dev» (ID с суффиксом .dev): ставится рядом с основным")
 	flag.Parse()
 	log.SetFlags(0)
 	if err := checkSigning(*release, *requireSigning, os.Getenv("MANGAREADER_KEYSTORE")); err != nil {
 		log.Fatal("android-build: ", err)
 	}
-	if err := run(splitABIs(*abiList), *release, *out, buildTags(*extraTags)); err != nil {
+	if err := run(splitABIs(*abiList), *release, *dev, *out, buildTags(*extraTags)); err != nil {
 		log.Fatal("android-build: ", err)
 	}
 }
@@ -73,7 +74,7 @@ func checkSigning(release, require bool, keystore string) error {
 	return nil
 }
 
-func run(list []string, release bool, out, tags string) error {
+func run(list []string, release, dev bool, out, tags string) error {
 	if len(list) == 0 {
 		return errors.New("не заданы архитектуры")
 	}
@@ -133,8 +134,7 @@ func run(list []string, release bool, out, tags string) error {
 			log.Print("MANGAREADER_KEYSTORE не задан — release-APK будет без подписи")
 		}
 	}
-	args := []string{task, "--console=plain",
-		"-PmangareaderAbis=" + strings.Join(list, ","), "-PversionName=" + version, "-PversionCode=" + strconv.Itoa(build)}
+	args := gradleArgs(task, list, version, build, dev)
 	// абсолютный путь: при NoDefaultCurrentDirectoryInExePath cmd.exe не
 	// запускает программы из текущей папки по имени
 	name := "gradlew"
@@ -165,6 +165,17 @@ func run(list []string, release bool, out, tags string) error {
 
 // buildTags — теги сборки библиотеки: migrated_fynedo, sqlite_fts5 (FTS5 в
 // SQLite каталога) и дополнительные (через запятую или пробел), без повторов.
+// gradleArgs — аргументы gradlew: задача, архитектуры, версия; dev — отдельное
+// приложение «MangaReader Dev» (свойство mangareaderDev в app/build.gradle.kts).
+func gradleArgs(task string, list []string, version string, build int, dev bool) []string {
+	args := []string{task, "--console=plain",
+		"-PmangareaderAbis=" + strings.Join(list, ","), "-PversionName=" + version, "-PversionCode=" + strconv.Itoa(build)}
+	if dev {
+		args = append(args, "-PmangareaderDev=true")
+	}
+	return args
+}
+
 func buildTags(extra string) string {
 	tags := []string{"migrated_fynedo", "sqlite_fts5"}
 	for _, t := range splitABIs(extra) {

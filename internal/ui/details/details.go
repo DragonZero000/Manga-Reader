@@ -58,6 +58,8 @@ type Details struct {
 	g       model.Gallery
 	visible bool
 	token   int
+	// onVisibility вызывается после открытия и закрытия страницы (слои оболочки).
+	onVisibility func()
 
 	title  *widget.Label
 	scroll *container.Scroll
@@ -115,13 +117,25 @@ func New(win fyne.Window, src *library.Source, th *thumbs.Cache, onRead func(mod
 
 	d.scroll = container.NewVScroll(container.NewPadded(d.body))
 	bg := canvas.NewRectangle(theme.Color(theme.ColorNameBackground))
-	d.layer = container.NewStack(bg, container.NewBorder(top, nil, nil, nil, d.scroll))
+	page := screens.WithWheel(screens.ScrollOf(d.scroll), d.scroll)
+	d.layer = container.NewStack(bg, container.NewBorder(top, nil, nil, nil, page))
 	d.layer.Hide()
 	return d
 }
 
 // SetDispatcher задаёт функцию выполнения в UI-потоке (для тестов).
 func (d *Details) SetDispatcher(do func(func())) { d.do = do }
+
+// SetOnVisibility задаёт действие после открытия и закрытия страницы:
+// оболочка скрывает закрытые слои.
+func (d *Details) SetOnVisibility(f func()) { d.onVisibility = f }
+
+// visibilityChanged сообщает оболочке о смене видимости.
+func (d *Details) visibilityChanged() {
+	if d.onVisibility != nil {
+		d.onVisibility()
+	}
+}
 
 // SetOpenURL задаёт открытие ссылки на произведение (кнопка «Открыть в
 // браузере»); nil — кнопка не показывается.
@@ -196,6 +210,9 @@ func (d *Details) OpenInBrowserButton() *widget.Button { return d.linkBtn }
 // Layer — объект для размещения в Stack оболочки.
 func (d *Details) Layer() fyne.CanvasObject { return d.layer }
 
+// Scroller — прокрутка страницы (для тестов и замера).
+func (d *Details) Scroller() screens.ScrollTarget { return screens.ScrollOf(d.scroll) }
+
 // Visible сообщает, открыта ли страница произведения.
 func (d *Details) Visible() bool { return d.visible }
 
@@ -221,6 +238,7 @@ func (d *Details) Open(g model.Gallery) {
 	d.layer.Show()
 	d.repaint(d.layer)
 	d.cover.load()
+	d.visibilityChanged()
 }
 
 // Close закрывает страницу произведения.
@@ -236,6 +254,7 @@ func (d *Details) Close() {
 	d.cover.reset()
 	d.loader.Clear()
 	d.g = model.Gallery{}
+	d.visibilityChanged()
 }
 
 func (d *Details) read() {

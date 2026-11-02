@@ -31,8 +31,12 @@ const FileName = "library.db"
 // (Gallery.Fingerprint): каталог версии 2 пересоздаётся, библиотека
 // сканируется целиком. 4 — происхождение тегов в индексе (tags.src: свои и
 // скрытые теги); выходит вместе с 3, так что библиотека пересканируется один
-// раз.
-const schemaVersion = 4
+// раз. 5 — обложки не в каталоге, а файлами кэша (thumbs.DirStore): каталог
+// версии 4 переводится без пересоздания (migrateCovers).
+const schemaVersion = 5
+
+// coversVersion — user_version каталога с таблицей обложек (схема 4).
+func coversVersion() int { return 4*100 + search.NormVersion }
 
 // userVersion — PRAGMA user_version: схема и правила нормализации поиска.
 func userVersion() int { return schemaVersion*100 + search.NormVersion }
@@ -68,13 +72,11 @@ var schema = []string{
 	`CREATE TABLE tags(key TEXT, type TEXT, name TEXT, name_norm TEXT, src INTEGER NOT NULL,
 		PRIMARY KEY(key, type, name, src))`,
 	`CREATE INDEX tags_norm ON tags(name_norm, type)`,
-	`CREATE TABLE covers(key TEXT PRIMARY KEY, rel TEXT, w INTEGER, h INTEGER, jpeg BLOB)`,
-	`CREATE INDEX covers_rel ON covers(rel)`,
 	`CREATE TABLE links(rel TEXT PRIMARY KEY, url TEXT)`,
 }
 
 // dataTables — таблицы с данными одной папки библиотеки.
-var dataTables = []string{"files", "docs", "docs_fts", "tags", "covers", "links"}
+var dataTables = []string{"files", "docs", "docs_fts", "tags", "links"}
 
 // Catalog — открытый каталог.
 type Catalog struct {
@@ -142,6 +144,11 @@ func open(path string) (*Catalog, error) {
 			db.Close()
 			return nil, fmt.Errorf("creating schema: %w", err)
 		}
+	case ver == coversVersion():
+		if err := c.migrateCovers(); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("moving covers out: %w", err)
+		}
 	case ver != userVersion():
 		db.Close()
 		return nil, fmt.Errorf("version %d, need %d", ver, userVersion())
@@ -167,6 +174,18 @@ func (c *Catalog) create() error {
 		return err
 	}
 	c.fresh = true
+	return nil
+}
+
+// migrateCovers переводит каталог версии 4 на текущую: удаляет таблицу
+// обложек (они теперь файлами кэша) и освобождает её место в файле. Галереи
+// и индекс остаются — библиотека не пересканируется.
+func (c *Catalog) migrateCovers() error {
+	for _, q := range []string{`DROP TABLE IF EXISTS covers`, `PRAGMA user_version = ` + strconv.Itoa(userVersion()), `VACUUM`} {
+		if _, err := c.db.Exec(q); err != nil {
+			return fmt.Errorf("%s: %w", q, err)
+		}
+	}
 	return nil
 }
 

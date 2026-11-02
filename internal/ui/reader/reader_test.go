@@ -9,6 +9,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -278,5 +279,24 @@ func TestStripScrollWithinWindow(t *testing.T) {
 	}
 	if _, ok := v.items[2]; !ok {
 		t.Error("после goTo страница 3 должна быть размещена")
+	}
+}
+
+// Смена режима при закрытой читалке только запоминается: вид без галереи
+// не показывается (индикатор загрузки ленты не крутится скрытым), режим
+// применяется при открытии.
+func TestSetModeWhileClosed(t *testing.T) {
+	r, _, g := setup(t)
+	r.SetMode(ModeStrip)
+	if r.Mode() != ModeStrip || r.settings.String(prefMode, "") != ModeStrip {
+		t.Fatalf("режим %q", r.Mode())
+	}
+	// индикатор Fyne в состоянии «запущен» перерисовывает окно каждый кадр
+	if reflect.ValueOf(r.strip.spinner).Elem().FieldByName("started").Bool() {
+		t.Fatal("индикатор ленты без галереи запущен")
+	}
+	r.Open(g)
+	if !r.strip.Visible() || r.paged.Visible() {
+		t.Fatal("при открытии должна показаться лента")
 	}
 }

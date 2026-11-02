@@ -7,13 +7,9 @@ import (
 	"log"
 
 	"mangareader/internal/library"
-	"mangareader/internal/thumbs"
 )
 
-var (
-	_ library.LinkBackup = (*Catalog)(nil)
-	_ thumbs.Store       = Covers{}
-)
+var _ library.LinkBackup = (*Catalog)(nil)
 
 // Links — копия ссылок скачанных файлов (library.LinkBackup): ею
 // восстанавливается отсутствующий или повреждённый links.json.

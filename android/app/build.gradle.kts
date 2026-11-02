@@ -25,6 +25,15 @@ android {
         versionName = prop("versionName", "dev")
         versionCode = prop("versionCode", "1").toInt()
         ndk { abiFilters += abis }
+        // dev-сборка (make build-android-dev) — отдельное приложение рядом с
+        // основным: свой ID, название, настройки и библиотека
+        if (prop("mangareaderDev", "false").toBoolean()) {
+            applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
+            manifestPlaceholders["appLabel"] = "MangaReader Dev"
+        } else {
+            manifestPlaceholders["appLabel"] = "MangaReader"
+        }
     }
 
     // release подписывается ключом проекта из переменных окружения;

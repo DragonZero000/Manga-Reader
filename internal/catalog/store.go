@@ -74,12 +74,9 @@ func (s ScanStore) Save(d library.ScanDelta) error {
 				rel, e.Size, e.ModTime.UnixNano(), gallery, kind, errText); err != nil {
 				return err
 			}
-			if _, err := tx.Exec(`DELETE FROM covers WHERE rel = ?`, rel); err != nil {
-				return err
-			}
 		}
 		for _, rel := range d.Delete {
-			for _, q := range []string{`DELETE FROM files WHERE rel = ?`, `DELETE FROM covers WHERE rel = ?`, `DELETE FROM links WHERE rel = ?`} {
+			for _, q := range []string{`DELETE FROM files WHERE rel = ?`, `DELETE FROM links WHERE rel = ?`} {
 				if _, err := tx.Exec(q, rel); err != nil {
 					return err
 				}

@@ -34,6 +34,7 @@ make test                   # go vet + go test (including the documentation chec
 make build-windows          # dist/mangareader.exe
 make package-windows        # dist/MangaReader/ with the browser and licenses, and dist/MangaReader.zip
 make build-android          # dist/mangareader.apk (debug, arm64)
+make build-android-dev      # dist/mangareader-dev.apk (separate "MangaReader Dev" app with the frame probe)
 make build-android-release  # dist/mangareader-release.apk (key: see below)
 make browser                # portable Firefox ESR in browser/firefox (for make run, Windows only)
 make clean                  # delete dist/
@@ -69,15 +70,28 @@ The browser integration tests run when `MANGAREADER_BROWSER_IT` is set to the Fi
 
 ## Frame measurement
 
-A build with the `frameprobe` tag writes to the log every 5 seconds how evenly the render loop runs: the intervals between frames (median, p95, maximum) and the number of frames longer than 25 ms. Regular builds don't include it.
+A build with the `frameprobe` tag measures how evenly the render loop runs. It doesn't start anything by itself: Settings get a **Development** section with buttons:
+
+- **Run tests** — the autoscroll scenarios one after another (about 3 minutes, don't touch the screen), a summary of each;
+- **Manual measurement** / **Stop measurement** — records frames while you scroll yourself, a `manual` summary when stopped;
+- **Share** (Android) — the system share menu with the text of the last report; on the PC — **Open folder** with the reports.
+
+When the tests or a manual measurement end, the report (a header: version, platform, screen size and scale, "Limit to 60 Hz", grid density, number of galleries; then the summary lines) is saved to `perf-YYYYMMDD-HHMMSS.txt`: on Android in the hidden `.perf` folder inside the library folder (the scanner skips it), on the PC in the `perf` folder next to the program. Each summary also goes to the log. Regular builds don't have the section.
 
 ```sh
 make build-android EXTRA_TAGS=frameprobe   # APK with the probe
-adb logcat | grep frameprobe               # frameprobe: n=300 p50=16.4ms p95=17.4ms max=18.1ms >25ms=0
+make build-android-dev                     # the same as a separate app, see below
+adb logcat | grep frameprobe               # frameprobe[grid]: n=961 p50=16.6ms p95=17.0ms max=17.3ms slow=0 >25ms=0 gc=3.4ms/22 gcmax=1.0ms heap=109MB
 make run EXTRA_TAGS=frameprobe             # the same on the PC (to the console)
 ```
 
-How to read it: Fyne draws on a 60 Hz timer, so normal is p50 and p95 around 16.7 ms and `n` around 300. A large `max` and frames longer than 25 ms mean the UI thread is busy (for example, preparing images), so look in the code. The probe shows the step of the UI loop, not the moment a frame reaches the screen: if the intervals are even but scrolling still stutters, the cause is how frames are presented. Check that visually or with a Perfetto trace.
+Scenarios (the summary label): `grid` — the library grid; `search` — search results for `pages:>0`; `details` — the gallery page of the first gallery; `settings`; `strip` and `paged` — the reader on the gallery with the most pages; `tabs` — switching tabs every 500 ms; `density-…` — the library at each grid density (phone: 2, 3, 4 columns; PC: `s`, `m`, `l`). Scrolling runs at 1500 logical px/s, 8 s down and 8 s up (4 + 4 s for each density); paged mode turns a page every 300 ms. The log ends with `frameprobe: scenarios done`. The scenarios drive scrolling in code, so they don't exercise touch handling; use the manual measurement for that (on the emulator, with `adb shell input swipe`).
+
+Summary fields: `n` — frames; `p50`, `p95`, `max` — intervals between frames; `slow` — intervals longer than 1.5 × the median (meaningful at any refresh rate); `>25ms` — longer than 25 ms, for comparison with older measurements; `gc` — the total of garbage-collector pauses / their count, `gcmax` — the longest; `heap` — the live heap at the end of the summary.
+
+How to read it: Fyne draws on a 60 Hz timer, so normal is p50 and p95 around 16.7 ms. A large `max` and frames longer than 25 ms mean the UI thread is busy (for example, preparing images), so look in the code. The probe shows the step of the UI loop, not the moment a frame reaches the screen: if the intervals are even but scrolling still stutters, the cause is how frames are presented. Check that visually or with a Perfetto trace.
+
+`make build-android-dev` builds the probe APK as a separate app: ID `io.github.mangareader.app.dev`, name "MangaReader Dev", version with the `-dev` suffix (`tools/android-build -dev`). It installs next to the regular app and has its own settings, library folder and browser data, so testing doesn't touch the main app. Otherwise it behaves like the regular app; the tests run only from the Development section.
 
 `EXTRA_TAGS` — extra comma-separated build tags for `run`, `build-windows` and `build-android` (`tools/android-build -tags`).
 

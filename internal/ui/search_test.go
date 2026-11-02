@@ -51,6 +51,7 @@ func newTestShellSettings(t *testing.T, settings storage.Settings) (*Shell, *lib
 	s.Reader.SetDispatcher(do)
 	s.Search().SetDispatcher(do)
 	s.Search().SetDelay(testDelay)
+	s.Library().SetDispatcher(do)
 	pump := func() {
 		for {
 			select {
@@ -423,5 +424,57 @@ func TestGridSizeSetting(t *testing.T) {
 	s2, _, _ := newTestShellSettings(t, st)
 	if got := s2.Settings().GridLabel(); got != "Крупные" || s2.grid.Cover().Width != 200 {
 		t.Fatalf("после перезапуска %q, карточка %v", got, s2.grid.Cover())
+	}
+}
+
+// Запрос повторяется при открытии вкладки и после сканирования, только если
+// библиотека изменилась; сканирование без изменений не обновляет сетку.
+func TestSearchRerunOnlyAfterChanges(t *testing.T) {
+	s, src, pump := newTestShell(t)
+	sc, lib := s.Search(), s.Library()
+	scan := func() {
+		t.Helper()
+		lib.Refresh()
+		waitUI(t, pump, "сканирование", func() bool { return !lib.Scanning() })
+		settle(pump)
+	}
+	scan() // первое сканирование заполняет сетку библиотеки
+	sc.SetQuery("pages:>0")
+	waitUI(t, pump, "результаты", func() bool { return sc.StatusText() == "Найдено: 1" })
+	seq := sc.Seq()
+
+	s.Tabs.SelectIndex(0)
+	s.Tabs.Select(s.searchTab)
+	settle(pump)
+	if sc.Seq() != seq {
+		t.Fatal("переключение вкладок без изменений выполнило запрос")
+	}
+
+	items := lib.Galleries()
+	scan()
+	if sc.Seq() != seq {
+		t.Fatal("сканирование без изменений выполнило запрос")
+	}
+	if got := lib.Galleries(); len(got) != len(items) || &got[0] != &items[0] {
+		t.Fatal("сканирование без изменений обновило сетку")
+	}
+
+	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "example.zip"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src.Root(), "new.zip"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	scan()
+	waitUI(t, pump, "новый архив в результатах", func() bool { return sc.StatusText() == "Найдено: 2" })
+	if sc.Seq() != seq+1 || len(lib.Galleries()) != 2 {
+		t.Fatalf("новый архив: запросов %d (было %d), в библиотеке %d", sc.Seq(), seq, len(lib.Galleries()))
+	}
+	s.Tabs.SelectIndex(0)
+	s.Tabs.Select(s.searchTab)
+	settle(pump)
+	if sc.Seq() != seq+1 {
+		t.Fatal("запрос повторён без новых изменений")
 	}
 }

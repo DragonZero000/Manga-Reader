@@ -2,6 +2,7 @@ package screens
 
 import (
 	"testing"
+	"time"
 
 	"fyne.io/fyne/v2/test"
 
@@ -128,6 +129,7 @@ func TestLibraryShowCachedAfterScan(t *testing.T) {
 	a := test.NewTempApp(t)
 	svc := app.NewForTest(library.NewDirSource(t.TempDir(), nil), nil, storage.NewMemSettings())
 	l := NewLibrary(svc, NewGridMetrics(svc.Settings), func(string) {}, &GalleryActions{Open: func(model.Gallery) {}}, nil)
+	l.grid.do = func(func()) {} // обложки не нужны: колбэк загрузки не гонится с тестом
 	a.NewWindow("t").SetContent(l.Content())
 	l.applyScan(library.ScanResult{Galleries: []model.Gallery{galleryOf("fresh.zip")}}, nil)
 	l.ShowCached(library.ScanResult{Galleries: []model.Gallery{galleryOf("old1.zip"), galleryOf("old2.zip")}})
@@ -265,5 +267,80 @@ func TestDoubleTapCard(t *testing.T) {
 	s.SelectDoubleTap("300")
 	if app.ReaderDoubleTap(st) != 3 {
 		t.Fatal("300% не сохранено")
+	}
+}
+
+// fakeCovers — кэш обложек: Size и Clear ждут разрешения из теста.
+type fakeCovers struct {
+	size    int64
+	sizeGo  chan struct{}
+	clearGo chan struct{}
+	cleared bool
+}
+
+func (f *fakeCovers) Size() (int64, error) {
+	<-f.sizeGo
+	return f.size, nil
+}
+
+func (f *fakeCovers) Clear() error {
+	<-f.clearGo
+	f.size, f.cleared = 0, true
+	return nil
+}
+
+// Кэш обложек: «…» во время подсчёта, затем объём; очистка без
+// подтверждения с уведомлением, кнопка недоступна во время очистки.
+func TestCoverCacheSetting(t *testing.T) {
+	a := test.NewTempApp(t)
+	svc := app.NewForTest(library.NewDirSource(t.TempDir(), nil), nil, storage.NewMemSettings())
+	fc := &fakeCovers{size: 200 * 50 << 10, sizeGo: make(chan struct{}, 4), clearGo: make(chan struct{})}
+	svc.Covers = fc
+	var notes []string
+	s := NewSettings(a, a.NewWindow("t"), svc, func(n string) { notes = append(notes, n) }, nil, nil, nil, nil)
+	q := make(chan func(), 16)
+	s.SetDispatcher(func(f func()) { q <- f })
+	run := func() {
+		t.Helper()
+		select {
+		case f := <-q:
+			f()
+		case <-time.After(3 * time.Second):
+			t.Fatal("нет результата фоновой операции")
+		}
+	}
+
+	s.UpdateCoverCache()
+	if got := s.CoverCacheText(); got != "Кэш обложек: …" {
+		t.Fatalf("во время подсчёта %q", got)
+	}
+	fc.sizeGo <- struct{}{}
+	run()
+	if got := s.CoverCacheText(); got != "Кэш обложек: 9,8 МБ" {
+		t.Fatalf("объём %q", got)
+	}
+
+	test.Tap(s.CoverClearButton())
+	if !s.CoverClearButton().Disabled() {
+		t.Fatal("во время очистки кнопка должна быть недоступна")
+	}
+	close(fc.clearGo)
+	fc.sizeGo <- struct{}{}
+	run() // очистка завершена
+	if !fc.cleared || s.CoverClearButton().Disabled() || len(notes) != 1 || notes[0] != "Кэш обложек очищен" {
+		t.Fatalf("очистка %v, кнопка недоступна %v, уведомления %q", fc.cleared, s.CoverClearButton().Disabled(), notes)
+	}
+	run() // подсчёт после очистки
+	if got := s.CoverCacheText(); got != "Кэш обложек: 0 МБ" {
+		t.Fatalf("после очистки %q", got)
+	}
+}
+
+// Без каталога — «0 МБ», кнопка недоступна.
+func TestCoverCacheWithoutCatalog(t *testing.T) {
+	s := newTestSettings(t, storage.NewMemSettings())
+	s.UpdateCoverCache()
+	if got := s.CoverCacheText(); got != "Кэш обложек: 0 МБ" || !s.CoverClearButton().Disabled() {
+		t.Fatalf("строка %q, кнопка недоступна %v", got, s.CoverClearButton().Disabled())
 	}
 }

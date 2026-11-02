@@ -61,7 +61,8 @@ const jpegQuality = 85
 // фоновых декодеров. Ожидающие задания выполняются с конца (новые — раньше):
 // при быстрой прокрутке сначала грузятся видимые сейчас карточки. Задание,
 // которое никому больше не нужно (все отменили), выбрасывается без
-// декодирования.
+// декодирования. Задания предзагрузки (Prefetch) лежат во втором стеке и
+// выполняются, только когда заданий видимых карточек нет.
 type Cache struct {
 	open  OpenFunc
 	limit int64
@@ -74,6 +75,7 @@ type Cache struct {
 	items    map[string]*list.Element // по ключу кэша
 	bytes    int64
 	stack    []*job          // ожидающие задания; вершина — конец среза
+	pre      []*job          // ожидающие задания предзагрузки; вершина — конец среза
 	jobs     map[string]*job // ожидающие и выполняющиеся, по ключу кэша
 	waiterID int
 	store    Store // nil — миниатюры только в памяти
@@ -94,6 +96,10 @@ type job struct {
 	g       model.Gallery
 	running bool
 	waiters map[int]Callback
+	// wanted — миниатюра в текущем наборе предзагрузки: задание выполняется,
+	// даже если все ожидающие отменили; inPre — задание лежит в c.pre.
+	wanted bool
+	inPre  bool
 }
 
 // New создаёт кэш объёмом limitBytes (≤ 0 — DefaultLimit) и workers
@@ -182,10 +188,8 @@ func (c *Cache) Load(g model.Gallery, cb Callback) (cancel func()) {
 		j = &job{key: key, g: g, waiters: map[int]Callback{}}
 		c.jobs[key] = j
 	} else if !j.running {
-		// снова нужна — в начало очереди
-		if i := slices.Index(c.stack, j); i >= 0 {
-			c.stack = slices.Delete(c.stack, i, i+1)
-		}
+		// снова нужна — в начало очереди видимых
+		c.unqueue(j)
 	}
 	c.waiterID++
 	id := c.waiterID
@@ -199,6 +203,71 @@ func (c *Cache) Load(g model.Gallery, cb Callback) (cancel func()) {
 		c.mu.Lock()
 		delete(j.waiters, id)
 		c.mu.Unlock()
+	}
+}
+
+// unqueue убирает невыполняющееся задание из стека, в котором оно лежит.
+// Вызывается под c.mu.
+func (c *Cache) unqueue(j *job) {
+	if j.inPre {
+		j.inPre = false
+		if i := slices.Index(c.pre, j); i >= 0 {
+			c.pre = slices.Delete(c.pre, i, i+1)
+		}
+		return
+	}
+	if i := slices.Index(c.stack, j); i >= 0 {
+		c.stack = slices.Delete(c.stack, i, i+1)
+	}
+}
+
+// Prefetch заменяет набор предзагрузки: миниатюры gs (в порядке важности,
+// первая — нужнее всех), которых нет в кэше, загружаются в фоне с низким
+// приоритетом — только когда нет заданий видимых карточек (Load). Результат
+// попадает в кэш в памяти (и в хранилище, если было декодирование).
+// Ожидающие задания прежнего набора, которых нет в gs и которые никто не
+// ждёт, удаляются без декодирования.
+func (c *Cache) Prefetch(gs []model.Gallery) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, j := range c.jobs {
+		j.wanted = false
+	}
+	pre := make([]*job, 0, len(gs))
+	for i := len(gs) - 1; i >= 0; i-- { // вершина стека — первая в gs
+		key := CacheKey(gs[i])
+		if _, ok := c.items[key]; ok {
+			continue
+		}
+		j, ok := c.jobs[key]
+		if !ok {
+			j = &job{key: key, g: gs[i], waiters: map[int]Callback{}}
+			c.jobs[key] = j
+		}
+		if j.wanted {
+			continue // повтор в gs
+		}
+		j.wanted = true
+		if j.running || (!j.inPre && len(j.waiters) > 0) {
+			continue // выполняется или ждёт в стеке видимых
+		}
+		if !j.inPre && ok {
+			c.unqueue(j) // никем не ждётся в стеке видимых — к предзагрузке
+		}
+		j.inPre = true
+		pre = append(pre, j)
+	}
+	for _, j := range c.pre {
+		if !j.wanted {
+			j.inPre = false
+			if len(j.waiters) == 0 {
+				delete(c.jobs, j.key) // выпала из набора — не декодируем
+			}
+		}
+	}
+	c.pre = pre
+	if len(pre) > 0 {
+		c.cond.Broadcast()
 	}
 }
 
@@ -219,15 +288,26 @@ func (c *Cache) Bytes() int64 {
 func (c *Cache) worker() {
 	for {
 		c.mu.Lock()
-		for len(c.stack) == 0 {
+		for len(c.stack) == 0 && len(c.pre) == 0 {
 			c.cond.Wait()
 		}
-		j := c.stack[len(c.stack)-1]
-		c.stack = c.stack[:len(c.stack)-1]
-		if len(j.waiters) == 0 {
-			delete(c.jobs, j.key) // все отменили — не декодируем
-			c.mu.Unlock()
-			continue
+		var j *job
+		if n := len(c.stack); n > 0 {
+			j, c.stack = c.stack[n-1], c.stack[:n-1]
+			if len(j.waiters) == 0 {
+				if j.wanted { // все отменили, но нужна предзагрузке
+					j.inPre = true
+					c.pre = append(c.pre, j)
+				} else {
+					delete(c.jobs, j.key) // все отменили — не декодируем
+				}
+				c.mu.Unlock()
+				continue
+			}
+		} else {
+			n := len(c.pre)
+			j, c.pre = c.pre[n-1], c.pre[:n-1]
+			j.inPre = false
 		}
 		j.running = true
 		w, h, store := c.boxW, c.boxH, c.store

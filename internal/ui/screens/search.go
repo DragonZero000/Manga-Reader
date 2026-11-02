@@ -62,6 +62,10 @@ type Search struct {
 	// last — текст последнего выполненного запроса («» — запросов не было);
 	// его повторяет Rerun.
 	last string
+	// rev — номер изменения библиотеки (nil — Rerun выполняет всегда);
+	// lastRev — номер при выполнении last.
+	rev     func() int
+	lastRev int
 	// helpDone — запрос уже выполнялся, справка больше не показывается.
 	helpDone bool
 	// filling — поле меняется программно: OnChanged не запускает таймер.
@@ -139,9 +143,20 @@ func (s *Search) Clear() {
 	s.setText("")
 }
 
+// SetRevision задаёт номер изменения библиотеки: Rerun выполняет запрос,
+// только если номер изменился с прошлого выполнения.
+func (s *Search) SetRevision(rev func() int) { s.rev = rev }
+
 // Rerun повторяет последний выполненный запрос (после сканирования, при
-// открытии вкладки); до первого запроса остаётся справка.
-func (s *Search) Rerun() { s.execute(s.last) }
+// открытии вкладки), если библиотека изменилась с его выполнения: иначе
+// результаты прежние и сетка не перерисовывается. До первого запроса
+// остаётся справка.
+func (s *Search) Rerun() {
+	if s.rev != nil && s.last != "" && s.rev() == s.lastRev {
+		return
+	}
+	s.execute(s.last)
+}
 
 // setText меняет поле без запуска таймера и отменяет ожидание.
 func (s *Search) setText(text string) {
@@ -201,6 +216,9 @@ func (s *Search) execute(text string) {
 		return
 	}
 	s.last = text
+	if s.rev != nil {
+		s.lastRev = s.rev()
+	}
 	s.seq++
 	seq := s.seq
 	if !s.helpDone {
@@ -295,6 +313,9 @@ func (s *Search) StatusText() string { return s.status.Text }
 
 // HelpVisible сообщает, показана ли справка.
 func (s *Search) HelpVisible() bool { return s.help.Visible() }
+
+// Scroller — прокрутка сетки результатов (для замера).
+func (s *Search) Scroller() ScrollTarget { return s.grid }
 
 // Results — галереи в сетке результатов.
 func (s *Search) Results() []model.Gallery { return s.grid.Items() }
