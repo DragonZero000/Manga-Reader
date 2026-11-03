@@ -126,11 +126,11 @@ func NewShell(a fyne.App, svc *app.Services) *Shell {
 	}, s.grid.Reload) // плотность сетки — сразу в библиотеке и поиске
 	s.setupBrowser(a)
 
-	s.searchTab = container.NewTabItemWithIcon(i18n.T("tab.search"), theme.SearchIcon(), s.search.Content())
-	s.errorsTab = container.NewTabItemWithIcon(i18n.T("tab.errors"), theme.ErrorIcon(), s.errors.Content())
-	s.settingsTab = container.NewTabItemWithIcon(i18n.T("tab.settings"), theme.SettingsIcon(), s.settings.Content())
+	s.searchTab = container.NewTabItemWithIcon(i18n.T("tab.search"), theme.SearchIcon(), tabContent(s.search.Content()))
+	s.errorsTab = container.NewTabItemWithIcon(i18n.T("tab.errors"), theme.ErrorIcon(), tabContent(s.errors.Content()))
+	s.settingsTab = container.NewTabItemWithIcon(i18n.T("tab.settings"), theme.SettingsIcon(), tabContent(s.settings.Content()))
 	s.Tabs = container.NewAppTabs(
-		container.NewTabItemWithIcon(i18n.T("tab.library"), theme.StorageIcon(), s.library.Content()),
+		container.NewTabItemWithIcon(i18n.T("tab.library"), theme.StorageIcon(), tabContent(s.library.Content())),
 		s.searchTab,
 		s.errorsTab,
 		s.settingsTab,
@@ -398,6 +398,12 @@ func (s *Shell) SearchFor(text string) {
 	s.Tabs.Select(s.searchTab)
 	s.search.SetQuery(text)
 }
+
+// tabContent — содержимое вкладки в простом контейнере. Вкладки показывают
+// и скрывают своё содержимое при каждом выборе, а Show виджета (прокрутки,
+// сетки) обновляет всё его дерево: на телефоне это десятки миллисекунд.
+// Show контейнера только снимает флаг Hidden.
+func tabContent(obj fyne.CanvasObject) fyne.CanvasObject { return container.NewStack(obj) }
 
 // applyDisplay применяет настройку частоты экрана (Android). Вызывать из
 // UI-потока.

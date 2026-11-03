@@ -9,8 +9,8 @@ import (
 	"time"
 )
 
-func TestSummarizeFrames(t *testing.T) {
-	if st := summarizeFrames("grid", nil); st.N != 0 || st.Label != "grid" {
+func TestSummarizeIntervals(t *testing.T) {
+	if st := summarizeIntervals("grid", nil); st.N != 0 || st.Label != "grid" {
 		t.Fatalf("пустой замер: %+v", st)
 	}
 	ms := time.Millisecond
@@ -19,7 +19,7 @@ func TestSummarizeFrames(t *testing.T) {
 		in = append(in, time.Duration(i)*ms) // 1..100 мс, в обратном порядке не важно
 	}
 	in[0], in[99] = in[99], in[0]
-	st := summarizeFrames("strip", in)
+	st := summarizeIntervals("strip", in)
 	if st.N != 100 || st.P50 != 50*ms || st.P95 != 95*ms || st.Max != 100*ms {
 		t.Fatalf("сводка: %+v", st)
 	}
@@ -32,22 +32,122 @@ func TestSummarizeFrames(t *testing.T) {
 	if in[0] != 100*ms {
 		t.Fatal("входной срез не должен меняться")
 	}
-	if got := summarizeFrames("", []time.Duration{16 * ms}); got.P50 != 16*ms || got.P95 != 16*ms || got.Slow != 0 {
+	if got := summarizeIntervals("", []time.Duration{16 * ms}); got.P50 != 16*ms || got.P95 != 16*ms || got.Slow != 0 {
 		t.Fatalf("один интервал: %+v", got)
 	}
 }
 
 // Порог рывка зависит от частоты экрана: на 240 Гц интервал 8 мс — рывок,
 // хотя он короче 25 мс.
-func TestSummarizeFramesHighRefresh(t *testing.T) {
+func TestSummarizeIntervalsHighRefresh(t *testing.T) {
 	in := make([]time.Duration, 100)
 	for i := range in {
 		in[i] = 4166 * time.Microsecond
 	}
 	in[10], in[20] = 8*time.Millisecond, 30*time.Millisecond
-	st := summarizeFrames("grid", in)
+	st := summarizeIntervals("grid", in)
 	if st.Slow != 2 || st.Slow25 != 1 {
 		t.Fatalf("рывков %d, дольше 25 мс %d", st.Slow, st.Slow25)
+	}
+}
+
+// shownFrames — кадры, показанные через ks vsync друг после друга (период
+// period); сдвиг прокрутки за кадр — shift × k.
+func shownFrames(period time.Duration, shift float32, ks ...int) []frameRec {
+	at := time.Unix(1000, 0)
+	recs := []frameRec{{Present: at, Period: period, HasOffset: true}}
+	var y float32
+	for _, k := range ks {
+		at = at.Add(time.Duration(k) * period)
+		y += shift * float32(k)
+		recs = append(recs, frameRec{Present: at, Period: period, Offset: y, HasOffset: true})
+	}
+	return recs
+}
+
+func TestSummarizeFramesPacing(t *testing.T) {
+	period := time.Second / 120
+	ks := make([]int, 100)
+	for i := range ks {
+		ks[i] = 1
+	}
+	st := summarizeFrames("grid", shownFrames(period, 12.5, ks...))
+	if st.N != 100 || st.OneV != 1 || st.Miss != 0 || st.DY != 0 {
+		t.Fatalf("ровно по vsync: %+v", st)
+	}
+	// кадр держится то 1, то 3 vsync
+	for i := range ks {
+		ks[i] = 1 + 2*(i%2)
+	}
+	st = summarizeFrames("grid", shownFrames(period, 12.5, ks...))
+	if st.OneV != 0.5 || math.Abs(st.Miss-0.5) > 1e-9 { // Σ(k−1)=100, Σk=200
+		t.Fatalf("1 и 3 vsync: 1v=%v miss=%v", st.OneV, st.Miss)
+	}
+	if st.DY != 0 { // сдвиг пропорционален времени: пропуск vsync — не неровность
+		t.Fatalf("dy=%v", st.DY)
+	}
+}
+
+func TestSummarizeFramesUnevenness(t *testing.T) {
+	period := time.Second / 120
+	at := time.Unix(1000, 0)
+	frame := func(y float32) frameRec {
+		at = at.Add(period)
+		return frameRec{Present: at, Period: period, Offset: y, HasOffset: true}
+	}
+	// сдвиги 10 и 15 через кадр: |15 − 10| / 12,5 = 0,4
+	var recs []frameRec
+	var y float32
+	for i := range 101 {
+		recs = append(recs, frame(y))
+		y += 10 + 5*float32(i%2)
+	}
+	if st := summarizeFrames("manual", recs); math.Abs(st.DY-0.4) > 0.01 {
+		t.Fatalf("скачки: dy=%v", st.DY)
+	}
+	// плавный разгон и торможение — почти 0
+	recs, y = recs[:0], 0
+	for i := range 101 {
+		recs = append(recs, frame(y))
+		y += float32(50 - math.Abs(float64(i-50)))
+	}
+	if st := summarizeFrames("manual", recs); st.DY > 0.02 {
+		t.Fatalf("разгон: dy=%v", st.DY)
+	}
+	// смена направления: тройки через разворот не в счёт
+	recs = []frameRec{frame(0), frame(10), frame(20), frame(30), frame(20), frame(10), frame(0)}
+	if st := summarizeFrames("manual", recs); st.DY != 0 {
+		t.Fatalf("разворот: dy=%v", st.DY)
+	}
+}
+
+// Промежутки длиннее frameIdleVsyncs — простой: в 1v, miss и dy не входят,
+// но остаются в интервалах (max).
+func TestSummarizeFramesIdle(t *testing.T) {
+	period := time.Second / 60
+	st := summarizeFrames("tabs", shownFrames(period, 10, 1, 1, 20, 1, 2))
+	if st.N != 5 || st.Max != 20*period {
+		t.Fatalf("интервалы: %+v", st)
+	}
+	if st.OneV != 0.75 || math.Abs(st.Miss-0.2) > 1e-9 { // k: 1,1,1,2 → Σ(k−1)=1, Σk=5
+		t.Fatalf("1v=%v miss=%v", st.OneV, st.Miss)
+	}
+}
+
+func TestSummarizeFramesNoOffset(t *testing.T) {
+	recs := shownFrames(time.Second/60, 0, 1, 1, 1)
+	for i := range recs {
+		recs[i].HasOffset = false
+	}
+	if st := summarizeFrames("paged", recs); st.DY != -1 || st.OneV != 1 {
+		t.Fatalf("%+v", st)
+	}
+	if st := summarizeFrames("x", nil); st.OneV != -1 || st.Miss != -1 || st.DY != -1 || st.N != 0 {
+		t.Fatalf("пусто: %+v", st)
+	}
+	// стоящая прокрутка (нулевые сдвиги) в dy не входит
+	if st := summarizeFrames("x", shownFrames(time.Second/60, 0, 1, 1, 1)); st.DY != -1 {
+		t.Fatalf("без движения: dy=%v", st.DY)
 	}
 }
 
@@ -76,12 +176,18 @@ func TestGCPauses(t *testing.T) {
 
 func TestFrameStatsString(t *testing.T) {
 	st := frameStats{Label: "grid", N: 3, P50: 16700 * time.Microsecond, Slow: 1, Slow25: 1,
+		OneV: 0.9734, Miss: 0.012, DY: 0.0456,
 		GC: gcStats{N: 2, Total: 1500 * time.Microsecond, Max: time.Millisecond}, HeapLive: 150 << 20}
 	s := st.String()
-	for _, want := range []string{"frameprobe[grid]:", "n=3", "p50=16.7ms", "slow=1", ">25ms=1", "gc=1.5ms/2", "gcmax=1.0ms", "heap=150MB"} {
+	for _, want := range []string{"frameprobe[grid]:", "n=3", "p50=16.7ms", "slow=1", ">25ms=1",
+		"1v=97.3%", "miss=1.2%", "dy=0.046", "gc=1.5ms/2", "gcmax=1.0ms", "heap=150MB"} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("%q: нет %q", s, want)
 		}
+	}
+	st.OneV, st.Miss, st.DY = -1, -1, -1
+	if s := st.String(); !strings.Contains(s, "1v=- miss=- dy=-") {
+		t.Fatalf("без данных: %q", s)
 	}
 }
 
@@ -95,12 +201,15 @@ func absDur(d time.Duration) time.Duration {
 func TestFormatReport(t *testing.T) {
 	at := time.Date(2026, 11, 2, 20, 30, 5, 0, time.UTC)
 	h := reportHeader{Kind: "tests", Version: "0.1.3-dev", Platform: "android/arm64", Time: at,
-		Width: 412, Height: 915, Scale: 3.5, Max60: "on", Grid: "3 columns", Galleries: 199}
+		Width: 412, Height: 915, Scale: 3.5, Refresh: 120.00001, Pacing: "choreographer", Present: "egl",
+		Max60: "on", Grid: "3 columns", Galleries: 199}
 	got := formatReport(h, []string{"frameprobe[grid]: n=1", "frameprobe[strip]: n=2"})
 	want := "MangaReader 0.1.3-dev performance report (tests)\n" +
 		"date: 2026-11-02 20:30:05\n" +
 		"platform: android/arm64\n" +
 		"screen: 412x915, scale 3.50\n" +
+		"refresh: 120 Hz\n" +
+		"pacing: choreographer, present: egl\n" +
 		"limit 60 Hz: on\n" +
 		"grid: 3 columns, galleries: 199\n\n" +
 		"frameprobe[grid]: n=1\nframeprobe[strip]: n=2\n"

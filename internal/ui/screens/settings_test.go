@@ -83,16 +83,16 @@ func TestDisplayCard(t *testing.T) {
 	st := storage.NewMemSettings()
 	s := newTestSettings(t, st)
 	c := s.DisplayCheck()
-	if c == nil || !c.Checked {
-		t.Fatal("по умолчанию «Ограничить 60 Гц» включено")
+	if c == nil || c.Checked {
+		t.Fatal("по умолчанию «Ограничить 60 Гц» выключено")
 	}
-	c.SetChecked(false) // как нажатие пользователя
-	if st.String(app.KeyDisplayMax60, "") != "0" || len(applied) != 1 || applied[0] {
-		t.Fatalf("выключение: настройка %q, применено %v", st.String(app.KeyDisplayMax60, ""), applied)
+	c.SetChecked(true) // как нажатие пользователя
+	if st.String(app.KeyDisplayMax60, "") != "1" || len(applied) != 1 || !applied[0] {
+		t.Fatalf("включение: настройка %q, применено %v", st.String(app.KeyDisplayMax60, ""), applied)
 	}
 	// после перезапуска флажок восстанавливается
-	if newTestSettings(t, st).DisplayCheck().Checked {
-		t.Fatal("выключенный флажок не восстановился")
+	if !newTestSettings(t, st).DisplayCheck().Checked {
+		t.Fatal("включённый флажок не восстановился")
 	}
 }
 

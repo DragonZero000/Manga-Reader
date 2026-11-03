@@ -20,7 +20,7 @@ The Firefox ESR and GeckoView builds may themselves include third-party code. Th
 | Module | Version | License |
 |---|---|---|
 | [Go standard library](https://go.dev/LICENSE) | toolchain from `go.mod` | BSD-3-Clause |
-| [fyne.io/fyne/v2](https://github.com/fyne-io/fyne) | v2.8.0 | BSD-3-Clause |
+| [fyne.io/fyne/v2](https://github.com/fyne-io/fyne) — modified copy in [`third_party/fyne`](third_party/fyne), see [`PATCHES.md`](third_party/fyne/PATCHES.md) | v2.8.0 | BSD-3-Clause |
 | [fyne.io/systray](https://github.com/fyne-io/systray) | v1.12.2 | Apache-2.0 |
 | [github.com/fsnotify/fsnotify](https://github.com/fsnotify/fsnotify) | v1.9.0 | BSD-3-Clause |
 | [golang.org/x/image](https://cs.opensource.google/go/x/image) | v0.24.0 | BSD-3-Clause |

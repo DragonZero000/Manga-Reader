@@ -210,7 +210,7 @@
   "settings.grid.large": "Крупные",
   "settings.display.title": "Экран",
   "settings.display.max60": "Ограничить 60 Гц",
-  "settings.display.hint": "Прокрутка ровнее: приложение рисует 60 кадров в секунду, а на экране 120 Гц они показываются неравномерно.",
+  "settings.display.hint": "Экономит батарею: на экране с частотой выше 60 Гц приложение просит 60 Гц. Прокрутка остаётся ровной, но кадров меньше.",
   "settings.userdata.title": "Хранение данных",
   "settings.userdata.keep": "Хранить данные удалённых произведений",
   "settings.userdata.day": "1 день",

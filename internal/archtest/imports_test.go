@@ -33,6 +33,7 @@ func TestServicePackagesHaveNoWidgets(t *testing.T) {
 		"mangareader/internal/userdata",
 		"mangareader/internal/i18n",
 		"mangareader/internal/search/indextest",
+		"mangareader/internal/ui/frameclock",
 	} {
 		for _, goos := range []string{"windows", "android"} {
 			cmd := exec.Command("go", "list", "-deps", "-tags", "sqlite_fts5", pkg)

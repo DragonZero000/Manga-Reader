@@ -15,9 +15,10 @@ static char *exc(JNIEnv *env) {
 	return strdup("исключение Java (подробности в logcat)");
 }
 
-// dispApply: DisplayRate.apply(activity, max60). Класс приложения — через
+// dispApply: DisplayRate.apply(activity, max60); в maxRate — наибольшая
+// частота режимов дисплея с текущим разрешением. Класс приложения — через
 // загрузчик классов Activity: из потока Go FindClass его не видит.
-char *dispApply(uintptr_t envp, uintptr_t ctxp, int max60) {
+char *dispApply(uintptr_t envp, uintptr_t ctxp, int max60, float *maxRate) {
 	JNIEnv *env = (JNIEnv *)envp;
 	jobject ctx = (jobject)ctxp;
 	jclass ctxCls = (*env)->GetObjectClass(env, ctx);
@@ -29,8 +30,8 @@ char *dispApply(uintptr_t envp, uintptr_t ctxp, int max60) {
 	jclass cls = (jclass)(*env)->CallObjectMethod(env, cl, load, name);
 	(*env)->DeleteLocalRef(env, name);
 	if (cls == NULL || (*env)->ExceptionCheck(env)) return exc(env);
-	jmethodID apply = (*env)->GetStaticMethodID(env, cls, "apply", "(Landroid/content/Context;Z)V");
+	jmethodID apply = (*env)->GetStaticMethodID(env, cls, "apply", "(Landroid/content/Context;Z)F");
 	if (apply == NULL) return exc(env);
-	(*env)->CallStaticVoidMethod(env, cls, apply, ctx, (jboolean)(max60 != 0));
+	*maxRate = (*env)->CallStaticFloatMethod(env, cls, apply, ctx, (jboolean)(max60 != 0));
 	return exc(env);
 }

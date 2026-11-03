@@ -6,20 +6,36 @@ import android.util.Log
 import kotlin.math.abs
 
 /**
- * Частота экрана окна приложения (Go: internal/display). Fyne рисует по
- * таймеру 60 Гц, поэтому на экране 120 Гц кадры выходят неровными; режим
- * дисплея 60 Гц убирает худший случай. Окно BrowserActivity не затрагивается.
+ * Частота экрана окна приложения (Go: internal/display). Кадры идут по vsync
+ * выбранной частоты (Choreographer), поэтому 60 Гц нужно только для экономии
+ * батареи: «Ограничить 60 Гц» выбирает режим дисплея 60 Гц. Без ограничения
+ * частоту выбирает система, а на время движения драйвер просит наибольшую
+ * частоту (ANativeWindow_setFrameRate) — её возвращает apply. Окно
+ * BrowserActivity не затрагивается.
  */
 object DisplayRate {
     private const val TAG = "MangaDisplay"
 
-    /** max60 — просить 60 Гц; false — частоту выбирает система. */
+    /**
+     * max60 — просить 60 Гц; false — частоту выбирает система. Возвращает
+     * наибольшую частоту режимов дисплея с текущим разрешением (0 — неизвестна).
+     */
     @JvmStatic
-    fun apply(ctx: Context, max60: Boolean) {
+    fun apply(ctx: Context, max60: Boolean): Float {
         val activity = ctx as? Activity
         if (activity == null) {
             Log.w(TAG, "display refresh rate: no Activity ($ctx)")
-            return
+            return 0f
+        }
+        val maxRate = try {
+            val display = activity.display
+            val cur = display?.mode
+            display?.supportedModes
+                ?.filter { cur != null && it.physicalWidth == cur.physicalWidth && it.physicalHeight == cur.physicalHeight }
+                ?.maxOfOrNull { it.refreshRate } ?: 0f
+        } catch (e: Exception) {
+            Log.w(TAG, "display modes", e)
+            0f
         }
         activity.runOnUiThread {
             try {
@@ -46,5 +62,6 @@ object DisplayRate {
                 Log.w(TAG, "display refresh rate", e)
             }
         }
+        return maxRate
     }
 }

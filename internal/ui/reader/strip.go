@@ -25,6 +25,10 @@ const (
 	errorHeight = 120
 	// endHeight — высота блока «Конец» после последней страницы.
 	endHeight = 160
+	// stripSliceHeight — высота куска страницы ленты в физических пикселях.
+	// Каждый кусок загружается в GPU за один кадр: кусок 1440×2048 (12 МБ)
+	// на телефоне не укладывается в кадр 120 Гц (8,3 мс), 1440×512 — да.
+	stripSliceHeight = 512
 )
 
 // stripView — лента: страницы подряд по ширине экрана. Виртуализация
@@ -304,7 +308,7 @@ func (v *stripView) acquire(page int) *stripItem {
 	it.status.Show()
 	size := v.r.physical(v.width, 0)
 	it.req = pages.Normalize(pages.Request{
-		Key: v.g.Key, Page: v.g.Pages[page].Name, W: size, SliceH: pages.MaxSliceHeight,
+		Key: v.g.Key, Page: v.g.Pages[page].Name, W: size, SliceH: stripSliceHeight,
 	})
 	return it
 }

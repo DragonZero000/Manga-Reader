@@ -83,6 +83,28 @@ func TestWarmerBudgetIndependentOfFrameRate(t *testing.T) {
 	}
 }
 
+// Время кадра бывает впереди time.Now: шаг назад по часам не уменьшает и не
+// удваивает бюджет.
+func TestWarmerClockBack(t *testing.T) {
+	test.NewTempApp(t)
+	run := func(back bool) float64 {
+		clock := time.Unix(1e6, 0)
+		w := testWarmer(&clock)
+		w.last = clock
+		// ждущий объект держит очередь: бюджет копится
+		w.add(warmImage(10, 10), func() (fyne.Position, warmState) { return fyne.Position{}, warmLater }, nil)
+		w.step(clock.Add(10 * time.Millisecond))
+		if back {
+			w.step(clock)
+		}
+		w.step(clock.Add(60 * time.Millisecond))
+		return w.allowance
+	}
+	if a, b := run(false), run(true); a == 0 || a != b {
+		t.Fatalf("бюджет %v, с шагом назад — %v", a, b)
+	}
+}
+
 // Объект, который пока нельзя прогреть, ждёт; ненужный — удаляется.
 func TestWarmerLaterAndDrop(t *testing.T) {
 	test.NewTempApp(t)

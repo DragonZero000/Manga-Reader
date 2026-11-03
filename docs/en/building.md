@@ -5,6 +5,7 @@
 - [Requirements](#requirements)
 - [Commands](#commands)
 - [Android build](#android-build)
+- [Fyne copy](#fyne-copy)
 - [Version](#version)
 - [Built-in browser during development](#built-in-browser-during-development)
 - [Frame measurement](#frame-measurement)
@@ -48,13 +49,19 @@ The code builds only with the `sqlite_fts5` tag: the library catalog (`internal/
 
 ## Android build
 
-`make build-android` (same as `go run ./tools/android-build`) compiles the Go part into `libmangareader.so` with the NDK compiler, takes Fyne's Java classes from the module version in `go.mod`, puts `LICENSE` and `THIRD_PARTY_NOTICES.md` into `assets/`, and builds the APK with the Gradle project in `android/`.
+`make build-android` (same as `go run ./tools/android-build`) compiles the Go part into `libmangareader.so` with the NDK compiler, takes Fyne's Java classes from the Fyne copy in `third_party/fyne`, puts `LICENSE` and `THIRD_PARTY_NOTICES.md` into `assets/`, and builds the APK with the Gradle project in `android/`.
 
 - **SDK** — `ANDROID_HOME` (Android Studio sets it). **NDK** — `ANDROID_NDK_HOME`, or the newest version ≥ 27 in `%ANDROID_HOME%\ndk`. **JDK** — `JAVA_HOME` if it is JDK 17+, otherwise JBR from Android Studio.
 - **Architectures** — `ANDROID_ABIS` (default `arm64-v8a`): `make build-android ANDROID_ABIS=arm64-v8a,armeabi-v7a`. Available: `arm64-v8a`, `armeabi-v7a`, `x86_64`, `x86`; each adds ~25 MB to the APK.
 - **Signing.** A debug build is signed with this computer's Android SDK debug key — new builds install over old ones (`adb install -r dist/mangareader.apk`) keeping settings. A release build is signed with the key from `MANGAREADER_KEYSTORE` (path to the `.jks`), `MANGAREADER_KEYSTORE_PASSWORD`, `MANGAREADER_KEY_ALIAS`, `MANGAREADER_KEY_PASSWORD`; without them the APK is unsigned. `go run ./tools/android-build -release -require-signing` refuses to build without a key (that's how CI builds).
 - APKs signed with different keys (your debug key and the project's releases) can't be installed over each other: switch once by uninstalling the app. Manga files are not affected.
 - The library is aligned to 16 KB memory pages (otherwise Android 15+ warns about incompatibility).
+
+## Fyne copy
+
+Fyne is built from the modified copy in [`third_party/fyne`](../../third_party/fyne): `replace fyne.io/fyne/v2 => ./third_party/fyne` in `go.mod`, while `require` stays at the base version. The copy changes frame pacing (see [Architecture](architecture.md#frame-pacing)); every change is listed in [`PATCHES.md`](../../third_party/fyne/PATCHES.md) and marked `// mangareader:` in the code. The copy is a module of its own, so the root `go vet ./...` and `go test ./...` don't walk it; its own tests run with `cd third_party/fyne && go test ./internal/pacing ./internal/animation`. `internal/archtest` checks that the `replace` points to the copy and that the base version in `PATCHES.md` matches the `require`.
+
+Updating Fyne means carrying the patch over by hand, following "Перенос на новую версию Fyne" in `PATCHES.md`: copy the new module from the module cache, bring over the new files and every change marked `// mangareader:`, update the version there and in `go.mod`, then run `make test`, the builds and a frame measurement on the phone and the PC (`1v` and `miss` no worse than before).
 
 ## Version
 
@@ -70,26 +77,30 @@ The browser integration tests run when `MANGAREADER_BROWSER_IT` is set to the Fi
 
 ## Frame measurement
 
-A build with the `frameprobe` tag measures how evenly the render loop runs. It doesn't start anything by itself: Settings get a **Development** section with buttons:
+A build with the `frameprobe` tag measures how evenly frames reach the screen. It doesn't start anything by itself: Settings get a **Development** section with buttons:
 
 - **Run tests** — the autoscroll scenarios one after another (about 3 minutes, don't touch the screen), a summary of each;
 - **Manual measurement** / **Stop measurement** — records frames while you scroll yourself, a `manual` summary when stopped;
 - **Share** (Android) — the system share menu with the text of the last report; on the PC — **Open folder** with the reports.
 
-When the tests or a manual measurement end, the report (a header: version, platform, screen size and scale, "Limit to 60 Hz", grid density, number of galleries; then the summary lines) is saved to `perf-YYYYMMDD-HHMMSS.txt`: on Android in the hidden `.perf` folder inside the library folder (the scanner skips it), on the PC in the `perf` folder next to the program. Each summary also goes to the log. Regular builds don't have the section.
+When the tests or a manual measurement end, the report (a header: version, platform, screen size and scale, `refresh` — the screen refresh rate, `pacing` — the frame pacing mode (`choreographer`, `vsync`, `dwm` or `timer`), `present` — where present times come from (`egl` — exact, from `EGL_ANDROID_get_frame_timestamps`; `dwm` — the DWM vblank after the frame was submitted; `swap` — the vsync after `eglSwapBuffers`), "Limit to 60 Hz", grid density, number of galleries; then the summary lines) is saved to `perf-YYYYMMDD-HHMMSS.txt`: on Android in the hidden `.perf` folder inside the library folder (the scanner skips it), on the PC in the `perf` folder next to the program. Each summary also goes to the log. Regular builds don't have the section.
 
 ```sh
 make build-android EXTRA_TAGS=frameprobe   # APK with the probe
 make build-android-dev                     # the same as a separate app, see below
-adb logcat | grep frameprobe               # frameprobe[grid]: n=961 p50=16.6ms p95=17.0ms max=17.3ms slow=0 >25ms=0 gc=3.4ms/22 gcmax=1.0ms heap=109MB
+adb logcat | grep frameprobe               # frameprobe[grid]: n=2556 p50=6.2ms p95=6.5ms max=12.7ms slow=5 >25ms=0 1v=99.7% miss=0.2% dy=0.066 gc=3.1ms/24 gcmax=1.3ms heap=86MB
 make run EXTRA_TAGS=frameprobe             # the same on the PC (to the console)
 ```
 
+On the PC the tests can also start without the button: `MANGAREADER_PROBE_RUN=1` in the environment of a `frameprobe` build runs them 5 s after the window appears (the window must stay visible).
+
 Scenarios (the summary label): `grid` — the library grid; `search` — search results for `pages:>0`; `details` — the gallery page of the first gallery; `settings`; `strip` and `paged` — the reader on the gallery with the most pages; `tabs` — switching tabs every 500 ms; `density-…` — the library at each grid density (phone: 2, 3, 4 columns; PC: `s`, `m`, `l`). Scrolling runs at 1500 logical px/s, 8 s down and 8 s up (4 + 4 s for each density); paged mode turns a page every 300 ms. The log ends with `frameprobe: scenarios done`. The scenarios drive scrolling in code, so they don't exercise touch handling; use the manual measurement for that (on the emulator, with `adb shell input swipe`).
 
-Summary fields: `n` — frames; `p50`, `p95`, `max` — intervals between frames; `slow` — intervals longer than 1.5 × the median (meaningful at any refresh rate); `>25ms` — longer than 25 ms, for comparison with older measurements; `gc` — the total of garbage-collector pauses / their count, `gcmax` — the longest; `heap` — the live heap at the end of the summary.
+While a measurement runs, the probe marks the canvas dirty on every tick, so a frame is drawn on every vsync, as during scrolling, and the gaps between frames are the pacing, not idle time. On Android with exact (EGL) present times, frames reach the probe a few frames late, in order.
 
-How to read it: Fyne draws on a 60 Hz timer, so normal is p50 and p95 around 16.7 ms. A large `max` and frames longer than 25 ms mean the UI thread is busy (for example, preparing images), so look in the code. The probe shows the step of the UI loop, not the moment a frame reaches the screen: if the intervals are even but scrolling still stutters, the cause is how frames are presented. Check that visually or with a Perfetto trace.
+Summary fields: `n` — frames; `p50`, `p95`, `max` — intervals between the moments frames were shown on screen; `slow` — intervals longer than 1.5 × the median (meaningful at any refresh rate); `>25ms` — longer than 25 ms, for comparison with older measurements; `1v` — the share of frames shown exactly one vsync after the previous one; `miss` — the share of missed vsyncs (gaps longer than 8 vsyncs count as idle and are left out of `1v`, `miss` and `dy`); `dy` — scroll unevenness: how much the per-vsync speed in a frame differs from the average of its two neighbours, as a share of the speed (the offset is taken when the frame is drawn; a finger smoothly speeding up or slowing down doesn't raise it; `-` in scenarios without scrolling); `gc` — the total of garbage-collector pauses / their count, `gcmax` — the longest; `heap` — the live heap at the end of the summary.
+
+How to read it: normal is p50 equal to the screen period (8.3 ms at 120 Hz, 6.25 ms at 160 Hz), `1v` of at least 95%, `miss` under 2% and `dy` under 0.1. Low `1v` with high `miss` and an even p50 means frames don't follow vsync (check `pacing`). A large `max` and frames longer than 25 ms mean the UI thread is busy (for example, preparing images), so look in the code; a single long frame also raises `dy`.
 
 `make build-android-dev` builds the probe APK as a separate app: ID `io.github.mangareader.app.dev`, name "MangaReader Dev", version with the `-dev` suffix (`tools/android-build -dev`). It installs next to the regular app and has its own settings, library folder and browser data, so testing doesn't touch the main app. Otherwise it behaves like the regular app; the tests run only from the Development section.
 

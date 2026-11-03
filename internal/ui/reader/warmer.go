@@ -6,6 +6,8 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
+
+	"mangareader/internal/ui/frameclock"
 )
 
 // Бюджет заблаговременной загрузки текстур страниц, пикселей в секунду.
@@ -50,7 +52,7 @@ type warmItem struct {
 // Resize освободил бы текстуру. Только UI-поток.
 type warmer struct {
 	rate float64
-	// now — текущее время; startAnim запускает такты (anim.Start).
+	// now — время кадра (frameclock.Now); startAnim запускает такты (anim.Start).
 	// Подменяются в тестах.
 	now       func() time.Time
 	startAnim func()
@@ -66,7 +68,7 @@ type warmer struct {
 }
 
 func newWarmer(mobile bool) *warmer {
-	w := &warmer{rate: warmRateDesktop, now: time.Now}
+	w := &warmer{rate: warmRateDesktop, now: frameclock.Now}
 	if mobile {
 		w.rate = warmRateMobile
 	}
@@ -127,9 +129,12 @@ func (w *warmer) restore() {
 // пока бюджет позволяет. Объект, который пока нельзя прогреть, пропускается.
 func (w *warmer) step(now time.Time) {
 	w.restore()
-	dt := min(now.Sub(w.last), warmMaxStep)
-	w.last = now
-	w.allowance += w.rate * dt.Seconds()
+	// Время кадра бывает чуть впереди time.Now (вызов вне кадра): бюджет
+	// считается от самого позднего времени и назад не идёт.
+	if now.After(w.last) {
+		w.allowance += w.rate * min(now.Sub(w.last), warmMaxStep).Seconds()
+		w.last = now
+	}
 	for i := 0; i < len(w.queue); {
 		it := w.queue[i]
 		pos, st := it.spot()

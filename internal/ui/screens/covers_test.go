@@ -137,6 +137,26 @@ func TestCoverBudgetCapsPause(t *testing.T) {
 	}
 }
 
+// Время кадра бывает впереди time.Now: шаг назад по часам не уменьшает и не
+// удваивает бюджет.
+func TestCoverBudgetClockBack(t *testing.T) {
+	size := fyne.NewSize(960, 1400)
+	run := func(back bool) int {
+		cg := newCoverGrid(t, 60, size)
+		p := cg.g.covers
+		start := p.last
+		p.step(start.Add(10 * time.Millisecond))
+		if back {
+			p.step(start) // вызов вне кадра: time.Now позади времени кадра
+		}
+		p.step(start.Add(60 * time.Millisecond))
+		return p.uploads
+	}
+	if a, b := run(false), run(true); a == 0 || a != b {
+		t.Fatalf("показано %d обложек, с шагом назад — %d", a, b)
+	}
+}
+
 // Очередь — построчно по направлению прокрутки, внутри строки слева направо.
 func TestCoverQueueOrder(t *testing.T) {
 	cg := newCoverGrid(t, 60, fyne.NewSize(960, 1400))

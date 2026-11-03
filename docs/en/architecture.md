@@ -9,6 +9,7 @@ MangaReader is a single Go application built with [Fyne](https://fyne.io) for Wi
 - [Package boundaries](#package-boundaries)
 - [Platforms and build tags](#platforms-and-build-tags)
 - [Threads and UI](#threads-and-ui)
+- [Frame pacing](#frame-pacing)
 - [User data](#user-data)
 - [Built-in browser](#built-in-browser)
 - [Version, build and CI](#version-build-and-ci)
@@ -24,6 +25,7 @@ android/             Android Gradle project; browser screens in Kotlin
 openspec/            specifications and change history (OpenSpec)
 docs/                documentation (en, ru, images)
 testdata/            example.zip — a sample archive
+third_party/fyne/    modified copy of Fyne 2.8.0 (frame pacing, see PATCHES.md)
 .github/workflows/   CI and releases
 FyneApp.toml         app metadata and the single source of the version
 ```
@@ -48,12 +50,13 @@ FyneApp.toml         app metadata and the single source of the version
 | `internal/userdata` | User data about works in SQLite (`user.db`): work records with a stable `uid`, schema migrations, backup of a damaged file, reconciliation with scans and moving records by content fingerprint, the user's own and hidden tags, reading progress |
 | `internal/i18n` | Interface language: translations from `locales/<lang>.json` (go-i18n), plural forms, date, number and size formats, language choice at startup, Fyne built-in texts in the app language |
 | `internal/devreport` | Performance report of the dev build: on Android, saving to `.perf` in the library folder and Share (JNI, `DevReport.kt`); on other platforms, a file in the `perf` folder |
-| `internal/display` | Refresh rate of the app window on Android (JNI, `DisplayRate.kt`): the 60 Hz limit; a stub on other platforms |
+| `internal/display` | Refresh rate of the app window on Android (JNI, `DisplayRate.kt`): the 60 Hz limit and the highest rate to ask for while something moves; a stub on other platforms |
 | `internal/appversion` | The version from `FyneApp.toml` and the Android build number |
 | `internal/ui` | Shell: window, tabs, toast notifications, wiring screens to services |
 | `internal/ui/screens` | Screens: library, search, errors, settings |
 | `internal/ui/details` | Gallery page |
 | `internal/ui/reader` | Reader: paged mode and strip |
+| `internal/ui/frameclock` | The only wrapper over Fyne's frame pacing (`driver/pacing`): frame time for animations and budgets, refresh rate, frame observer, refresh-rate hint |
 | `internal/archtest` | Tests for architectural boundaries and documentation structure |
 | `tools/android-build` | APK build: `libmangareader.so` via the NDK, Fyne Java classes, licenses in `assets/`, Gradle |
 | `tools/fetch-firefox` | Downloads and unpacks the pinned Firefox ESR version (SHA-256 checked) |
@@ -82,6 +85,17 @@ Linux is not supported yet.
 ## Threads and UI
 
 The app is migrated to `fyne.Do` (`[Migrations] fyneDo = true` in `FyneApp.toml`): widgets are changed **only** from the main thread. Scanning, thumbnail and page decoding, search and browser events run in goroutines and hand results to the UI through `fyne.Do`. `make run` starts the app with Fyne thread checks; release builds use the `migrated_fynedo` tag, without checks.
+
+## Frame pacing
+
+Fyne 2.8 draws frames on a 60 Hz timer that isn't tied to the screen: on a 120 Hz phone a frame stays on screen for one or two refreshes, on a 160 Hz monitor for two or three. So the app uses a modified copy of Fyne in [`third_party/fyne`](../../third_party/fyne) (`replace` in `go.mod`). Every change is listed in [`PATCHES.md`](../../third_party/fyne/PATCHES.md) and marked `// mangareader:` in the code.
+
+- **Android.** Frames follow `AChoreographer` frame callbacks (NDK, on the input thread's looper): one frame per vsync at any refresh rate, adaptive (LTPO) screens included. A frame is requested only while it's needed: the canvas is dirty, an animation runs, a finger is on the screen, or a `fyne.Do` call, an input, size or lifecycle event arrived; then 4 more frames after the last drawn one. When nothing changes, nothing is drawn.
+- **Refresh rate on Android.** With "Limit to 60 Hz" off, while something moves (a finger on the screen, or an animation that redraws on every vsync for at least 200 ms) the window asks for the display's highest refresh rate (`ANativeWindow_setFrameRate`); 500 ms after the movement the system chooses again. `internal/display` passes that rate from `DisplayRate.kt`, or 0 with the limit on.
+- **Windows.** `SwapInterval(1)`: the vsync of the monitor the window is on sets the pace. The loop timer runs at 1.1 × the monitor rate, so a tick is already waiting when `SwapBuffers` returns; after 250 ms without a frame the timer drops to 60 Hz and only polls events. If the video driver forces vsync off, the loop notices (frames come faster than vsync) and makes each frame wait for the DWM composition (`DwmFlush`).
+- **Animation time.** Fyne animations and the app's own (wheel smoothing, the cover and page-texture budgets, the probe's autoscroll) take the time of the vsync the frame is prepared for, not `time.Now()`. At a steady speed every frame moves the same distance.
+- **Touches per frame (Android).** The touch sensor sends points more often than frames and unevenly. Finger moves are collected until the frame, and the frame applies one position 5 ms before the frame time: interpolated between neighbouring points, or extrapolated by at most 8 ms, as Android itself does. So the scroll distance per frame doesn't depend on how many points arrived. Touch start and end are passed on at once.
+- **`driver/pacing`** is the package added to the copy: frame time, refresh rate, pacing mode, the frame observer (for the probe), the refresh-rate hint. The app uses it only through [`internal/ui/frameclock`](../../internal/ui/frameclock/frameclock.go); `internal/archtest` checks that. To go back to upstream Fyne, remove the `replace` and replace that one file with a `time.Now()` version.
 
 ## Layers, covers and page textures
 

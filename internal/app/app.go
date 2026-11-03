@@ -197,9 +197,11 @@ func SetGridSize(s storage.Settings, size string) {
 // KeyDisplayMax60 — ограничить частоту экрана 60 Гц (Android): «1» или «0».
 const KeyDisplayMax60 = "display.max60"
 
-// DisplayMax60 — ограничивать ли частоту экрана 60 Гц (по умолчанию да).
+// DisplayMax60 — ограничивать ли частоту экрана 60 Гц. По умолчанию нет:
+// кадры идут по vsync экрана любой частоты (third_party/fyne, driver/pacing),
+// ограничение только экономит батарею.
 func DisplayMax60(s storage.Settings) bool {
-	return s.String(KeyDisplayMax60, "1") != "0"
+	return s.String(KeyDisplayMax60, "0") == "1"
 }
 
 // SetDisplayMax60 сохраняет настройку частоты экрана.

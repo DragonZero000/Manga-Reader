@@ -12,6 +12,9 @@ require (
 	golang.org/x/text v0.22.0
 )
 
+// Модифицированная копия Fyne (темп кадров по vsync): third_party/fyne/PATCHES.md
+replace fyne.io/fyne/v2 => ./third_party/fyne
+
 require (
 	fyne.io/systray v1.12.2 // indirect
 	github.com/BurntSushi/toml v1.6.0 // indirect

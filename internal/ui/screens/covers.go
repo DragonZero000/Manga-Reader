@@ -8,6 +8,8 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
+
+	"mangareader/internal/ui/frameclock"
 )
 
 const (
@@ -46,12 +48,12 @@ type imagePool struct {
 	limit int
 	lru   *list.List // *pooledImage, начало — недавно использованные
 	items map[string]*pooledImage
-	// now — текущее время; подменяется в тестах.
+	// now — время кадра (frameclock.Now); подменяется в тестах.
 	now func() time.Time
 }
 
 func newImagePool() *imagePool {
-	return &imagePool{limit: 1, lru: list.New(), items: map[string]*pooledImage{}, now: time.Now}
+	return &imagePool{limit: 1, lru: list.New(), items: map[string]*pooledImage{}, now: frameclock.Now}
 }
 
 // get — объект key (nil — нет); отмечается как недавно использованный.
@@ -213,9 +215,12 @@ func (p *coverPresenter) start() {
 // (по направлению прокрутки) ставятся, пока бюджет позволяет. Карточки,
 // ушедшие с экрана, снимаются с очереди без загрузки.
 func (p *coverPresenter) step(now time.Time) {
-	dt := min(now.Sub(p.last), coverMaxStep)
-	p.last = now
-	p.allowance += p.rate * dt.Seconds()
+	// Время кадра бывает чуть впереди time.Now (вызов вне кадра): бюджет
+	// считается от самого позднего времени и назад не идёт.
+	if now.After(p.last) {
+		p.allowance += p.rate * min(now.Sub(p.last), coverMaxStep).Seconds()
+		p.last = now
+	}
 	p.g.track()
 	from, to := p.g.visibleRange()
 	p.sortQueue()

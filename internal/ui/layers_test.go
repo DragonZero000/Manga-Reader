@@ -132,3 +132,21 @@ func TestLayersHideCovered(t *testing.T) {
 		t.Fatal("поиск по тегу: должны быть видны вкладки «Поиск»")
 	}
 }
+
+// Содержимое каждой вкладки — простой контейнер: при выборе вкладки Show
+// контейнера только снимает флаг Hidden, а Show виджета (прокрутки, сетки)
+// обновлял бы всё его дерево и освобождал текстуры обложек.
+func TestTabContentIsPlainContainer(t *testing.T) {
+	s, _ := newLayersShell(t, 1)
+	for i, item := range s.Tabs.Items {
+		if _, ok := item.Content.(*fyne.Container); !ok {
+			t.Errorf("вкладка %d: содержимое %T, нужен *fyne.Container", i, item.Content)
+		}
+	}
+	for i := range s.Tabs.Items {
+		s.Tabs.SelectIndex(i) // вкладки по-прежнему переключаются
+		if !s.Tabs.Items[i].Content.Visible() {
+			t.Errorf("вкладка %d не показана", i)
+		}
+	}
+}

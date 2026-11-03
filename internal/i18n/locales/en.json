@@ -208,7 +208,7 @@
   "settings.grid.large": "Large",
   "settings.display.title": "Display",
   "settings.display.max60": "Limit to 60 Hz",
-  "settings.display.hint": "Smoother scrolling: the app draws 60 frames per second, and a 120 Hz screen shows them unevenly.",
+  "settings.display.hint": "Saves battery: on a screen faster than 60 Hz the app asks for 60 Hz. Scrolling stays even, with fewer frames.",
   "settings.userdata.title": "Data retention",
   "settings.userdata.keep": "Keep data of deleted works",
   "settings.userdata.day": "1 day",

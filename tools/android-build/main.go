@@ -333,9 +333,15 @@ func copyFyneJava(dst string) error {
 	return nil
 }
 
-// moduleDir — папка модуля той версии, что в go.mod. «go list -m» на чистом
-// кэше модулей (CI) возвращает пустой Dir, а «go mod download» сначала скачивает.
+// moduleDir — папка модуля той версии, что в go.mod, с учётом replace (копия
+// Fyne в third_party/fyne). «go list -m» на чистом кэше модулей (CI) для
+// модуля без replace возвращает пустой Dir, тогда «go mod download» скачивает.
 func moduleDir(path string) (string, error) {
+	if out, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", path).Output(); err == nil {
+		if dir := strings.TrimSpace(string(out)); dir != "" {
+			return dir, nil
+		}
+	}
 	out, err := exec.Command("go", "mod", "download", "-json", path).Output()
 	if err != nil {
 		return "", fmt.Errorf("модуль %s: %w", path, err)

@@ -5,6 +5,7 @@ package ui
 import (
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -22,6 +23,7 @@ import (
 	"mangareader/internal/model"
 	"mangareader/internal/paths"
 	"mangareader/internal/storage"
+	"mangareader/internal/ui/frameclock"
 	"mangareader/internal/ui/reader"
 	"mangareader/internal/ui/screens"
 )
@@ -45,6 +47,11 @@ const (
 	probeGap = time.Second
 	// probeQuery — запрос сценария search: все галереи.
 	probeQuery = "pages:>0"
+	// probeRunEnv — переменная окружения: «1» — запустить тесты через
+	// probeAutoDelay после показа окна, как кнопкой «Запустить тесты».
+	probeRunEnv = "MANGAREADER_PROBE_RUN"
+	// probeAutoDelay — пауза перед тестами по probeRunEnv (сканирование библиотеки).
+	probeAutoDelay = 5 * time.Second
 )
 
 // devTools — раздел «Разработка» в настройках dev-сборки: тесты по кнопке,
@@ -86,6 +93,11 @@ func (s *Shell) startProbe() {
 	items = append(items, d.status, hint)
 	s.settings.AddCard(widget.NewCard(i18n.T("dev.title"), "", container.NewVBox(items...)))
 	log.Print("frameprobe: dev tools enabled")
+	// Замер без нажатия кнопки (ПК, из командной строки): только если
+	// переменная задана явно.
+	if os.Getenv(probeRunEnv) == "1" {
+		probeAfter(probeAutoDelay, d.runTests)
+	}
 }
 
 // runTests выполняет сценарии один за другим; по окончании — отчёт и
@@ -96,7 +108,7 @@ func (d *devTools) runTests() {
 	}
 	d.setBusy(true)
 	d.status.SetText(i18n.T("dev.running"))
-	startFrames()
+	startFrames(d.s.Window.Canvas())
 	s := d.s
 	steps := []func(next func()){
 		s.probeGrid, s.probeSearch, s.probeDetails, s.probeSettings,
@@ -127,8 +139,8 @@ func (d *devTools) toggleManual() {
 		d.manual.SetText(i18n.T("dev.manual_stop"))
 		d.manual.SetIcon(theme.MediaStopIcon())
 		d.status.SetText(i18n.T("dev.recording"))
-		startFrames()
-		probeBegin("manual")
+		startFrames(d.s.Window.Canvas())
+		probeBegin("manual", d.s.visibleOffset)
 		return
 	}
 	d.recording = false
@@ -162,6 +174,7 @@ func (d *devTools) finish(kind string, lines []string) {
 	now := time.Now()
 	h := reportHeader{Kind: kind, Version: s.svc.Version, Platform: runtime.GOOS + "/" + runtime.GOARCH,
 		Time: now, Width: c.Size().Width, Height: c.Size().Height, Scale: c.Scale(),
+		Refresh: frameclock.RefreshRate(), Pacing: frameclock.Mode(), Present: frameclock.PresentSource(),
 		Galleries: len(s.library.Galleries())}
 	if display.Supported {
 		h.Max60 = map[bool]string{true: "on", false: "off"}[app.DisplayMax60(st)]
@@ -237,9 +250,9 @@ func probeAfter(d time.Duration, f func()) {
 // probeAnimate вызывает tick с прошедшим временем на каждом кадре в течение
 // d, затем done.
 func probeAnimate(d time.Duration, tick func(elapsed time.Duration), done func()) {
-	start := time.Now()
+	start := frameclock.Now()
 	a := fyne.NewAnimation(d, func(f float32) {
-		tick(time.Since(start))
+		tick(frameclock.Now().Sub(start))
 		if f >= 1 {
 			done()
 		}
@@ -251,7 +264,7 @@ func probeAnimate(d time.Duration, tick func(elapsed time.Duration), done func()
 // probeScroll прокручивает t вниз leg со скоростью probeSpeed, затем столько
 // же вверх, и пишет сводку label.
 func probeScroll(label string, t screens.ScrollTarget, leg time.Duration, done func()) {
-	probeBegin(label)
+	probeBegin(label, t.ScrollOffset)
 	t.ScrollToOffset(0)
 	turn := float32(-1) // смещение в момент разворота
 	probeAnimate(2*leg, func(el time.Duration) {
@@ -344,7 +357,7 @@ func (s *Shell) probeStrip(next func()) {
 
 func (s *Shell) probePaged(next func()) {
 	s.probeReader(reader.ModePaged, func(done func()) {
-		probeBegin("paged")
+		probeBegin("paged", nil)
 		flips := 0
 		probeAnimate(2*probeLeg, func(el time.Duration) {
 			for ; flips < int(el/probeFlip); flips++ {
@@ -363,17 +376,41 @@ func (s *Shell) probePaged(next func()) {
 }
 
 func (s *Shell) probeTabs(next func()) {
-	probeBegin("tabs")
+	probeBegin("tabs", nil)
 	n := 0
 	probeAnimate(probeLeg, func(el time.Duration) {
 		for ; n < int(el/probeTab); n++ {
-			s.Tabs.SelectIndex((n + 1) % len(s.Tabs.Items))
+			i := (n + 1) % len(s.Tabs.Items)
+			probeTabSwitch(i, func() { s.Tabs.SelectIndex(i) })
 		}
 	}, func() {
 		probeEnd()
 		s.Tabs.SelectIndex(0)
 		next()
 	})
+}
+
+// visibleOffset — смещение прокрутки того, что сейчас на экране (ручной
+// замер): лента читалки, страница произведения или вкладка.
+func (s *Shell) visibleOffset() float32 {
+	switch {
+	case s.Reader.Visible():
+		if s.Reader.Mode() == reader.ModeStrip {
+			return s.Reader.StripScroller().ScrollOffset()
+		}
+		return 0
+	case s.Details.Visible():
+		return s.Details.Scroller().ScrollOffset()
+	}
+	switch s.Tabs.Selected() {
+	case s.searchTab:
+		return s.search.Scroller().ScrollOffset()
+	case s.settingsTab:
+		return s.settings.Scroller().ScrollOffset()
+	case s.Tabs.Items[0]:
+		return s.library.Scroller().ScrollOffset()
+	}
+	return 0
 }
 
 // probeDensity прокручивает библиотеку при каждой плотности сетки (телефон —
