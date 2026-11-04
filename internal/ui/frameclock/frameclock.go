@@ -10,6 +10,7 @@ package frameclock
 import (
 	"time"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/driver/pacing"
 )
 
@@ -40,3 +41,15 @@ func Sample(fn func() float64) { pacing.SetSampler(fn) }
 // SetRateHint задаёт частоту экрана (Гц), которую Android просит у системы
 // на время движения; 0 — не просить.
 func SetRateHint(rate float64) { pacing.SetRateHint(rate) }
+
+// Fling бросает target со скоростью v (единиц Fyne в секунду по осям, знак —
+// направление сдвига пальца) так же, как инерция после отрыва пальца. Для
+// сценариев замера; только UI-поток. false — бросок не начат.
+func Fling(target fyne.Draggable, v fyne.Delta) bool { return pacing.Fling(target, v) }
+
+// FlingActive — идёт ли бросок.
+func FlingActive() bool { return pacing.FlingActive() }
+
+// TouchLatency — задержка пересчёта касаний на время кадра (Android); 0 —
+// касаний не было.
+func TouchLatency() time.Duration { return pacing.TouchLatency() }

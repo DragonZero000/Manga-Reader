@@ -17,6 +17,9 @@ type ScrollTarget interface {
 	MaxScrollOffset() float32
 	// ScrollToOffset прокручивает к смещению y (в пределах 0…MaxScrollOffset).
 	ScrollToOffset(y float32)
+	// Draggable — цель программного броска (инерции) для сценариев замера;
+	// обычно DragOf(t).
+	Draggable() fyne.Draggable
 }
 
 // ScrollOf — ScrollTarget вертикального container.Scroll.
@@ -25,6 +28,24 @@ func ScrollOf(s *container.Scroll) ScrollTarget { return scrollTarget{s} }
 type scrollTarget struct{ s *container.Scroll }
 
 func (t scrollTarget) ScrollOffset() float32 { return t.s.Offset.Y }
+
+func (t scrollTarget) Draggable() fyne.Draggable { return DragOf(t) }
+
+// DragOf — цель броска для t: Dragged сдвигает t через ScrollToOffset, так
+// что бросок идёт одним путём на ПК и на телефоне, а ScrollOffset сообщает
+// броску край прокрутки.
+func DragOf(t ScrollTarget) fyne.Draggable { return targetDrag{t} }
+
+type targetDrag struct{ t ScrollTarget }
+
+func (d targetDrag) Dragged(e *fyne.DragEvent) {
+	d.t.ScrollToOffset(d.t.ScrollOffset() - e.Dragged.DY)
+}
+
+func (targetDrag) DragEnd() {}
+
+// ScrollOffset — смещение цели (для остановки броска на краю).
+func (d targetDrag) ScrollOffset() fyne.Position { return fyne.NewPos(0, d.t.ScrollOffset()) }
 
 func (t scrollTarget) MaxScrollOffset() float32 {
 	return max(0, t.s.Content.MinSize().Height-t.s.Size().Height)

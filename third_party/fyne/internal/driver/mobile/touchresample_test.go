@@ -29,7 +29,7 @@ func TestTouchResamplerEvenShift(t *testing.T) {
 			r.move(0, 0, float32(times[next]), ms(times[next]))
 			next++
 		}
-		if _, y, ok := r.take(0, ms(frame)); ok {
+		if _, y, ok := r.take(0, ms(frame), time.Second/120); ok {
 			if f > 2 {
 				shifts = append(shifts, float64(y-prev))
 			}
@@ -91,7 +91,7 @@ func TestTouchResamplerBeginEnd(t *testing.T) {
 	r.begin(3, 0, 0, ms(0))
 	r.move(3, 0, 4, ms(4))
 	r.move(3, 0, 8, ms(8))
-	if _, y, ok := r.take(3, ms(11)); !ok || y != 6 {
+	if _, y, ok := r.take(3, ms(11), time.Second/120); !ok || y != 6 {
 		t.Fatalf("кадр: %v %v", y, ok)
 	}
 	r.move(3, 0, 12, ms(12))
@@ -110,10 +110,83 @@ func TestTouchResamplerNoStepBack(t *testing.T) {
 	r.begin(0, 0, 0, ms(0))
 	r.move(0, 0, 10, ms(10))
 	r.move(0, 0, 20, ms(20))
-	if _, y, ok := r.take(0, ms(30)); !ok || y != 25 {
+	if _, y, ok := r.take(0, ms(30), time.Second/120); !ok || y != 25 {
 		t.Fatalf("экстраполяция: %v %v", y, ok)
 	}
 	if _, _, ok := r.end(0); ok {
 		t.Fatal("шаг назад в конце касания")
+	}
+}
+
+// Система отдаёт точки пачкой раз за кадр, и пачка этого кадра приходит то
+// до нашего кадра, то после (NativeActivity через ViewRootImpl). Сенсор 480 Гц,
+// экран 120 Гц, палец с постоянной скоростью 1 px/мс: сдвиг за кадр одинаковый.
+func TestTouchResamplerBatchedDelivery(t *testing.T) {
+	period := time.Second / 120
+	sensor := time.Second / 480
+	var r touchResampler
+	at := func(d time.Duration) time.Time { return touchT0.Add(d) }
+	pos := func(d time.Duration) float32 { return float32(d) / float32(time.Millisecond) }
+	r.begin(0, 0, 0, at(0))
+	next := sensor // следующая точка сенсора
+	deliver := func(upTo time.Duration) {
+		for ; next <= upTo; next += sensor {
+			r.move(0, 0, pos(next), at(next))
+		}
+	}
+	var prev float32
+	var shifts []float64
+	for k := 1; k <= 200; k++ {
+		vsync := time.Duration(k) * period
+		batch := vsync - time.Millisecond // система забрала точки к своему vsync
+		late := k%3 == 0 || k%7 == 0      // пачка приходит после нашего кадра
+		if !late {
+			deliver(batch)
+		}
+		_, y, ok := r.take(0, at(vsync), period)
+		if late {
+			deliver(batch)
+		}
+		if !ok {
+			t.Fatalf("кадр %d: нечего применять", k)
+		}
+		if k > 40 { // задержка уже подобрана
+			shifts = append(shifts, float64(y-prev))
+		}
+		prev = y
+	}
+	want := float64(pos(period))
+	for i, s := range shifts {
+		if math.Abs(s-want) > 0.01 {
+			t.Fatalf("сдвиг %d: %.3f, ждали %.3f (задержка %v)", i, s, want, r.Latency())
+		}
+	}
+	if l := r.Latency(); l <= period || l > resampleLatency+2*period {
+		t.Fatalf("задержка %v", l)
+	}
+}
+
+// Точки приходят сразу; палец останавливается на 100 мс и снова идёт.
+// Остановка — не опоздание доставки: задержка остаётся 5 мс.
+func TestTouchResamplerPauseKeepsLatency(t *testing.T) {
+	period := time.Second / 120
+	sensor := time.Second / 240
+	var r touchResampler
+	at := func(d time.Duration) time.Time { return touchT0.Add(d) }
+	r.begin(0, 0, 0, at(0))
+	next := sensor
+	var y float32
+	for k := 1; k <= 60; k++ {
+		vsync := time.Duration(k) * period
+		for ; next <= vsync-time.Millisecond; next += sensor {
+			if next < 200*time.Millisecond || next > 300*time.Millisecond { // пауза
+				y++
+				r.move(0, 0, y, at(next))
+			}
+		}
+		r.take(0, at(vsync), period)
+		if l := r.Latency(); l != 0 && l != resampleLatency {
+			t.Fatalf("кадр %d: задержка %v", k, l)
+		}
 	}
 }

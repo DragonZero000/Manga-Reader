@@ -13,6 +13,7 @@ import (
 	"fyne.io/fyne/v2/internal/app"
 	intdriver "fyne.io/fyne/v2/internal/driver"
 	"fyne.io/fyne/v2/internal/driver/common"
+	"fyne.io/fyne/v2/internal/fling" // mangareader: инерция прокрутки
 	"fyne.io/fyne/v2/theme"
 )
 
@@ -32,6 +33,8 @@ type canvas struct {
 	size           fyne.Size
 	touched        map[int]mobile.Touchable
 	windowHead     fyne.CanvasObject
+	// mangareader: касание остановило бросок — это не нажатие (tapUp)
+	caughtFling map[int]bool
 
 	dragOffset     fyne.Position
 	dragStart      fyne.Position
@@ -62,6 +65,7 @@ func newCanvas(dev fyne.Device) fyne.Canvas {
 		padded:         true,
 		scale:          dev.SystemScaleForWindow(nil), // we don't need a window parameter on mobile,
 		touched:        make(map[int]mobile.Touchable),
+		caughtFling:    make(map[int]bool),
 	}
 	ret.Initialize(ret, ret.overlayChanged)
 	return ret
@@ -223,6 +227,12 @@ func (c *canvas) tapDown(pos fyne.Position, tapID int) {
 	c.lastTapDownPos[tapID] = pos
 	c.dragging = nil
 	c.draggingOuter = nil
+	// mangareader: касание во время броска останавливает его и не считается нажатием
+	if fling.Stop() {
+		c.caughtFling[tapID] = true
+	} else {
+		delete(c.caughtFling, tapID)
+	}
 
 	co, objPos, layer := c.findObjectAtPositionMatching(pos, func(object fyne.CanvasObject) bool {
 		switch object.(type) {
@@ -337,6 +347,8 @@ func (c *canvas) tapUp(pos fyne.Position, tapID int,
 	doubleTapCallback func(fyne.DoubleTappable, *fyne.PointEvent),
 	dragCallback func(fyne.Draggable, *fyne.DragEvent),
 ) {
+	caught := c.caughtFling[tapID] // mangareader
+	delete(c.caughtFling, tapID)
 	if c.dragging != nil {
 		previousDelta := c.lastTapDelta[tapID]
 		ev := &fyne.DragEvent{Dragged: previousDelta}
@@ -389,6 +401,10 @@ func (c *canvas) tapUp(pos fyne.Position, tapID int,
 		touchEv.AbsolutePosition = pos
 		wid.TouchUp(touchEv)
 		c.touched[tapID] = nil
+	}
+
+	if caught {
+		return // mangareader: касание только остановило бросок: ни нажатия, ни долгого, ни двойного
 	}
 
 	ev := &fyne.PointEvent{

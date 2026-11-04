@@ -224,3 +224,39 @@ func TestFormatReport(t *testing.T) {
 		t.Fatalf("имя %q", n)
 	}
 }
+
+// dyt и dyf считаются по тройкам, у которых средний кадр с пальцем или с
+// инерцией: неровность пальца не попадает в dyf и наоборот.
+func TestSummarizeFramesMotion(t *testing.T) {
+	period := time.Second / 120
+	at := time.Unix(1000, 0)
+	var recs []frameRec
+	var y float32
+	add := func(shift float32, motion string) {
+		recs = append(recs, frameRec{Present: at, Period: period, Offset: y, HasOffset: true, Motion: motion})
+		at = at.Add(period)
+		y += shift
+	}
+	for i := range 60 { // палец: сдвиг скачет 10/15
+		add(10+5*float32(i%2), "touch")
+	}
+	for range 60 { // инерция: ровно
+		add(12, "fling")
+	}
+	st := summarizeFrames("manual", recs)
+	if st.DYT < 0.3 || st.DYT > 0.5 {
+		t.Errorf("dyt=%v, ждали около 0,4", st.DYT)
+	}
+	if st.DYF > 0.02 { // одна тройка на стыке с пальцем
+		t.Errorf("dyf=%v, ждали около 0", st.DYF)
+	}
+	if st.DY <= st.DYF {
+		t.Errorf("dy=%v должен включать неровность пальца", st.DY)
+	}
+	if st := summarizeFrames("x", shownFrames(period, 12.5, 1, 1, 1, 1)); st.DYT != -1 || st.DYF != -1 {
+		t.Errorf("без вида движения: dyt=%v dyf=%v", st.DYT, st.DYF)
+	}
+	if s := (frameStats{DY: 0.1, DYT: 0.25, DYF: -1}).String(); !strings.Contains(s, "dy=0.100 dyt=0.250 dyf=-") {
+		t.Errorf("строка: %s", s)
+	}
+}

@@ -33,6 +33,10 @@ import (
 const (
 	// probeSpeed — скорость автопрокрутки, логических px/с.
 	probeSpeed = 1500
+	// probeFlingSpeed — скорость броска сценариев fling-*, логических px/с.
+	probeFlingSpeed = 3000
+	// probeFlingMax — сколько ждать остановки одного броска.
+	probeFlingMax = 4 * time.Second
 	// probeLeg — длительность прокрутки в одну сторону.
 	probeLeg = 8 * time.Second
 	// probeDensityLeg — то же для каждого значения плотности сетки.
@@ -112,7 +116,7 @@ func (d *devTools) runTests() {
 	s := d.s
 	steps := []func(next func()){
 		s.probeGrid, s.probeSearch, s.probeDetails, s.probeSettings,
-		s.probeStrip, s.probePaged, s.probeTabs, s.probeDensity,
+		s.probeStrip, s.probePaged, s.probeTabs, s.probeFlingGrid, s.probeFlingStrip, s.probeDensity,
 	}
 	var run func(i int)
 	run = func(i int) {
@@ -280,6 +284,59 @@ func probeScroll(label string, t screens.ScrollTarget, leg time.Duration, done f
 		probeEnd()
 		done()
 	})
+}
+
+// probeFling бросает t от начала три раза вниз со скоростью probeFlingSpeed,
+// каждый раз дожидаясь остановки, затем один раз вверх, и пишет сводку label
+// (design D5 изменения kinetic-scroll).
+func probeFling(label string, t screens.ScrollTarget, done func()) {
+	t.ScrollToOffset(0)
+	probeBegin(label, t.ScrollOffset)
+	speeds := []float32{-probeFlingSpeed, -probeFlingSpeed, -probeFlingSpeed, probeFlingSpeed}
+	var launch func(i int)
+	launch = func(i int) {
+		if i == len(speeds) {
+			probeEnd()
+			done()
+			return
+		}
+		if !frameclock.Fling(t.Draggable(), fyne.NewDelta(0, speeds[i])) {
+			launch(i + 1)
+			return
+		}
+		probeWaitFling(func() { launch(i + 1) })
+	}
+	launch(0)
+}
+
+// probeWaitFling вызывает then, когда бросок остановился (не дольше
+// probeFlingMax).
+func probeWaitFling(then func()) {
+	start := frameclock.Now()
+	fired := false
+	var a *fyne.Animation
+	a = fyne.NewAnimation(time.Second, func(float32) {
+		if fired || (frameclock.FlingActive() && frameclock.Now().Sub(start) < probeFlingMax) {
+			return
+		}
+		fired = true
+		a.Stop()
+		then()
+	})
+	a.RepeatCount = fyne.AnimationRepeatForever
+	a.Curve = fyne.AnimationLinear
+	a.Start()
+}
+
+func (s *Shell) probeFlingGrid(next func()) {
+	s.Tabs.SelectIndex(0)
+	probeFling("fling-grid", s.library.Scroller(), next)
+}
+
+func (s *Shell) probeFlingStrip(next func()) {
+	s.probeReader(reader.ModeStrip, func(done func()) {
+		probeFling("fling-strip", s.Reader.StripScroller(), done)
+	}, next)
 }
 
 func (s *Shell) probeGrid(next func()) {

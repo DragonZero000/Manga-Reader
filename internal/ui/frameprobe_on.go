@@ -88,7 +88,7 @@ func recordFrame(f frameclock.Frame) {
 	}
 	frames.recs = append(frames.recs, frameRec{
 		Present: f.Present, Period: f.Period,
-		Offset: float32(f.Sample), HasOffset: f.HasSample,
+		Offset: float32(f.Sample), HasOffset: f.HasSample, Motion: f.Motion,
 	})
 }
 
@@ -123,6 +123,9 @@ func probeEnd() {
 	frameclock.Sample(nil)
 	st.GC = gcPauses(frames.gc, readGCPauses())
 	st.HeapLive = readHeapLive()
+	if st.DYT >= 0 { // палец был на экране
+		st.TouchLatency = frameclock.TouchLatency()
+	}
 	line := st.String()
 	log.Print(line)
 	frames.lines = append(frames.lines, line)

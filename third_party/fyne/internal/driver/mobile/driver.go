@@ -1,13 +1,14 @@
 package mobile
 
 import (
-	"math"
+	"math" // mangareader: willFling
 	"runtime"
 	"strconv"
 	"time"
 
 	"fyne.io/fyne/v2"
 	fynecanvas "fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/container" // mangareader: инерция прокрутки
 	"fyne.io/fyne/v2/driver/mobile"
 	"fyne.io/fyne/v2/internal"
 	"fyne.io/fyne/v2/internal/animation"
@@ -24,6 +25,7 @@ import (
 	"fyne.io/fyne/v2/internal/driver/mobile/event/size"
 	"fyne.io/fyne/v2/internal/driver/mobile/event/touch"
 	"fyne.io/fyne/v2/internal/driver/mobile/gl"
+	"fyne.io/fyne/v2/internal/fling"  // mangareader: инерция прокрутки
 	"fyne.io/fyne/v2/internal/pacing" // mangareader: время кадра
 	"fyne.io/fyne/v2/internal/painter"
 	pgl "fyne.io/fyne/v2/internal/painter/gl"
@@ -32,11 +34,9 @@ import (
 )
 
 const (
-	tapMoveDecay        = 0.92                   // how much should the scroll continue decay on each frame?
-	tapMoveEndThreshold = 2.0                    // at what offset will we stop decaying?
-	tapMoveThreshold    = 4.0                    // how far can we move before it is a drag
-	tapSecondaryDelay   = 300 * time.Millisecond // how long before secondary tap
-	tapDoubleDelay      = 500 * time.Millisecond // max duration between taps for a DoubleTap event
+	tapMoveThreshold  = 4.0                    // how far can we move before it is a drag
+	tapSecondaryDelay = 300 * time.Millisecond // how long before secondary tap
+	tapDoubleDelay    = 500 * time.Millisecond // max duration between taps for a DoubleTap event
 )
 
 // Configuration is the system information about the current device
@@ -77,6 +77,8 @@ type driver struct {
 	rateTimer  *time.Timer      // снятие запроса частоты
 	// движения касаний, ждущие кадра (touchresample.go)
 	touchFrames touchResampler
+	// скорость пальца для инерции прокрутки (velocity.go)
+	velocities map[touch.Sequence]*velocityTracker
 }
 
 // Declare conformity with Driver
@@ -294,17 +296,26 @@ func (d *driver) Run() {
 							d.touchFrames.begin(e.Sequence, e.X, e.Y, e.Time)
 						}
 						d.tapDownCanvas(current, e.X, e.Y, e.Sequence)
+						d.trackVelocity(current, e, true)
+						pacing.SetMotion(pacing.MotionTouch)
 					case touch.TypeMove:
+						d.trackVelocity(current, e, false)
 						if !d.touchFrames.move(e.Sequence, e.X, e.Y, e.Time) { // mangareader: до кадра
 							d.tapMoveCanvas(current, e.X, e.Y, e.Sequence)
 						}
 					case touch.TypeEnd:
 						d.touches = max(d.touches-1, 0) // mangareader
-						// mangareader: накопленное движение — до конца касания
-						if x, y, ok := d.touchFrames.end(e.Sequence); ok {
+						v := d.liftVelocity(current, e) // mangareader
+						// mangareader: накопленное движение — до конца касания; если отрыв
+						// начнёт бросок, отставание пересчёта не догоняется рывком —
+						// бросок стартует с показанного положения, как в Android
+						if x, y, ok := d.touchFrames.end(e.Sequence); ok && !willFling(current.canvas, v) {
 							d.tapMoveCanvas(current, x, y, e.Sequence)
 						}
-						d.tapUpCanvas(current, e.X, e.Y, e.Sequence)
+						if d.touches == 0 && pacing.CurrentMotion() == pacing.MotionTouch {
+							pacing.SetMotion("")
+						}
+						d.tapUpCanvas(current, e.X, e.Y, e.Sequence, v)
 					}
 				case key.Event:
 					d.requestFrame() // mangareader
@@ -517,7 +528,13 @@ func (d *driver) tapMoveCanvas(w *window, x, y float32, tapID touch.Sequence) {
 	}
 }
 
-func (d *driver) tapUpCanvas(w *window, x, y float32, tapID touch.Sequence) {
+// willFling — отрыв пальца со скоростью v начнёт бросок (как в tapUpCanvas).
+func willFling(c *canvas, v fyne.Delta) bool {
+	scroll, ok := any(c.dragging).(*container.Scroll)
+	return ok && scroll.Direction != container.ScrollHorizontalOnly && math.Abs(float64(v.DY)) >= fling.MinVelocity
+}
+
+func (d *driver) tapUpCanvas(w *window, x, y float32, tapID touch.Sequence, v fyne.Delta) {
 	tapX := scale.ToFyneCoordinate(w.canvas, int(x))
 	tapY := scale.ToFyneCoordinate(w.canvas, int(y))
 	pos := fyne.NewPos(tapX, tapY+tapYOffset)
@@ -529,28 +546,13 @@ func (d *driver) tapUpCanvas(w *window, x, y float32, tapID touch.Sequence) {
 	}, func(wid fyne.DoubleTappable, ev *fyne.PointEvent) {
 		wid.DoubleTapped(ev)
 	}, func(wid fyne.Draggable, ev *fyne.DragEvent) {
-		if math.Abs(float64(ev.Dragged.DX)) <= tapMoveEndThreshold && math.Abs(float64(ev.Dragged.DY)) <= tapMoveEndThreshold {
-			wid.DragEnd()
+		// mangareader: инерция только у вертикальных прокруток, по физике Android и по
+		// кадрам (internal/fling); остальные перетаскиваемые виджеты получают DragEnd сразу
+		if scroll, ok := any(wid).(*container.Scroll); ok && scroll.Direction != container.ScrollHorizontalOnly &&
+			fling.Start(wid, fyne.Delta{DY: v.DY}, nil) {
 			return
 		}
-
-		go func() {
-			for math.Abs(float64(ev.Dragged.DX)) > tapMoveEndThreshold || math.Abs(float64(ev.Dragged.DY)) > tapMoveEndThreshold {
-				if math.Abs(float64(ev.Dragged.DX)) > 0 {
-					ev.Dragged.DX *= tapMoveDecay
-				}
-				if math.Abs(float64(ev.Dragged.DY)) > 0 {
-					ev.Dragged.DY *= tapMoveDecay
-				}
-
-				d.DoFromGoroutine(func() {
-					wid.Dragged(ev)
-				}, false)
-				time.Sleep(time.Millisecond * 16)
-			}
-
-			d.DoFromGoroutine(wid.DragEnd, false)
-		}()
+		wid.DragEnd()
 	})
 }
 

@@ -140,6 +140,9 @@ func (g *galleryGrid) ScrollToOffset(y float32) {
 	g.grid.ScrollToOffset(max(0, min(y, g.MaxScrollOffset())))
 }
 
+// Draggable — цель броска для сценариев замера (ScrollTarget).
+func (g *galleryGrid) Draggable() fyne.Draggable { return DragOf(g) }
+
 // cellHeight — высота карточки (строки сетки без отступа).
 func (g *galleryGrid) cellHeight() float32 {
 	if g.cellH == 0 {

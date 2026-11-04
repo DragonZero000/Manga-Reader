@@ -39,8 +39,10 @@ type frameStats struct {
 	OneV          float64 // доля кадров, показанных ровно через 1 vsync; -1 — нет данных
 	Miss          float64 // доля пропущенных vsync; -1 — нет данных
 	DY            float64 // неровность сдвига прокрутки за кадр (unevenness); -1 — нет данных
+	DYT, DYF      float64 // то же по кадрам с пальцем на экране и по кадрам инерции; -1 — таких кадров нет
 	GC            gcStats
-	HeapLive      uint64 // живая куча в конце сводки, байт
+	HeapLive      uint64        // живая куча в конце сводки, байт
+	TouchLatency  time.Duration // задержка пересчёта касаний (Android); 0 — касаний не было
 }
 
 // frameRec — показанный кадр.
@@ -49,6 +51,7 @@ type frameRec struct {
 	Period    time.Duration // период vsync
 	Offset    float32       // смещение прокрутки сценария в кадре
 	HasOffset bool
+	Motion    string // вид движения кадра: "", "touch", "fling" (Frame.Motion)
 }
 
 // gcStats — паузы сборщика мусора за время сводки.
@@ -66,6 +69,7 @@ func summarizeFrames(label string, recs []frameRec) frameStats {
 	// скорость прокрутки за vsync между соседними кадрами; NaN — разрыв
 	// (простой или кадр без смещения)
 	var speeds []float64
+	var motions []string // вид движения кадра каждой скорости
 	oneV, n, sumK, sumMiss := 0, 0, 0, 0
 	for i := 1; i < len(recs); i++ {
 		prev, cur := recs[i-1], recs[i]
@@ -74,6 +78,7 @@ func summarizeFrames(label string, recs []frameRec) frameStats {
 		k := vsyncs(d, cur.Period)
 		if k > frameIdleVsyncs || k < 1 {
 			speeds = append(speeds, math.NaN())
+			motions = append(motions, cur.Motion)
 			continue
 		}
 		n++
@@ -82,6 +87,7 @@ func summarizeFrames(label string, recs []frameRec) frameStats {
 		if k == 1 {
 			oneV++
 		}
+		motions = append(motions, cur.Motion)
 		if prev.HasOffset && cur.HasOffset {
 			speeds = append(speeds, float64(cur.Offset-prev.Offset)/float64(k))
 		} else {
@@ -96,7 +102,9 @@ func summarizeFrames(label string, recs []frameRec) frameStats {
 	if sumK > 0 {
 		st.Miss = float64(sumMiss) / float64(sumK)
 	}
-	st.DY = unevenness(speeds)
+	st.DY = unevenness(speeds, nil, "")
+	st.DYT = unevenness(speeds, motions, "touch")
+	st.DYF = unevenness(speeds, motions, "fling")
 	return st
 }
 
@@ -112,10 +120,14 @@ func vsyncs(d, period time.Duration) int {
 // Σ|v[i]| по тройкам соседних скоростей (за vsync) одного знака без разрывов.
 // Плавный разгон и торможение пальца дают почти 0, скачки от кадра к
 // кадру — нет; пропущенный vsync не в счёт (скорость делится на k). -1 —
-// нет ни одной тройки.
-func unevenness(v []float64) float64 {
+// нет ни одной тройки. Если motions задан, в счёт идут только тройки, у
+// которых средний кадр имеет вид движения kind ("touch", "fling").
+func unevenness(v []float64, motions []string, kind string) float64 {
 	var dev, sum float64
 	for i := 1; i+1 < len(v); i++ {
+		if motions != nil && motions[i] != kind {
+			continue
+		}
 		a, b, c := v[i-1], v[i], v[i+1]
 		if !(a*b > 0 && b*c > 0) { // NaN, ноль или смена направления
 			continue
@@ -213,13 +225,19 @@ func (s frameStats) String() string {
 		}
 		return fmt.Sprintf("%.1f%%", f*100)
 	}
-	dy := "-"
-	if s.DY >= 0 {
-		dy = fmt.Sprintf("%.3f", s.DY)
+	dy := func(v float64) string {
+		if v < 0 {
+			return "-"
+		}
+		return fmt.Sprintf("%.3f", v)
 	}
-	return fmt.Sprintf("frameprobe[%s]: n=%d p50=%s p95=%s max=%s slow=%d >25ms=%d 1v=%s miss=%s dy=%s gc=%s/%d gcmax=%s heap=%dMB",
-		s.Label, s.N, ms(s.P50), ms(s.P95), ms(s.Max), s.Slow, s.Slow25, pct(s.OneV), pct(s.Miss), dy,
+	line := fmt.Sprintf("frameprobe[%s]: n=%d p50=%s p95=%s max=%s slow=%d >25ms=%d 1v=%s miss=%s dy=%s dyt=%s dyf=%s gc=%s/%d gcmax=%s heap=%dMB",
+		s.Label, s.N, ms(s.P50), ms(s.P95), ms(s.Max), s.Slow, s.Slow25, pct(s.OneV), pct(s.Miss), dy(s.DY), dy(s.DYT), dy(s.DYF),
 		ms(s.GC.Total), s.GC.N, ms(s.GC.Max), s.HeapLive>>20)
+	if s.TouchLatency > 0 {
+		line += " tlat=" + ms(s.TouchLatency)
+	}
+	return line
 }
 
 // reportHeader — шапка отчёта тестов производительности dev-сборки.

@@ -39,7 +39,17 @@ type Frame struct {
 	// функция была задана.
 	Sample    float64
 	HasSample bool
+
+	// Motion — вид движения в момент рисования кадра: "" (нет), MotionTouch
+	// (палец на экране) или MotionFling (инерция прокрутки).
+	Motion string
 }
+
+// Виды движения кадра (Frame.Motion).
+const (
+	MotionTouch = "touch"
+	MotionFling = "fling"
+)
 
 var (
 	frameMu   sync.Mutex
@@ -51,11 +61,14 @@ var (
 	observer atomic.Pointer[func(Frame)]
 	sampler  atomic.Pointer[func() float64]
 	rateHint atomic.Uint64 // math.Float64bits частоты, Гц
+	motion   atomic.Value  // string: вид движения (Frame.Motion)
+	touchLat atomic.Int64  // задержка пересчёта касаний, нс
 )
 
 func init() {
 	mode.Store(ModeTimer)
 	source.Store(PresentSwap)
+	motion.Store("")
 }
 
 // BeginFrame задаёт время кадра, который драйвер начинает готовить.
@@ -131,9 +144,25 @@ func SetSampler(fn func() float64) {
 	sampler.Store(&fn)
 }
 
-// TakeSample записывает в f значение функции SetSampler. Драйвер вызывает
-// его в UI-потоке сразу после рисования кадра.
+// SetMotion задаёт вид движения, который TakeSample запишет в Frame.Motion:
+// "", MotionTouch или MotionFling. Мобильный драйвер ставит MotionTouch, пока
+// палец на экране, пакет fling — MotionFling. UI-поток.
+func SetMotion(m string) { motion.Store(m) }
+
+// CurrentMotion — вид движения, заданный SetMotion.
+func CurrentMotion() string { return motion.Load().(string) }
+
+// SetTouchLatency задаёт задержку пересчёта касаний на время кадра,
+// выбранную мобильным драйвером в последнем кадре с движением пальца.
+func SetTouchLatency(d time.Duration) { touchLat.Store(int64(d)) }
+
+// TouchLatency — задержка пересчёта касаний (0 — касаний не было).
+func TouchLatency() time.Duration { return time.Duration(touchLat.Load()) }
+
+// TakeSample записывает в f вид движения и значение функции SetSampler.
+// Драйвер вызывает его в UI-потоке сразу после рисования кадра.
 func TakeSample(f *Frame) {
+	f.Motion = CurrentMotion()
 	if fn := sampler.Load(); fn != nil {
 		f.Sample, f.HasSample = (*fn)(), true
 	}

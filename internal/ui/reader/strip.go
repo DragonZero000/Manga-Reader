@@ -187,6 +187,9 @@ func (v *stripView) ScrollToOffset(y float32) {
 	v.updateVisible()
 }
 
+// Draggable — цель броска для сценариев замера (screens.ScrollTarget).
+func (v *stripView) Draggable() fyne.Draggable { return screens.DragOf(v) }
+
 // contentHeight — высота всех страниц и блока «Конец».
 func (v *stripView) contentHeight() float32 {
 	if len(v.prefix) == 0 {

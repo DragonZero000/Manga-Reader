@@ -105,12 +105,14 @@ func (d *driver) onVsync(t time.Time) {
 // новее «frame − 5 мс» ещё не пришли, и положение всегда угадывалось бы
 // экстраполяцией. Только цикл драйвера.
 func (d *driver) applyTouches(w *window, frame time.Time) {
-	vsync := frame.Add(-pacing.Period())
+	period := pacing.Period()
+	vsync := frame.Add(-period)
 	for _, seq := range d.touchFrames.sequences() {
-		if x, y, ok := d.touchFrames.take(seq, vsync); ok {
+		if x, y, ok := d.touchFrames.take(seq, vsync, period); ok {
 			d.tapMoveCanvas(w, x, y, seq)
 		}
 	}
+	pacing.SetTouchLatency(d.touchFrames.Latency())
 }
 
 // takeFrameTime — время кадра от Choreographer или, без него, time.Now().

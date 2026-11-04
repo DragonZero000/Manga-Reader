@@ -11,8 +11,8 @@ import (
 // Пересчёт касаний на время кадра — как InputConsumer в Android.
 const (
 	// resampleLatency — на сколько раньше времени кадра берётся положение
-	// пальца: точка новее этого момента обычно уже пришла, и положение
-	// интерполируется, а не угадывается.
+	// пальца, если точки приходят сразу: точка новее этого момента обычно
+	// уже пришла, и положение интерполируется, а не угадывается.
 	resampleLatency = 5 * time.Millisecond
 	// resampleMinDelta, resampleMaxDelta — промежуток между двумя последними
 	// точками, при котором по ним можно экстраполировать.
@@ -20,8 +20,12 @@ const (
 	resampleMaxDelta = 20 * time.Millisecond
 	// resampleMaxPrediction — дальше последней точки не экстраполировать.
 	resampleMaxPrediction = 8 * time.Millisecond
-	// touchHistory — сколько точек одной последовательности хранить.
-	touchHistory = 16
+	// touchHistory — сколько точек одной последовательности хранить (сенсор
+	// до 480 Гц при задержке до resampleLatency + 2 периода 60 Гц).
+	touchHistory = 64
+	// touchLagWindow — за сколько последних кадров с движением помнить
+	// возраст свежей точки (около 0,25 с при 120 Гц).
+	touchLagWindow = 32
 )
 
 // touchSample — точка касания с временем события.
@@ -36,14 +40,58 @@ type touchTrack struct {
 	samples []touchSample
 	applied touchSample
 	pending bool // есть точки после applied
+
+	// доставка точек: самая ранняя точка, пришедшая после прошлого кадра
+	// (hasFresh — такие есть), время прошлого кадра и самая свежая точка,
+	// которая к нему уже была
+	freshMin                time.Time
+	hasFresh                bool
+	lastFrame, newestAtLast time.Time
 }
 
 // touchResampler копит движения касаний до кадра и в кадре отдаёт одно
 // положение на каждую последовательность (design D6 frame-pacing): сдвиг
 // прокрутки за кадр не зависит от того, сколько точек прислал сенсор между
 // кадрами. Только цикл драйвера.
+//
+// Задержка пересчёта подбирается по тому, как приходят точки. В
+// NativeActivity касания идут через ViewRootImpl: система отдаёт их пачкой
+// раз за кадр со своего Choreographer, и пачка этого кадра приходит то до
+// нашего кадрового колбэка, то после. Тогда свежая точка то моложе 5 мс, то
+// старше на период, и положение на «vsync − 5 мс» угадывалось бы
+// экстраполяцией через кадр — сдвиг скакал бы, как без пересчёта. Поэтому
+// задержка — наибольшее опоздание за последние touchLagWindow кадров, от
+// resampleLatency до resampleLatency + 2 периода: положение всегда между
+// настоящими точками, ценой задержки на кадр там, где точки приходят
+// пачками. Опоздание кадра — возраст самой свежей точки, которая к нему
+// была, и засчитывается оно, только когда позже пришли точки, существовавшие
+// уже к тому кадру (доставка запоздала), без паузы перед ними: остановка
+// пальца — не опоздание.
 type touchResampler struct {
 	tracks map[touch.Sequence]*touchTrack
+
+	lags    [touchLagWindow]time.Duration // опоздания по кадрам
+	lagNext int                           // куда писать следующее
+	latency time.Duration                 // задержка последнего кадра (замер)
+}
+
+// Latency — задержка пересчёта, выбранная в последнем кадре с движением
+// (0 — касаний ещё не было).
+func (r *touchResampler) Latency() time.Duration { return r.latency }
+
+// noteLag запоминает возраст свежей точки в кадре.
+func (r *touchResampler) noteLag(d time.Duration) {
+	r.lags[r.lagNext] = max(d, 0)
+	r.lagNext = (r.lagNext + 1) % touchLagWindow
+}
+
+// resampleDelay — задержка пересчёта при периоде кадров period.
+func (r *touchResampler) resampleDelay(period time.Duration) time.Duration {
+	d := resampleLatency
+	for _, l := range r.lags {
+		d = max(d, l)
+	}
+	return min(d, resampleLatency+2*period)
 }
 
 // begin начинает последовательность seq: точка уже применена (TypeBegin).
@@ -70,6 +118,10 @@ func (r *touchResampler) move(seq touch.Sequence, x, y float32, t time.Time) boo
 	}
 	tr.samples = append(tr.samples, touchSample{x, y, t})
 	tr.pending = true
+	if !tr.hasFresh || t.Before(tr.freshMin) {
+		tr.freshMin = t
+	}
+	tr.hasFresh = true
 	return true
 }
 
@@ -107,19 +159,31 @@ func (r *touchResampler) sequences() []touch.Sequence {
 }
 
 // take — положение пальца seq для кадра с меткой vsync frame (время
-// кадрового колбэка): на frame − resampleLatency. false — с прошлого кадра
-// нечего применять.
-func (r *touchResampler) take(seq touch.Sequence, frame time.Time) (x, y float32, ok bool) {
+// кадрового колбэка) при периоде кадров period: на frame − задержка
+// (resampleDelay). false — с прошлого кадра нечего применять.
+func (r *touchResampler) take(seq touch.Sequence, frame time.Time, period time.Duration) (x, y float32, ok bool) {
 	tr := r.tracks[seq]
-	if tr == nil || !tr.pending {
+	if tr == nil {
 		return 0, 0, false
 	}
-	s, ok := resample(tr.samples, frame.Add(-resampleLatency))
+	last := tr.samples[len(tr.samples)-1]
+	// прошлый кадр видел точки с опозданием: пришли точки не новее его,
+	// и перед ними не было паузы
+	if tr.hasFresh && !tr.lastFrame.IsZero() && !tr.freshMin.After(tr.lastFrame) &&
+		tr.freshMin.Sub(tr.newestAtLast) <= resampleMaxDelta {
+		r.noteLag(tr.lastFrame.Sub(tr.newestAtLast))
+	}
+	tr.hasFresh = false
+	tr.lastFrame, tr.newestAtLast = frame, last.t
+	if !tr.pending {
+		return 0, 0, false
+	}
+	r.latency = r.resampleDelay(period)
+	s, ok := resample(tr.samples, frame.Add(-r.latency))
 	if !ok {
 		return 0, 0, false // все точки новее: подождут следующего кадра
 	}
 	// не назад относительно направления последнего движения
-	last := tr.samples[len(tr.samples)-1]
 	if (s.x-tr.applied.x)*(last.x-tr.applied.x)+(s.y-tr.applied.y)*(last.y-tr.applied.y) < 0 {
 		s = tr.applied
 	}
@@ -153,10 +217,10 @@ func resample(samples []touchSample, at time.Time) (touchSample, bool) {
 		return touchSample{}, false
 	}
 	a := samples[i]
-	if i+1 < len(samples) { // интерполяция
-		b := samples[i+1]
+	if i+1 < len(samples) { // интерполяция при любом промежутке: сенсор 480 Гц
+		b := samples[i+1] // присылает точки чаще resampleMinDelta
 		d := b.t.Sub(a.t)
-		if d < resampleMinDelta {
+		if d <= 0 {
 			return a, true
 		}
 		return lerp(a, b, at.Sub(a.t), d, at), true

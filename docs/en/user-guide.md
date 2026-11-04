@@ -94,6 +94,8 @@ The **Library** tab shows galleries as a grid of cards: cover and title. Card si
 
 Tapping a card opens its gallery page. The 🎲 button on the panel opens the page of a random gallery from the library; it is inactive while the library is empty. If the library is empty, the app shows the path of the folder to put archives into; you can copy the path in **Settings**.
 
+**Kinetic scroll (phone).** A quick swipe along a list (the library, search, a gallery page, settings, the strip) goes on by itself after you lift your finger and slows down smoothly, the way it does in other Android apps; a faster swipe goes farther, and a series of swipes in one direction speeds it up. A touch stops the scrolling at once and does not count as a tap, so a card under your finger does not open; tap again to open it. At the end of a list the scroll just stops. Flipping pages in paged mode and moving a zoomed page have no inertia.
+
 <img src="../images/mobile-library.png" alt="Empty library on Android" width="280">
 
 ### Card menu

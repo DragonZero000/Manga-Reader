@@ -17,9 +17,10 @@ import (
 // fakeTarget — прокрутка с наибольшим смещением maxOff.
 type fakeTarget struct{ off, maxOff float32 }
 
-func (f *fakeTarget) ScrollOffset() float32    { return f.off }
-func (f *fakeTarget) MaxScrollOffset() float32 { return f.maxOff }
-func (f *fakeTarget) ScrollToOffset(y float32) { f.off = max(0, min(y, f.maxOff)) }
+func (f *fakeTarget) ScrollOffset() float32     { return f.off }
+func (f *fakeTarget) MaxScrollOffset() float32  { return f.maxOff }
+func (f *fakeTarget) ScrollToOffset(y float32)  { f.off = max(0, min(y, f.maxOff)) }
+func (f *fakeTarget) Draggable() fyne.Draggable { return DragOf(f) }
 
 // smootherWithTicks — сглаживатель, анимации которого тест ведёт сам: tick(f)
 // — такт последней запущенной анимации.
