@@ -16,10 +16,12 @@ const badgeMax = 99
 // BadgeIcon возвращает иконку base (SVG с viewBox 0 0 24 24) с кружком и
 // числом n в правом верхнем углу. При n <= 0 возвращается сама base.
 // fg — цвет исходной иконки, badge — цвет кружка; цифры рисуются белым.
+// ring — цвет кольца вокруг кружка (обычно фон панели), отделяет кружок от
+// иконки того же цвета; nil — без кольца.
 //
 // Текст в SVG рендер Fyne не поддерживает, поэтому цифры рисуются линиями
 // в стиле семисегментного индикатора.
-func BadgeIcon(base fyne.Resource, n int, fg, badge color.Color) fyne.Resource {
+func BadgeIcon(base fyne.Resource, n int, fg, badge, ring color.Color) fyne.Resource {
 	if n <= 0 || base == nil {
 		return base
 	}
@@ -51,18 +53,29 @@ func BadgeIcon(base fyne.Resource, n int, fg, badge color.Color) fyne.Resource {
 
 	// Скругления rx и transform групп рендер Fyne не поддерживает:
 	// «таблетка» — два круга и прямоугольник между ними.
-	bc := hexColor(badge)
-	pill := fmt.Sprintf(`<circle cx="%.2f" cy="%.2f" r="%.2f" fill="%s"/><circle cx="%.2f" cy="%.2f" r="%.2f" fill="%s"/>`,
-		x0+r, cy, r, bc, 24-r, cy, r, bc)
-	if w > 2*r {
-		pill += fmt.Sprintf(`<rect x="%.2f" y="%.2f" width="%.2f" height="%.2f" fill="%s"/>`, x0+r, cy-r, w-2*r, 2*r, bc)
+	// shape — «таблетка» с центрами кругов как у кружка и радиусом rad
+	shape := func(rad float64, c string) string {
+		s := fmt.Sprintf(`<circle cx="%.2f" cy="%.2f" r="%.2f" fill="%s"/><circle cx="%.2f" cy="%.2f" r="%.2f" fill="%s"/>`,
+			x0+r, cy, rad, c, 24-r, cy, rad, c)
+		if w > 2*r {
+			s += fmt.Sprintf(`<rect x="%.2f" y="%.2f" width="%.2f" height="%.2f" fill="%s"/>`, x0+r, cy-rad, w-2*r, 2*rad, c)
+		}
+		return s
+	}
+	pill := shape(r, hexColor(badge))
+	ringName := "none"
+	if ring != nil {
+		// кольцо — та же фигура шире на ringW под кружком
+		const ringW = 1.6
+		ringName = hexColor(ring)[1:]
+		pill = shape(r+ringW, hexColor(ring)) + pill
 	}
 	svg := fmt.Sprintf(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24px" height="24px" fill="%s">`+
 		`%s%s<path d="%s" fill="none" stroke="#ffffff" stroke-width="%.2f" stroke-linecap="round" stroke-linejoin="round"/>`+
 		`</svg>`,
 		hexColor(fg), inner, pill, glyphs.String(), stroke)
 	// Fyne кэширует растр по имени ресурса — в имени всё, что влияет на вид
-	name := fmt.Sprintf("badge-%s-%s-%s-%s.svg", base.Name(), label, hexColor(fg)[1:], hexColor(badge)[1:])
+	name := fmt.Sprintf("badge-%s-%s-%s-%s-%s.svg", base.Name(), label, hexColor(fg)[1:], hexColor(badge)[1:], ringName)
 	return fyne.NewStaticResource(name, []byte(svg))
 }
 

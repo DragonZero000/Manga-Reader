@@ -201,3 +201,37 @@ Android кадры идут по `AChoreographer`, на Windows — по vsync �
   `TakeSample` записывает вид движения (`touch`, `fling`).
 - `driver/pacing`: `Fling(target, v)` и `FlingActive()` — бросок для сценариев
   замера (на ПК тоже).
+
+### Вкладки: цвет подписи (`library-stats`)
+
+- `container/tabs.go`: у `TabItem` неэкспортируемое поле `importance` и
+  метод `SetImportance(widget.Importance)`; у `tabButton` флаг `danger`;
+  `tabButtonRenderer.Refresh` для `danger` красит подпись цветом
+  `theme.ColorNameError` (выбрана вкладка или нет). Нужно вкладке «Ошибки»
+  MangaReader: у `AppTabs` цвет подписи иначе берётся из темы.
+- `container/apptabs.go`: `buildTabButtons` переносит важность вкладки в
+  `tabButton.danger`; после `SetImportance` нужен `AppTabs.Refresh()`.
+- `container/apptabs_mangareader_test.go`: `TestTabItemDangerLabel`.
+  При возврате на исходный Fyne подпись станет обычного цвета, иконка
+  остаётся красной (её красит приложение).
+
+### Android: долгое нажатие во время удержания (`library-stats`)
+
+В Fyne долгое нажатие на телефоне срабатывало только при подъёме пальца
+(`tapUp`, если прошло больше `tapSecondaryDelay`): пока палец лежит,
+ничего не видно, и непонятно, получилось ли нажатие. Теперь — как в Android:
+меню открывается во время удержания.
+
+- `canvas.go`: поля `pressSeq` (номер касания по `tapID`) и `longFired`;
+  `armLongPress` после `tapDown` ставит таймер на `tapSecondaryDelay`
+  (кроме касания, остановившего бросок); `fireLongPress` в UI-потоке
+  (`DoFromGoroutine`) вызывает долгое нажатие объекта под пальцем, если
+  касание ещё то же и перетаскивания нет. `tapMove` за порогом сдвига и
+  `tapUp` меняют номер (ожидание отменяется); `tapUp` после сработавшего
+  долгого нажатия не вызывает колбэки нажатия, второго и двойного нажатия
+  (`TouchUp` — как обычно). Старый путь «долгое при подъёме» остаётся, если
+  таймер не успел.
+- `driver.go`: `tapDownCanvas` вызывает `armLongPress` с `TappedSecondary`.
+- `longpress_mangareader_test.go`: удержание, сдвиг, короткое нажатие.
+  При возврате на исходный Fyne меню снова будет открываться после подъёма
+  пальца.

@@ -47,14 +47,17 @@ type Shell struct {
 	// подменяется в тестах.
 	needsWriteAccess func() bool
 
+	libraryTab  *container.TabItem
 	searchTab   *container.TabItem
-	errorsTab   *container.TabItem
+	statsTab    *container.TabItem
+	errorsTab   *container.TabItem // есть в Tabs, только пока есть ошибки
 	settingsTab *container.TabItem
 	watching    bool     // наблюдение за папкой запущено
 	onStopped   []func() // действия при выходе
 
 	library *screens.Library
 	search  *screens.Search
+	stats   *screens.Stats
 	errors  *screens.Errors
 	// grid — размер карточек, общий для библиотеки и поиска
 	grid     *screens.GridMetrics
@@ -66,11 +69,21 @@ type Shell struct {
 }
 
 // libraryChanged отмечает изменение библиотеки помимо сканирования; если
-// открыта вкладка «Поиск», запрос выполняется заново сразу.
+// открыта вкладка «Поиск» или «Статистика», она обновляется сразу.
 func (s *Shell) libraryChanged() {
 	s.libRev++
-	if s.Tabs.Selected() == s.searchTab {
+	s.refreshOpenTab()
+}
+
+// refreshOpenTab обновляет открытую вкладку, зависящую от состава
+// библиотеки: поиск повторяет запрос, статистика пересчитывается (только
+// если библиотека изменилась с прошлого раза).
+func (s *Shell) refreshOpenTab() {
+	switch s.Tabs.Selected() {
+	case s.searchTab:
 		s.search.Rerun()
+	case s.statsTab:
+		s.stats.Rerun()
 	}
 }
 
@@ -82,7 +95,7 @@ func NewShell(a fyne.App, svc *app.Services) *Shell {
 		screens.Confirm(title, text, confirm, cb, s.Window)
 	}
 	s.needsWriteAccess = svc.NeedsWriteAccess
-	mobile := fyne.CurrentDevice().IsMobile()
+	mobile := isMobile()
 
 	var bottomInset float32
 	if mobile {
@@ -109,13 +122,18 @@ func NewShell(a fyne.App, svc *app.Services) *Shell {
 	s.library = screens.NewLibrary(svc, s.grid, s.Toast.Show, s.actions, choose)
 	s.search = screens.NewSearch(svc, s.grid, s.actions)
 	s.errors = screens.NewErrors(svc.Problems)
+	s.stats = screens.NewStats(svc, s.Window, s.SearchFor, s.actions.Open)
 	s.search.SetRevision(func() int { return s.libRev })
-	// поиск и ошибки отражают содержимое папки после каждого сканирования
+	s.stats.SetRevision(func() int { return s.libRev })
+	// поиск, статистика и ошибки отражают содержимое папки после каждого сканирования
 	s.library.OnScanned = func(changed bool) {
 		if changed {
 			s.libRev++
 		}
 		s.search.Rerun()
+		if s.Tabs.Selected() == s.statsTab {
+			s.stats.Rerun()
+		}
 		s.updateErrors()
 		s.svc.PruneLinks()
 		s.svc.PruneCovers()
@@ -126,19 +144,27 @@ func NewShell(a fyne.App, svc *app.Services) *Shell {
 	}, s.grid.Reload) // плотность сетки — сразу в библиотеке и поиске
 	s.setupBrowser(a)
 
+	s.libraryTab = container.NewTabItemWithIcon(i18n.T("tab.library"), theme.StorageIcon(), tabContent(s.library.Content()))
 	s.searchTab = container.NewTabItemWithIcon(i18n.T("tab.search"), theme.SearchIcon(), tabContent(s.search.Content()))
-	s.errorsTab = container.NewTabItemWithIcon(i18n.T("tab.errors"), theme.ErrorIcon(), tabContent(s.errors.Content()))
+	s.statsTab = container.NewTabItemWithIcon(i18n.T("tab.stats"), theme.ListIcon(), tabContent(s.stats.Content()))
+	s.errorsTab = container.NewTabItemWithIcon(i18n.T("tab.errors"), errorIcon(), tabContent(s.errors.Content()))
+	s.errorsTab.SetImportance(widget.DangerImportance)
 	s.settingsTab = container.NewTabItemWithIcon(i18n.T("tab.settings"), theme.SettingsIcon(), tabContent(s.settings.Content()))
-	s.Tabs = container.NewAppTabs(
-		container.NewTabItemWithIcon(i18n.T("tab.library"), theme.StorageIcon(), tabContent(s.library.Content())),
-		s.searchTab,
-		s.errorsTab,
-		s.settingsTab,
-	)
+	// «Ошибки» добавляется между «Статистикой»/«Поиском» и «Настройками»,
+	// когда появляются ошибки (updateErrors)
+	if mobile {
+		s.Tabs = container.NewAppTabs(s.libraryTab, s.searchTab, s.statsTab, s.settingsTab)
+	} else {
+		s.Tabs = container.NewAppTabs(s.statsTab, s.libraryTab, s.searchTab, s.settingsTab)
+	}
+	// «Библиотека» на ПК больше не первая: стартовая вкладка — явно
+	s.Tabs.Select(s.libraryTab)
 	s.Tabs.OnSelected = func(item *container.TabItem) {
 		switch item {
 		case s.searchTab:
 			s.search.Rerun()
+		case s.statsTab:
+			s.stats.Rerun()
 		case s.errorsTab:
 			s.updateErrors()
 		case s.settingsTab:
@@ -331,20 +357,47 @@ func (s *Shell) ChooseFolder() {
 	}, s.Window)
 }
 
-// updateErrors обновляет экран ошибок и число на вкладке. Открытая вкладка
-// «Ошибки» означает, что пользователь видит все записи, — они отмечаются
-// просмотренными (в том числе появившиеся, пока вкладка открыта).
+// errorIcon — иконка вкладки «Ошибки»: цвета ошибки темы.
+func errorIcon() fyne.Resource { return theme.NewErrorThemedResource(theme.ErrorIcon()) }
+
+// errorsTabShown сообщает, есть ли вкладка «Ошибки» в панели вкладок.
+func (s *Shell) errorsTabShown() bool {
+	for _, it := range s.Tabs.Items {
+		if it == s.errorsTab {
+			return true
+		}
+	}
+	return false
+}
+
+// updateErrors обновляет экран ошибок, вкладку «Ошибки» и число на ней.
+// Вкладка есть, только пока есть ошибки; красная иконка и подпись — всегда,
+// пока она есть. Открытая вкладка «Ошибки» означает, что пользователь видит
+// все записи, — они отмечаются просмотренными (в том числе появившиеся, пока
+// вкладка открыта).
 func (s *Shell) updateErrors() {
 	p := s.svc.Problems
-	if s.Tabs.Selected() == s.errorsTab {
+	has := len(p.Items()) > 0
+	if has && s.Tabs.Selected() == s.errorsTab {
 		p.MarkAllSeen()
 	}
 	s.errors.Refresh()
-	icon := theme.ErrorIcon()
+	switch shown := s.errorsTabShown(); {
+	case has && !shown:
+		s.showErrorsTab()
+	case !has && shown:
+		s.hideErrorsTab()
+	}
+	if !has {
+		return
+	}
+	icon := errorIcon()
 	if n := p.Unseen(); n > 0 {
 		settings := fyne.CurrentApp().Settings()
 		th, v := settings.Theme(), settings.ThemeVariant()
-		icon = BadgeIcon(icon, n, th.Color(theme.ColorNameForeground, v), th.Color(theme.ColorNameError, v))
+		errColor := th.Color(theme.ColorNameError, v)
+		// иконка и кружок одного цвета — кольцо цвета фона их разделяет
+		icon = BadgeIcon(theme.ErrorIcon(), n, errColor, errColor, th.Color(theme.ColorNameBackground, v))
 	}
 	if s.errorsTab.Icon != icon {
 		s.errorsTab.Icon = icon
@@ -352,8 +405,49 @@ func (s *Shell) updateErrors() {
 	}
 }
 
-// Errors — экран ошибок и его вкладка (для тестов).
+// showErrorsTab вставляет вкладку «Ошибки» перед «Настройками». Выбранной
+// остаётся прежняя вкладка: Fyne хранит выбор по номеру, вставка сдвинула бы
+// «Настройки» под выбор «Ошибок».
+func (s *Shell) showErrorsTab() {
+	prev := s.Tabs.Selected()
+	items := make([]*container.TabItem, 0, len(s.Tabs.Items)+1)
+	for _, it := range s.Tabs.Items {
+		if it == s.settingsTab {
+			items = append(items, s.errorsTab)
+		}
+		items = append(items, it)
+	}
+	s.Tabs.SetItems(items)
+	if prev != nil && s.Tabs.Selected() != prev {
+		s.Tabs.Select(prev)
+	}
+}
+
+// hideErrorsTab убирает вкладку «Ошибки»; если она выбрана, сначала
+// выбирается «Статистика».
+func (s *Shell) hideErrorsTab() {
+	if s.Tabs.Selected() == s.errorsTab {
+		s.Tabs.Select(s.statsTab)
+	}
+	s.Tabs.Remove(s.errorsTab)
+	s.errorsTab.Icon = errorIcon() // без числа, если вкладка вернётся
+}
+
+// Errors — экран ошибок и его вкладка (для тестов); вкладка есть в Tabs,
+// только пока есть ошибки.
 func (s *Shell) Errors() (*screens.Errors, *container.TabItem) { return s.errors, s.errorsTab }
+
+// Stats — экран статистики (для тестов).
+func (s *Shell) Stats() *screens.Stats { return s.stats }
+
+// TabTitles — подписи вкладок по порядку (для тестов).
+func (s *Shell) TabTitles() []string {
+	out := make([]string, len(s.Tabs.Items))
+	for i, it := range s.Tabs.Items {
+		out[i] = it.Text
+	}
+	return out
+}
 
 // updateLayers скрывает слои, полностью закрытые слоем выше: вкладки — под
 // страницей произведения и читалкой, страницу произведения — под читалкой.
@@ -455,3 +549,7 @@ func (s *Shell) typedKey(ev *fyne.KeyEvent) {
 		}
 	}
 }
+
+// isMobile — приложение на телефоне (порядок вкладок, нижняя панель);
+// подменяется в тестах.
+var isMobile = func() bool { return fyne.CurrentDevice().IsMobile() }

@@ -180,3 +180,29 @@ func TestParseErrors(t *testing.T) {
 		t.Errorf("текст ошибки: %q", got)
 	}
 }
+
+func TestParseMissing(t *testing.T) {
+	q := mustParse(t, `Missing:Artist -missing:META missing:tags -Missing:"tag"`)
+	want := []Filter{
+		{FieldMissing, OpHas, Value{Text: "artist"}},
+		{FieldMissing, OpNotHas, Value{Text: "meta"}},
+		{FieldMissing, OpHas, Value{Text: "tags"}},
+		{FieldMissing, OpNotHas, Value{Text: "tag"}},
+	}
+	if !reflect.DeepEqual(q.Filters, want) {
+		t.Errorf("фильтры %+v, want %+v", q.Filters, want)
+	}
+	pe := parseErr(t, "missing:title")
+	if pe.Token != "missing:title" || pe.Reason.Code != ReasonUnknownValue || !reflect.DeepEqual(pe.Reason.Args, []any{"title"}) {
+		t.Errorf("missing:title: %+v", pe)
+	}
+	if pe := parseErr(t, "-missing:"); pe.Reason.Code != ReasonNoValue {
+		t.Errorf("-missing: %+v", pe)
+	}
+	f := Filter{Field: FieldMissing, Op: OpEq, Value: Value{Text: "meta"}}
+	q = NewQuery()
+	q.Filters = []Filter{f}
+	if err := q.Validate(); err == nil {
+		t.Error("операция OpEq для missing допустима")
+	}
+}

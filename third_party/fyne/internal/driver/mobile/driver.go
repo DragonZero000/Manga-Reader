@@ -498,6 +498,10 @@ func (d *driver) tapDownCanvas(w *window, x, y float32, tapID touch.Sequence) {
 	pos := fyne.NewPos(tapX, tapY+tapYOffset)
 
 	w.canvas.tapDown(pos, int(tapID))
+	// mangareader: долгое нажатие во время удержания
+	w.canvas.armLongPress(pos, int(tapID), func(wid fyne.SecondaryTappable, ev *fyne.PointEvent) {
+		wid.TappedSecondary(ev)
+	})
 }
 
 func (d *driver) tapMoveCanvas(w *window, x, y float32, tapID touch.Sequence) {

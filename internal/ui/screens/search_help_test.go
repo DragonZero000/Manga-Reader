@@ -17,7 +17,7 @@ func TestHelpExamples(t *testing.T) {
 		all = append(all, ex[0])
 	}
 	joined := strings.Join(all, "\n")
-	for _, want := range []string{"custom-tag:", "hidden-tag:"} {
+	for _, want := range []string{"custom-tag:", "hidden-tag:", "missing:artist"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("в справке нет %q", want)
 		}

@@ -25,7 +25,7 @@ android/             Android Gradle project; browser screens in Kotlin
 openspec/            specifications and change history (OpenSpec)
 docs/                documentation (en, ru, images)
 testdata/            example.zip — a sample archive
-third_party/fyne/    modified copy of Fyne 2.8.0 (frame pacing, see PATCHES.md)
+third_party/fyne/    modified copy of Fyne 2.8.0 (frame pacing, tab label colour, see PATCHES.md)
 .github/workflows/   CI and releases
 FyneApp.toml         app metadata and the single source of the version
 ```
@@ -41,6 +41,7 @@ FyneApp.toml         app metadata and the single source of the version
 | `internal/library` | Folder scanning, zip and `meta.json` parsing, file type detection, change watching (fsnotify), page sizes |
 | `internal/model` | Model: `Gallery`, `Tag`, `Key`, the user's tag overlay (`EffectiveTags`, `TagViews`), natural sorting |
 | `internal/search` | Search fields, query parsing, `Query`, the `Index` interface and the in-memory index |
+| `internal/stats` | Library statistics over a list of galleries with no widgets: totals, tag tops, page and size buckets, years, growth, quality, and the search query behind each row |
 | `internal/problems` | The list of library errors and their seen status |
 | `internal/thumbs` | Cover thumbnails: background decoding, downscaling, in-memory cache |
 | `internal/pages` | Prioritized page loading for the reader and display geometry |
@@ -53,7 +54,7 @@ FyneApp.toml         app metadata and the single source of the version
 | `internal/display` | Refresh rate of the app window on Android (JNI, `DisplayRate.kt`): the 60 Hz limit and the highest rate to ask for while something moves; a stub on other platforms |
 | `internal/appversion` | The version from `FyneApp.toml` and the Android build number |
 | `internal/ui` | Shell: window, tabs, toast notifications, wiring screens to services |
-| `internal/ui/screens` | Screens: library, search, errors, settings |
+| `internal/ui/screens` | Screens: library, search, statistics, errors, settings |
 | `internal/ui/details` | Gallery page |
 | `internal/ui/reader` | Reader: paged mode and strip |
 | `internal/ui/frameclock` | The only wrapper over Fyne's frame pacing (`driver/pacing`): frame time for animations and budgets, refresh rate, frame observer, refresh-rate hint |
@@ -96,6 +97,7 @@ Fyne 2.8 draws frames on a 60 Hz timer that isn't tied to the screen: on a 120 H
 - **Animation time.** Fyne animations and the app's own (wheel smoothing, the cover and page-texture budgets, the probe's autoscroll) take the time of the vsync the frame is prepared for, not `time.Now()`. At a steady speed every frame moves the same distance.
 - **Touches per frame (Android).** The touch sensor sends points more often than frames and unevenly. Finger moves are collected until the frame, and the frame applies one position 5 ms before the frame time: interpolated between neighbouring points, or extrapolated by at most 8 ms, as Android itself does. If the system hands the points over in a batch once per frame (in a `NativeActivity` touches go through `ViewRootImpl`) and the batch arrives sometimes before our frame and sometimes after, the delay adapts: the largest delivery delay over the last 32 frames (finger pauses don't count), at most 5 ms + 2 frame periods, so the position always lies between real points. If lifting the finger starts a fling, the lag isn't caught up in one jump — the fling starts from the position on screen. So the scroll distance per frame doesn't depend on how many points arrived. Touch start and end are passed on at once.
 - **Kinetic scroll (Android).** After a finger leaves a vertical scroll (library and search grids, a gallery page, settings, the reader strip), the scroll goes on with Android's own physics (`OverScroller`): the speed comes from the finger points of the last 100 ms (a quadratic least-squares fit, zero if the finger stood still for 40 ms), the distance and the slowing down follow the spline curve from AOSP, and a leave slower than 50 dp/s or faster than 8000 dp/s is dropped or capped. Steps run once per frame from the frame time, as a Fyne animation, so they are even at any refresh rate. A touch during the fling stops it and is not a tap (a card doesn't open); a fling in the same direction adds speed, as in `OverScroller`; at the edge of the list it just stops. Other draggable widgets (the paged-mode swipe, a zoomed page, sliders) get the end of the drag at once, without inertia. The code is the `internal/fling` package in the Fyne copy; Fyne's own inertia (a goroutine sleeping 16 ms) is removed. The PC keeps the mouse and wheel behaviour.
+- **Long press (Android).** Fyne used to fire a long press only when the finger was lifted. In the copy it fires while the finger is still down, as in Android: 300 ms after the touch, if the finger hasn't moved past the drag threshold, the object under it gets `TappedSecondary` (a card or statistics row menu opens), and lifting the finger afterwards does nothing. Moving the finger or lifting it earlier cancels the wait; a touch that stopped a fling never becomes a long press (`armLongPress` in `internal/driver/mobile/canvas.go`).
 - **`driver/pacing`** is the package added to the copy: frame time, refresh rate, pacing mode, the frame observer (for the probe), the refresh-rate hint. The app uses it only through [`internal/ui/frameclock`](../../internal/ui/frameclock/frameclock.go); `internal/archtest` checks that. To go back to upstream Fyne, remove the `replace` and replace that one file with a `time.Now()` version.
 
 ## Layers, covers and page textures
@@ -116,7 +118,7 @@ The app keeps two SQLite files next to each other (next to the exe on PC, in the
 
 | File | Package | Nature |
 |---|---|---|
-| `library.db` | `internal/catalog` | Cache: rebuilt from the archives. Recreated on a schema version change or damage, cleared when the library folder changes |
+| `library.db` | `internal/catalog` | Cache: rebuilt from the archives. Recreated on a schema version change (now 6: `docs.has_meta`) or damage, cleared when the library folder changes |
 | `user.db` | `internal/userdata` | User data (own and hidden tags, reading progress; later groups): cannot be restored from the archives. Never recreated: the schema changes by migrations (`PRAGMA user_version`); a damaged file is renamed to `user.db.broken-<YYYYMMDD-HHMMSS>` and a new one is created; a file from a newer app version is left untouched and user data is unavailable in that run |
 
 A work record (`works`) stores a stable `uid`, the library folder key, the path relative to it, the content fingerprint and the "orphan" time (the file is not found). User data refers to `uid`, not to the path. Records are created only when data about a work is first saved. The folder key is `app:manga` on PC (moving the portable folder keeps the data) and the SAF tree URI on Android.
@@ -149,6 +151,16 @@ In the search index a tag has an origin: `tags.src` is 0 for a visible original,
 The index in `library.db` stores the result of the overlay, so it must match `user.db`. `user.db` gets a random epoch when it is created (`meta.epoch`); `library.db` remembers the epoch its index was built with (`meta.overlay_epoch`, `none` without user data). At startup, if they differ (`user.db` restored from a backup, recreated after damage, unavailable), the library is reindexed in the background after `LoadCatalog` and the epoch is saved. Rebuilding the index from the scanner cache and changing the library folder reset the saved epoch.
 
 Reading progress is the `progress(uid, page, page_index, total, finished, updated_at)` table in `user.db`, one row per work: the page's file name in the archive, its number and the page count when it was saved, and the "finished" mark. `app.ProgressService` keeps the positions of the current folder in memory (the Continue button and the menu read them on the UI thread) and writes to the database from a single background goroutine in order, so "finished" is never overwritten by an earlier position; positions are reloaded after reconciling with a scan and after changing the folder. `app.Resume` picks the page for Continue: by name first, then by number (the position may be inaccurate); for a finished work — the first page after the last one read, if it has appeared. The shell saves the position a second after a page change, when the reader closes and when the app goes to the background.
+
+## Statistics and the Errors tab
+
+`internal/stats` counts the library composition from a list of galleries with no widgets: `stats.Compute(ctx, galleries, Options)` returns numbers per block (`Result`) and a reference to each row (`RowRef`), and `stats.Query(row, filter)` builds the search query behind a row. Nothing is stored in SQL: the galleries in memory already carry the user's own and hidden tags (`EffectiveTags`), and a second implementation of the same rules in `library.db` would drift away from them. The sample is all galleries, or, with a filter, the keys that `search.Index` finds for the filter text (`internal/app.StatsService`: one background goroutine per request, a new request cancels the previous one, the screen drops an answer that is not for the latest request).
+
+- **Rows and search.** A test checks for every row of a test library that `Index.Search(Query(row))` finds exactly the number in the row, with `MemIndex` and with `catalog`. A tag is quoted by `search.TagQuery`, the same function the gallery page uses. The upload year is counted in UTC and the growth in local time, the way search parses `uploaded:` and `added:`.
+- **`missing:`.** The search field `missing:<tag type>`, `missing:tags` and `missing:meta` (and `-missing:…`) are answered from the effective tags and from `Gallery.HasMeta` — "a `meta.json` was found and parsed in the archive". The catalog stores it in `docs.has_meta`, so `schemaVersion` of `library.db` is 6: an older catalog is recreated and the library is scanned once.
+- **Settings.** `stats.filter`, `stats.excluded`, `stats.blocks`, `stats.modes`, `stats.bounds.pages`, `stats.bounds.size` in `storage.Settings` (JSON in one key per group; a damaged value gives the default and a log line). They are display settings, not data about works, so they are not in `user.db`.
+- **Screen.** `internal/ui/screens` (`stats*.go`): rows are `statRow` widgets reused by index, a long top opens in a fixed-height `widget.List`. Counting results come back through `fyne.Do`. The screen recounts only if the library revision (`Shell.libRev`), the filter, the exclusions or the settings changed.
+- **Tabs.** `Shell` builds the tabs per platform (Windows: Statistics first; Android: after Search) and selects Library explicitly. The **Errors** tab is inserted before Settings and removed when the error list becomes empty; if it is selected at that moment, Statistics is selected first. Its label colour comes from `TabItem.SetImportance(widget.DangerImportance)`, a change in the Fyne copy (see `PATCHES.md`, "Tabs: label colour").
 
 ## Localization
 

@@ -91,45 +91,23 @@ func TestOpenPreviousSchemaRecreates(t *testing.T) {
 	}
 }
 
-// Каталог версии 4 (обложки в таблице) переводится без пересоздания:
-// галереи остаются, таблица обложек удалена, файл уменьшился.
-func TestOpenMigratesCovers(t *testing.T) {
-	path := filepath.Join(t.TempDir(), FileName)
-	c := openTest(t, path, "root")
-	c.db.Exec(`INSERT INTO files(rel, size, mtime, err_kind, err_text) VALUES('a.txt', 1, 1, '', 'x')`)
-	if _, err := c.db.Exec(`CREATE TABLE covers(key TEXT PRIMARY KEY, rel TEXT, w INTEGER, h INTEGER, jpeg BLOB)`); err != nil {
-		t.Fatal(err)
-	}
-	big := make([]byte, 64<<10)
-	for i := range 40 {
-		c.db.Exec(`INSERT INTO covers(key, rel, w, h, jpeg) VALUES(?, ?, 1, 1, ?)`, fmt.Sprintf("k%d", i), "a.zip", big)
-	}
-	c.db.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, coversVersion()))
-	c.db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`)
-	c.Close()
-	before, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
+// Каталог версий 4 и 5 (без has_meta) пересоздаётся: галереи в нём без
+// признака meta.json, библиотека пересканируется.
+func TestOpenWithoutHasMetaRecreates(t *testing.T) {
+	for _, old := range []int{4, 5} {
+		path := filepath.Join(t.TempDir(), FileName)
+		c := openTest(t, path, "root")
+		c.db.Exec(`INSERT INTO files(rel, size, mtime, err_kind, err_text) VALUES('a.txt', 1, 1, '', 'x')`)
+		c.db.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, old*100+search.NormVersion))
+		c.Close()
 
-	c2 := openTest(t, path, "root")
-	if c2.Fresh() || count(t, c2, "files") != 1 {
-		t.Fatalf("каталог пересоздан: fresh=%v, files=%d", c2.Fresh(), count(t, c2, "files"))
-	}
-	var tables int
-	c2.db.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE name = 'covers'`).Scan(&tables)
-	var ver int
-	c2.db.QueryRow(`PRAGMA user_version`).Scan(&ver)
-	if tables != 0 || ver != userVersion() {
-		t.Fatalf("таблица обложек %d, версия %d", tables, ver)
-	}
-	c2.db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`)
-	after, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if after.Size() >= before.Size()-int64(len(big))*20 {
-		t.Fatalf("файл не уменьшился: %d → %d", before.Size(), after.Size())
+		c2 := openTest(t, path, "root")
+		if !c2.Fresh() || count(t, c2, "files") != 0 {
+			t.Fatalf("версия %d: fresh=%v, files=%d", old, c2.Fresh(), count(t, c2, "files"))
+		}
+		if _, err := c2.db.Exec(`SELECT has_meta FROM docs`); err != nil {
+			t.Fatalf("версия %d: нет колонки has_meta: %v", old, err)
+		}
 	}
 }
 

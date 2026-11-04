@@ -51,6 +51,8 @@ func newTestShellSettings(t *testing.T, settings storage.Settings) (*Shell, *lib
 	s.Reader.SetDispatcher(do)
 	s.Search().SetDispatcher(do)
 	s.Search().SetDelay(testDelay)
+	s.Stats().SetDispatcher(do)
+	s.Stats().SetDelay(testDelay)
 	s.Library().SetDispatcher(do)
 	pump := func() {
 		for {

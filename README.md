@@ -25,7 +25,8 @@ An offline manga reader for zip archives on **Windows** and **Android**, with a 
 - **Reading progress** — the app remembers where you stopped: **Continue · p. N** on the gallery page, a "finished" mark, and new pages added to the archive are picked up.
 - **Search** — by words and phrases, tags (including your own and hidden ones), excluded tags, page count, dates, file size; runs while you type or on a button; tapping a tag searches for it; 🎲 picks a random result.
 - **Built-in browser** — Firefox ESR on Windows, GeckoView on Android, in the app's language; downloads are saved right into the library, and the app remembers the page each file came from.
-- **Errors** — anything that isn't an archive of images (HTML instead of an archive, a broken zip, a PDF…) is listed on a separate tab with the reason; files are never deleted.
+- **Statistics** — what the library consists of: top artists, parodies, languages and tags, page and size distributions, growth by month, your own tags, metadata quality; narrow it with a search filter, hide tags and blocks, and tap any row to search for it.
+- **Errors** — anything that isn't an archive of images (HTML instead of an archive, a broken zip, a PDF…) is listed on a separate tab (shown only while there are errors) with the reason; files are never deleted.
 - **Portable on Windows** — everything lives in one folder you can carry on a USB stick.
 
 ## Download

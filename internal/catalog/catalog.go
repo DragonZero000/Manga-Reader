@@ -31,12 +31,11 @@ const FileName = "library.db"
 // (Gallery.Fingerprint): каталог версии 2 пересоздаётся, библиотека
 // сканируется целиком. 4 — происхождение тегов в индексе (tags.src: свои и
 // скрытые теги); выходит вместе с 3, так что библиотека пересканируется один
-// раз. 5 — обложки не в каталоге, а файлами кэша (thumbs.DirStore): каталог
-// версии 4 переводится без пересоздания (migrateCovers).
-const schemaVersion = 5
-
-// coversVersion — user_version каталога с таблицей обложек (схема 4).
-func coversVersion() int { return 4*100 + search.NormVersion }
+// раз. 5 — обложки не в каталоге, а файлами кэша (thumbs.DirStore). 6 —
+// признак «в архиве есть meta.json» (Gallery.HasMeta, docs.has_meta): старые
+// записи его не хранят, каталог версий 4 и 5 пересоздаётся, библиотека
+// пересканируется один раз.
+const schemaVersion = 6
 
 // userVersion — PRAGMA user_version: схема и правила нормализации поиска.
 func userVersion() int { return schemaVersion*100 + search.NormVersion }
@@ -66,7 +65,7 @@ var schema = []string{
 		gallery BLOB, err_kind TEXT, err_text TEXT)`,
 	`CREATE TABLE docs(key TEXT PRIMARY KEY, rel TEXT, title_sort TEXT, title_norm TEXT,
 		scan_norm TEXT, ext_id INTEGER, pages INTEGER, favorites INTEGER, size INTEGER,
-		uploaded INTEGER, added INTEGER)`,
+		uploaded INTEGER, added INTEGER, has_meta INTEGER NOT NULL DEFAULT 0)`,
 	`CREATE VIRTUAL TABLE docs_fts USING fts5(key UNINDEXED, hay, tokenize='trigram')`,
 	// src — происхождение тега: srcMeta, srcCustom, srcHidden
 	`CREATE TABLE tags(key TEXT, type TEXT, name TEXT, name_norm TEXT, src INTEGER NOT NULL,
@@ -144,11 +143,6 @@ func open(path string) (*Catalog, error) {
 			db.Close()
 			return nil, fmt.Errorf("creating schema: %w", err)
 		}
-	case ver == coversVersion():
-		if err := c.migrateCovers(); err != nil {
-			db.Close()
-			return nil, fmt.Errorf("moving covers out: %w", err)
-		}
 	case ver != userVersion():
 		db.Close()
 		return nil, fmt.Errorf("version %d, need %d", ver, userVersion())
@@ -174,18 +168,6 @@ func (c *Catalog) create() error {
 		return err
 	}
 	c.fresh = true
-	return nil
-}
-
-// migrateCovers переводит каталог версии 4 на текущую: удаляет таблицу
-// обложек (они теперь файлами кэша) и освобождает её место в файле. Галереи
-// и индекс остаются — библиотека не пересканируется.
-func (c *Catalog) migrateCovers() error {
-	for _, q := range []string{`DROP TABLE IF EXISTS covers`, `PRAGMA user_version = ` + strconv.Itoa(userVersion()), `VACUUM`} {
-		if _, err := c.db.Exec(q); err != nil {
-			return fmt.Errorf("%s: %w", q, err)
-		}
-	}
 	return nil
 }
 

@@ -25,6 +25,17 @@ type TabItem struct {
 	button *tabButton
 
 	disabled bool
+
+	// mangareader: важность подписи вкладки (SetImportance).
+	importance widget.Importance
+}
+
+// SetImportance sets the importance of the tab label. mangareader: with
+// widget.DangerImportance the label is drawn in the theme error colour,
+// whether the tab is selected or not. Call Refresh of the tab container
+// afterwards.
+func (ti *TabItem) SetImportance(i widget.Importance) {
+	ti.importance = i
 }
 
 // Disabled returns whether or not the TabItem is disabled.
@@ -550,6 +561,7 @@ type tabButton struct {
 	icon          fyne.Resource
 	iconPosition  buttonIconPosition
 	importance    widget.Importance
+	danger        bool // mangareader: подпись цвета ошибки (TabItem.SetImportance)
 	onTapped      func()
 	onClosed      func()
 	text          string
@@ -739,7 +751,9 @@ func (r *tabButtonRenderer) Refresh() {
 	r.label.Text = r.button.text
 	r.label.Alignment = r.button.textAlignment
 	if !r.button.Disabled() {
-		if r.button.importance == widget.HighImportance {
+		if r.button.danger { // mangareader: красная подпись
+			r.label.Color = th.Color(theme.ColorNameError, v)
+		} else if r.button.importance == widget.HighImportance {
 			r.label.Color = th.Color(theme.ColorNamePrimary, v)
 		} else {
 			r.label.Color = th.Color(theme.ColorNameForeground, v)

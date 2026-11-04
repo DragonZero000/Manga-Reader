@@ -50,19 +50,32 @@ func near(c color.Color, want color.NRGBA) bool {
 
 func TestBadgeIcon(t *testing.T) {
 	base := theme.ErrorIcon()
-	if BadgeIcon(base, 0, badgeFG, badgeRed) != base {
+	if BadgeIcon(base, 0, badgeFG, badgeRed, nil) != base {
 		t.Fatal("при 0 должна возвращаться исходная иконка")
 	}
-	three := BadgeIcon(base, 3, badgeFG, badgeRed)
-	if !strings.Contains(three.Name(), "-3-") || BadgeIcon(base, 150, badgeFG, badgeRed).Name() == three.Name() {
+	three := BadgeIcon(base, 3, badgeFG, badgeRed, nil)
+	if !strings.Contains(three.Name(), "-3-") || BadgeIcon(base, 150, badgeFG, badgeRed, nil).Name() == three.Name() {
 		t.Fatalf("имя ресурса: %s", three.Name())
 	}
-	if !strings.Contains(BadgeIcon(base, 150, badgeFG, badgeRed).Name(), "-99+-") {
+	if !strings.Contains(BadgeIcon(base, 150, badgeFG, badgeRed, nil).Name(), "-99+-") {
 		t.Fatal("больше 99 — «99+»")
 	}
 
-	for _, res := range []fyne.Resource{three, BadgeIcon(base, 150, badgeFG, badgeRed)} {
+	for _, res := range []fyne.Resource{three, BadgeIcon(base, 150, badgeFG, badgeRed, nil)} {
 		checkBadgeRender(t, renderIcon(t, res))
+	}
+}
+
+func TestBadgeIconRing(t *testing.T) {
+	base := theme.ErrorIcon()
+	ring := color.NRGBA{R: 0x12, G: 0x34, B: 0x56, A: 0xff}
+	plain := BadgeIcon(base, 3, badgeRed, badgeRed, nil)
+	ringed := BadgeIcon(base, 3, badgeRed, badgeRed, ring)
+	if plain.Name() == ringed.Name() {
+		t.Fatal("кольцо должно менять имя ресурса (кэш растра)")
+	}
+	if !strings.Contains(string(ringed.Content()), "#123456") || strings.Contains(string(plain.Content()), "#123456") {
+		t.Fatal("кольцо рисуется только при заданном цвете")
 	}
 }
 

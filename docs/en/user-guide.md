@@ -12,6 +12,7 @@ MangaReader shows manga from zip archives in your library folder and helps you g
 - [Gallery page](#gallery-page)
 - [Reader](#reader)
 - [Search](#search)
+- [Statistics](#statistics)
 - [Built-in browser](#built-in-browser)
 - [Errors](#errors)
 - [Settings](#settings)
@@ -207,6 +208,7 @@ The **✕** button clears the box and keeps the results on screen. The 🎲 butt
 | `-tag:yuri` | Excludes works with the tag (also `-artist:…` etc.) |
 | `custom-tag:"my fav"` | Your own tag of any type, see [Editing tags](#editing-tags) |
 | `hidden-tag:yuri` | An original tag you hid |
+| `missing:artist` | Works with no tag of a type (`artist`, `group`, `parody`, `character`, `language`, `category`, `tag`); also `missing:tags` (no tags at all) and `missing:meta` (no `meta.json` in the archive) |
 | `pages:>20` | Page count: `>`, `<`, `>=`, `<=`, range `10..50` |
 | `uploaded:2024` | Upload date on the site: `2024`, `>2024-06`, `2024-01..2024-03` |
 | `added:>=2025-01` | When the file appeared in the folder (file modification time) |
@@ -215,9 +217,36 @@ The **✕** button clears the box and keeps the results on screen. The 🎲 butt
 | `scanlator:name` | Scanlator |
 | `school pages:>20 -tag:yuri` | All together |
 
-Tags are searched as you see them on the gallery page: `tag:`, `artist:` and the other types find the original tags that aren't hidden plus your own ones, and a word in the query doesn't match hidden tags. `custom-tag:` finds only your own tags, `hidden-tag:` only hidden ones; both work with `-`.
+Tags are searched as you see them on the gallery page: `tag:`, `artist:` and the other types find the original tags that aren't hidden plus your own ones, and a word in the query doesn't match hidden tags. `custom-tag:` finds only your own tags, `hidden-tag:` only hidden ones; both work with `-`. `missing:artist` takes the same current tags into account, and `-missing:artist` is the opposite (works that have an artist).
 
 Dates: `2024` is the whole year, `2024-06` a month, `2024-06-15` a day; `>period` means after its end, `<period` before its start. If a query has a mistake, "Query error: …" appears below the search box with an explanation. Results refresh on their own when the library changes: the last query that ran is repeated.
+
+## Statistics
+
+The **Statistics** tab shows what the library consists of: which artists, parodies and languages prevail, how much space the works take, which ones have no metadata. It is the first tab on Windows and comes after **Search** on Android; the app still starts on **Library**. Statistics use the current tags of a work — the original ones except the hidden ones, plus your own — and the actual page count and file size.
+
+Blocks, in this order (each one can be turned off, see below):
+
+- **Summary** — works, pages and total size; average and median page count and size; the earliest and the latest upload date; the number of unique tags of each type. Sizes here and everywhere in the statistics have two decimal places (`1.27 GB`).
+- **Artists, Groups, Parodies, Characters, Languages, Categories, Tags** — the first 5 rows of a top for each tag type with a bar, the value and the share. The switch in the block header ranks by works, pages or size, and the arrow next to it switches the order: descending or ascending. **Show all** opens the full list (up to 10 rows high, then it scrolls) with a **Find in list** box.
+- **By page count** and **By file size** — works split into buckets (by default 20, 50, 100, 200, 500 pages; 5, 10, 20, 50, 100, 200 MB); under the size buckets come **Largest works**: by size or by page count (a switch), with the order arrow and **Show all** like the tops; tapping one opens its page.
+- **By upload year** — one row per year of the upload date on the site, including years with no works, and **No date**.
+- **Library growth** — works by the time the file was changed: by month while the history is shorter than 24 months, otherwise by year (the arrow next to a year shows its months).
+- **Your tags** — how many works have your own and hidden tags, and a top of each.
+- **Metadata quality** — works without `meta.json`, without an artist, without a language, without tags.
+
+Tapping a tag, bucket, year, month or a quality row opens **Search** with the matching query (for example `size:>5mb size:<=10mb`, `missing:artist`) in front of which the statistics filter is put, so the found number matches the number in the row.
+
+**Filter.** The box at the top takes the same syntax as search, including `-tag:…`; the numbers are recounted half a second after you stop typing or on Enter. **✕** clears it, and the filter is kept between launches.
+
+**Hiding a tag.** Right-click (PC) or long press (phone: the menu opens while your finger is still on the screen) on a tag row opens a menu; the row stays highlighted while it is open. The tag disappears only from that block (and from the unique-tag count of its type in the summary); the works stay in all the other numbers, and the filter does not matter.
+
+- **Hide** — until the app is restarted. Such tags are listed under the filter as `artist:x — Artists`: **✕** brings the tag back, **Permanently** makes the exclusion permanent. With more than three of them, a single **Excluded: N** row replaces the list; tap it to expand or collapse the list.
+- **Hide permanently…** — after a confirmation the tag stays excluded after a restart too. Permanent exclusions are not shown at the top: they are in **Customize** → the collapsed **Permanent exclusions (N)** section, where **✕** brings the tag back.
+
+**Customize.** The button next to the filter turns the 14 blocks on and off (under the **Summary** checkbox, a collapsible **Summary fields** list hides any of its rows; a Summary with no fields is not shown), lists the permanent exclusions and sets your own bucket bounds for pages and size: numbers separated by commas, 1 to 15 of them, positive and strictly increasing; whole for pages, decimals with a dot for MB (`2.5, 10`). A wrong value shows an error under the box and the previous bounds stay; **Default** brings the defaults back.
+
+The numbers are counted in the background and refresh on their own when the library changes while the tab is open; if nothing changed since the last count, opening the tab shows the same numbers at once.
 
 ## Built-in browser
 
@@ -249,7 +278,7 @@ The **Browser** button on the library toolbar opens a Firefox-based browser. Eve
 
 ## Errors
 
-The app checks **every** file in the library folder. Only a `.zip` archive with images becomes a gallery; everything else lands on the **Errors** tab with a reason, for example:
+The app checks **every** file in the library folder. Only a `.zip` archive with images becomes a gallery; everything else lands on the **Errors** tab with a reason. The tab is there only while there are errors (it sits before **Settings**), and its icon and label are red. Examples of reasons:
 
 - "Image - only zip archives are supported": pictures, video, audio, PDF, RAR/7z, text — the type is detected by content, not by extension;
 - "Web page (HTML) instead of an archive" — the site returned an error or check page instead of the file;

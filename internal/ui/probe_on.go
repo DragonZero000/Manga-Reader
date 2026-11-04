@@ -329,7 +329,7 @@ func probeWaitFling(then func()) {
 }
 
 func (s *Shell) probeFlingGrid(next func()) {
-	s.Tabs.SelectIndex(0)
+	s.Tabs.Select(s.libraryTab)
 	probeFling("fling-grid", s.library.Scroller(), next)
 }
 
@@ -340,7 +340,7 @@ func (s *Shell) probeFlingStrip(next func()) {
 }
 
 func (s *Shell) probeGrid(next func()) {
-	s.Tabs.SelectIndex(0)
+	s.Tabs.Select(s.libraryTab)
 	probeScroll("grid", s.library.Scroller(), probeLeg, next)
 }
 
@@ -356,7 +356,7 @@ func (s *Shell) probeDetails(next func()) {
 		next()
 		return
 	}
-	s.Tabs.SelectIndex(0)
+	s.Tabs.Select(s.libraryTab)
 	s.Details.Open(gs[0])
 	probeAfter(probeSettle, func() {
 		probeScroll("details", s.Details.Scroller(), probeLeg, func() {
@@ -442,7 +442,7 @@ func (s *Shell) probeTabs(next func()) {
 		}
 	}, func() {
 		probeEnd()
-		s.Tabs.SelectIndex(0)
+		s.Tabs.Select(s.libraryTab)
 		next()
 	})
 }
@@ -462,9 +462,11 @@ func (s *Shell) visibleOffset() float32 {
 	switch s.Tabs.Selected() {
 	case s.searchTab:
 		return s.search.Scroller().ScrollOffset()
+	case s.statsTab:
+		return s.stats.Scroller().ScrollOffset()
 	case s.settingsTab:
 		return s.settings.Scroller().ScrollOffset()
-	case s.Tabs.Items[0]:
+	case s.libraryTab:
 		return s.library.Scroller().ScrollOffset()
 	}
 	return 0
@@ -474,7 +476,7 @@ func (s *Shell) visibleOffset() float32 {
 // 2, 3, 4 колонки; ПК — размеры карточек) и возвращает настройку.
 func (s *Shell) probeDensity(next func()) {
 	st := s.svc.Settings
-	s.Tabs.SelectIndex(0)
+	s.Tabs.Select(s.libraryTab)
 	var values []string
 	var set func(v string)
 	var restore func()

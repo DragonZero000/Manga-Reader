@@ -35,6 +35,10 @@ type canvas struct {
 	windowHead     fyne.CanvasObject
 	// mangareader: касание остановило бросок — это не нажатие (tapUp)
 	caughtFling map[int]bool
+	// mangareader: долгое нажатие во время удержания (armLongPress): номер
+	// касания (сдвиг и подъём пальца его меняют) и сработавшие касания
+	pressSeq  map[int]int
+	longFired map[int]bool
 
 	dragOffset     fyne.Position
 	dragStart      fyne.Position
@@ -66,6 +70,8 @@ func newCanvas(dev fyne.Device) fyne.Canvas {
 		scale:          dev.SystemScaleForWindow(nil), // we don't need a window parameter on mobile,
 		touched:        make(map[int]mobile.Touchable),
 		caughtFling:    make(map[int]bool),
+		pressSeq:       make(map[int]int),
+		longFired:      make(map[int]bool),
 	}
 	ret.Initialize(ret, ret.overlayChanged)
 	return ret
@@ -259,6 +265,41 @@ func (c *canvas) tapDown(pos fyne.Position, tapID int) {
 	}
 }
 
+// mangareader: armLongPress — долгое нажатие во время удержания, как в Android:
+// если через tapSecondaryDelay после касания палец не сдвинулся и не поднят,
+// объект под пальцем получает долгое нажатие (alt), а подъём пальца потом
+// ничего не вызывает. Касание, остановившее бросок, долгим не бывает.
+func (c *canvas) armLongPress(pos fyne.Position, tapID int, alt func(fyne.SecondaryTappable, *fyne.PointEvent)) {
+	c.pressSeq[tapID]++
+	delete(c.longFired, tapID)
+	if c.caughtFling[tapID] {
+		return
+	}
+	seq := c.pressSeq[tapID]
+	time.AfterFunc(tapSecondaryDelay, func() {
+		fyne.CurrentApp().Driver().DoFromGoroutine(func() {
+			c.fireLongPress(pos, tapID, seq, alt)
+		}, false)
+	})
+}
+
+// fireLongPress вызывает долгое нажатие, если касание seq ещё длится.
+func (c *canvas) fireLongPress(pos fyne.Position, tapID, seq int, alt func(fyne.SecondaryTappable, *fyne.PointEvent)) {
+	if c.pressSeq[tapID] != seq || c.dragging != nil {
+		return
+	}
+	co, objPos, _ := c.findObjectAtPositionMatching(pos, func(object fyne.CanvasObject) bool {
+		_, ok := object.(fyne.SecondaryTappable)
+		return ok
+	})
+	wid, ok := co.(fyne.SecondaryTappable)
+	if !ok {
+		return
+	}
+	c.longFired[tapID] = true
+	alt(wid, &fyne.PointEvent{Position: objPos, AbsolutePosition: pos})
+}
+
 func (c *canvas) tapMove(pos fyne.Position, tapID int,
 	dragCallback func(fyne.Draggable, *fyne.DragEvent),
 ) {
@@ -269,6 +310,7 @@ func (c *canvas) tapMove(pos fyne.Position, tapID int,
 	if c.dragging == nil && (math.Abs(float64(deltaX)) < tapMoveThreshold && math.Abs(float64(deltaY)) < tapMoveThreshold) {
 		return
 	}
+	c.pressSeq[tapID]++ // mangareader: сдвиг пальца отменяет долгое нажатие
 	c.lastTapDownPos[tapID] = pos
 	offset := fyne.Delta{DX: deltaX, DY: deltaY}
 	c.lastTapDelta[tapID] = offset
@@ -349,6 +391,11 @@ func (c *canvas) tapUp(pos fyne.Position, tapID int,
 ) {
 	caught := c.caughtFling[tapID] // mangareader
 	delete(c.caughtFling, tapID)
+	// mangareader: подъём пальца отменяет ожидание долгого нажатия; если оно уже
+	// сработало, подъём ничего не вызывает
+	fired := c.longFired[tapID]
+	delete(c.longFired, tapID)
+	c.pressSeq[tapID]++
 	if c.dragging != nil {
 		previousDelta := c.lastTapDelta[tapID]
 		ev := &fyne.DragEvent{Dragged: previousDelta}
@@ -403,8 +450,8 @@ func (c *canvas) tapUp(pos fyne.Position, tapID int,
 		c.touched[tapID] = nil
 	}
 
-	if caught {
-		return // mangareader: касание только остановило бросок: ни нажатия, ни долгого, ни двойного
+	if caught || fired {
+		return // mangareader: касание остановило бросок или уже дало долгое нажатие: ни нажатия, ни долгого, ни двойного
 	}
 
 	ev := &fyne.PointEvent{

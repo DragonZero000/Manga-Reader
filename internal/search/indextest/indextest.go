@@ -26,6 +26,7 @@ func Run(t *testing.T, newIndex NewIndex) {
 	t.Run("Upsert", func(t *testing.T) { testUpsertReplaces(t, newIndex) })
 	t.Run("SuggestTags", func(t *testing.T) { testSuggestTags(t, newIndex) })
 	t.Run("Overlay", func(t *testing.T) { testOverlay(t, newIndex) })
+	t.Run("Missing", func(t *testing.T) { testMissing(t, newIndex) })
 	t.Run("Normalize", func(t *testing.T) { testNormalize(t, newIndex) })
 	t.Run("SpecialChars", func(t *testing.T) { testSpecialChars(t, newIndex) })
 	t.Run("Concurrent", func(t *testing.T) { testConcurrent(t, newIndex) })
@@ -43,6 +44,7 @@ func ExampleG() model.Gallery {
 		Favorites:  806,
 		Pages:      []model.Page{{Name: "example/1.jpg"}, {Name: "example/2.jpg"}},
 		File:       model.FileInfo{Size: 31759, ModTime: time.Date(2026, 9, 24, 10, 0, 0, 0, time.Local)},
+		HasMeta:    true,
 	}
 	for _, t := range [][2]string{{"category", "doujinshi"}, {"language", "japanese"}, {"tag", "tag 1"},
 		{"tag", "tag 2"}, {"tag", "tag 3"}, {"parody", "parody 1"}, {"artist", "artist 1"}, {"character", "character 1"}} {
@@ -449,5 +451,46 @@ func testConcurrent(t *testing.T, newIndex NewIndex) {
 	wg.Wait()
 	if _, total, _ := idx.Search(ctx, search.NewQuery()); total != 200 {
 		t.Fatalf("всего %d", total)
+	}
+}
+
+// testMissing: missing:<тип>, missing:tags и missing:meta с наложением
+// пользователя и обратные условия.
+func testMissing(t *testing.T, newIndex NewIndex) {
+	bare := PlainG("bare.zip", time.Date(2026, 1, 1, 0, 0, 0, 0, time.Local))
+	idx := fill(t, newIndex(t), ExampleG(), bare)
+	ex, ba, both, none := []string{"example.zip"}, []string{"bare.zip"}, []string{"example.zip", "bare.zip"}, []string{}
+	for q, want := range map[string][]string{
+		"missing:meta":      ba,
+		"missing:tags":      ba,
+		"-missing:meta":     ex,
+		"-missing:tags":     ex,
+		"missing:artist":    ba,
+		"MISSING:Language":  ba,
+		"missing:tag":       ba,
+		"-missing:category": ex,
+		"missing:meta missing:tags -missing:artist": none,
+	} {
+		if got := Find(t, idx, q); !reflect.DeepEqual(got, want) {
+			t.Errorf("%q → %v, want %v", q, got, want)
+		}
+	}
+
+	// свой автор у архива без meta.json, единственный скрытый автор у архива с ним
+	example := ExampleG()
+	example.Hidden = []model.Tag{model.NewTag("artist", "artist 1")}
+	bare.Custom = []model.Tag{model.NewTag("artist", "alice")}
+	idx = fill(t, newIndex(t), example, bare)
+	for q, want := range map[string][]string{
+		"missing:artist":  ex,
+		"-missing:artist": ba,
+		"missing:meta":    ba,
+		"missing:tags":    none,
+		"-missing:tags":   both,
+		"missing:parody":  ba,
+	} {
+		if got := Find(t, idx, q); !reflect.DeepEqual(got, want) {
+			t.Errorf("с наложением %q → %v, want %v", q, got, want)
+		}
 	}
 }

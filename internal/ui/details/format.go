@@ -8,6 +8,7 @@ import (
 
 	"mangareader/internal/i18n"
 	"mangareader/internal/model"
+	"mangareader/internal/search"
 )
 
 // knownTypeOrder — порядок групп тегов и ключи перевода их подписей.
@@ -113,15 +114,7 @@ func missingTypes(groups []Group) []string {
 
 // TagQuery — строка поиска по тегу: `тип:"имя"` для известных типов,
 // `tag:"имя"` (тег любого типа) — для остальных.
-func TagQuery(tagType, name string) string {
-	name = strings.ReplaceAll(name, `"`, "")
-	for _, k := range knownTypeOrder {
-		if k.typ == tagType {
-			return tagType + `:"` + name + `"`
-		}
-	}
-	return `tag:"` + name + `"`
-}
+func TagQuery(tagType, name string) string { return search.TagQuery(tagType, name) }
 
 // Row — строка сведений «подпись — значение».
 type Row struct {

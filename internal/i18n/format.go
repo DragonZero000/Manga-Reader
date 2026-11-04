@@ -44,7 +44,11 @@ func Int(n int64) string {
 
 // Size — размер в Б/КБ/МБ/ГБ/ТБ (основание 1024) с одной цифрой после
 // десятичного разделителя языка: «1,5 МБ» / «1.5 MB».
-func Size(n int64) string {
+func Size(n int64) string { return SizeDigits(n, 1) }
+
+// SizeDigits — размер как у Size, но с digits цифрами после разделителя:
+// «1,27 ГБ» при digits = 2; байты — без дробной части.
+func SizeDigits(n int64, digits int) string {
 	if n < 1024 {
 		return strconv.FormatInt(n, 10) + " " + T("size.b")
 	}
@@ -55,7 +59,7 @@ func Size(n int64) string {
 		v /= 1024
 		i++
 	}
-	num := strings.Replace(strconv.FormatFloat(v, 'f', 1, 64), ".", T("number.decimal"), 1)
+	num := strings.Replace(strconv.FormatFloat(v, 'f', digits, 64), ".", T("number.decimal"), 1)
 	return num + " " + T(units[i])
 }
 

@@ -92,6 +92,7 @@ func ReadArchive(f storage.File, relPath string, e storage.Entry, display string
 		}
 	}
 	applyMeta(&g, meta, relPath)
+	g.HasMeta = meta != nil
 	return g, warnings, nil
 }
 

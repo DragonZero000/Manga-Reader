@@ -102,6 +102,12 @@ func validateFilter(f *Filter) *Reason {
 		if strings.TrimSpace(v.Text) == "" {
 			return reason(ReasonEmptyText)
 		}
+		if f.Field == FieldMissing {
+			v.Text = strings.ToLower(strings.TrimSpace(v.Text))
+			if !isMissingValue(v.Text) {
+				return reason(ReasonUnknownValue, v.Text)
+			}
+		}
 	case KindTag:
 		v.Tag = model.NewTag(v.Tag.Type, v.Tag.Name)
 		if v.Tag.Name == "" {

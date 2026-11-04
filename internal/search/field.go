@@ -1,5 +1,7 @@
 package search
 
+import "mangareader/internal/model"
+
 // Field — параметр произведения, по которому можно искать или сортировать.
 type Field int
 
@@ -13,6 +15,7 @@ const (
 	FieldScanlator                  // сканлейтор
 	FieldAdded                      // время изменения файла
 	FieldSize                       // размер файла
+	FieldMissing                    // нет тега типа или нет meta.json
 )
 
 // Op — операция фильтра.
@@ -60,6 +63,9 @@ var fields = []FieldInfo{
 	{FieldScanlator, "scanlator", "Scanlator", KindText, []Op{OpEq, OpContains}, false},
 	{FieldAdded, "added", "Added", KindDate, numRange, true},
 	{FieldSize, "size", "File size", KindNumber, numRange, true},
+	// missing: значение — тип тега, «tags» или «meta» (MissingValues); OpHas —
+	// «отсутствует», OpNotHas — обратное («-missing:...»)
+	{FieldMissing, "missing", "Missing", KindText, []Op{OpHas, OpNotHas}, false},
 }
 
 // Fields возвращает описание всех полей поиска.
@@ -121,4 +127,25 @@ func (o Op) String() string {
 		return s
 	}
 	return "unknown"
+}
+
+// Значения поля missing помимо типов тегов.
+const (
+	MissingTags = "tags" // нет действующих тегов вообще
+	MissingMeta = "meta" // в архиве нет meta.json
+)
+
+// MissingValues — допустимые значения missing: типы тегов, «tags» и «meta».
+func MissingValues() []string {
+	return append(model.KnownTagTypes(), MissingTags, MissingMeta)
+}
+
+// isMissingValue проверяет значение missing (уже в нижнем регистре).
+func isMissingValue(v string) bool {
+	for _, m := range MissingValues() {
+		if m == v {
+			return true
+		}
+	}
+	return false
 }

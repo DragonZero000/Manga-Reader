@@ -4,7 +4,6 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
@@ -14,12 +13,13 @@ import (
 
 // Errors — экран ошибок библиотеки: файлы, которые приложение не может
 // открыть. Список берётся из problems.Tracker; меняется только в UI-потоке.
+// Вкладка с этим экраном есть, только пока список не пуст, поэтому
+// пустого состояния у экрана нет.
 type Errors struct {
 	tracker *problems.Tracker
 
 	list    *fyne.Container
 	scroll  *container.Scroll
-	empty   fyne.CanvasObject
 	content fyne.CanvasObject
 }
 
@@ -27,14 +27,7 @@ func NewErrors(tracker *problems.Tracker) *Errors {
 	e := &Errors{tracker: tracker}
 	e.list = container.NewVBox()
 	e.scroll = container.NewVScroll(e.list)
-
-	title := widget.NewLabelWithStyle(i18n.T("errors.empty.title"), fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	hint := widget.NewLabel(i18n.T("errors.empty.hint"))
-	hint.Alignment = fyne.TextAlignCenter
-	hint.Wrapping = fyne.TextWrapWord
-	e.empty = container.NewVBox(layout.NewSpacer(), title, hint, layout.NewSpacer())
-
-	e.content = container.NewStack(e.empty, e.scroll)
+	e.content = e.scroll
 	e.Refresh()
 	return e
 }
@@ -54,13 +47,6 @@ func (e *Errors) Refresh() {
 	}
 	e.list.Objects = rows
 	e.list.Refresh()
-	if len(items) == 0 {
-		e.scroll.Hide()
-		e.empty.Show()
-	} else {
-		e.empty.Hide()
-		e.scroll.Show()
-	}
 }
 
 // Rows — число записей в списке (для тестов).

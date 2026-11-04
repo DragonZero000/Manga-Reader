@@ -42,6 +42,7 @@ func newLayersShell(t *testing.T, n int) (*Shell, *library.Source) {
 	s.Details.SetDispatcher(drop)
 	s.Reader.SetDispatcher(drop)
 	s.Search().SetDispatcher(drop)
+	s.Stats().SetDispatcher(drop)
 	s.Library().ShowCached(library.ScanResult{Galleries: src.Galleries()})
 	s.Window.Resize(fyne.NewSize(960, 640))
 	return s, src
@@ -114,8 +115,8 @@ func TestLayersHideCovered(t *testing.T) {
 	if !s.Tabs.Visible() || s.Details.Layer().Visible() {
 		t.Fatalf("после страницы: вкладки %v, страница %v", s.Tabs.Visible(), s.Details.Layer().Visible())
 	}
-	if s.Tabs.SelectedIndex() != 0 || grid.ScrollOffset() != off || s.Search().Query() != "japan" {
-		t.Fatalf("вкладка %d, смещение %v (было %v), поиск %q", s.Tabs.SelectedIndex(), grid.ScrollOffset(), off, s.Search().Query())
+	if s.Tabs.Selected() != s.libraryTab || grid.ScrollOffset() != off || s.Search().Query() != "japan" {
+		t.Fatalf("вкладка %q, смещение %v (было %v), поиск %q", s.Tabs.Selected().Text, grid.ScrollOffset(), off, s.Search().Query())
 	}
 
 	// «Домой» и поиск по тегу закрывают оба слоя и показывают вкладки

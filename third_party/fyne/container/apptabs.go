@@ -388,6 +388,7 @@ func (r *appTabsRenderer) buildTabButtons(count int) *fyne.Container {
 			button.importance = widget.MediumImportance
 		}
 		button.text = item.Text
+		button.danger = item.importance == widget.DangerImportance // mangareader: SetImportance
 		button.textAlignment = fyne.TextAlignCenter
 		button.Refresh()
 		buttons.Objects = append(buttons.Objects, button)

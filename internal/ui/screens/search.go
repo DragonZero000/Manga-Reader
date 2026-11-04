@@ -32,6 +32,7 @@ var helpExamples = [][2]string{
 	{`-tag:yuri`, "search.help.exclude"},
 	{`custom-tag:"my fav"`, "search.help.custom_tag"},
 	{`hidden-tag:yuri`, "search.help.hidden_tag"},
+	{"missing:artist", "search.help.missing"},
 	{"pages:>20", "search.help.pages"},
 	{"uploaded:2024", "search.help.uploaded"},
 	{"size:>10mb", "search.help.size"},

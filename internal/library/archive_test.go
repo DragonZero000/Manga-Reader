@@ -53,6 +53,9 @@ func TestReadExampleArchive(t *testing.T) {
 	if g.File.Path != p || g.File.Size == 0 || g.File.ModTime.IsZero() {
 		t.Errorf("FileInfo = %+v", g.File)
 	}
+	if !g.HasMeta {
+		t.Error("HasMeta ложен при корректном meta.json")
+	}
 }
 
 func TestReadArchiveManyPages(t *testing.T) {
@@ -89,6 +92,9 @@ func TestReadArchiveWithoutMeta(t *testing.T) {
 	if g.Title != "my manga" || g.ExternalID != 0 || len(g.Tags) != 0 || len(warnings) != 0 {
 		t.Fatalf("got %+v, warnings %v", g, warnings)
 	}
+	if g.HasMeta {
+		t.Error("HasMeta истинен без meta.json")
+	}
 }
 
 func TestReadArchiveBrokenMeta(t *testing.T) {
@@ -103,6 +109,9 @@ func TestReadArchiveBrokenMeta(t *testing.T) {
 	}
 	if g.Title != "bad" || len(warnings) != 1 || !strings.Contains(warnings[0], "meta.json") {
 		t.Fatalf("title=%q warnings=%v", g.Title, warnings)
+	}
+	if g.HasMeta {
+		t.Error("HasMeta истинен при повреждённом meta.json")
 	}
 }
 

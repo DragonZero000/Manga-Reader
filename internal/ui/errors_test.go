@@ -34,6 +34,7 @@ func newErrorsShell(t *testing.T, dir string, settings *storage.MemSettings) *er
 	do := func(f func()) { q <- f }
 	e.library.SetDispatcher(do)
 	e.Search().SetDispatcher(do)
+	e.Stats().SetDispatcher(do)
 	e.Toast.do = do
 	e.scan = func() {
 		e.library.Refresh()

@@ -27,6 +27,7 @@ type doc struct {
 	scopes [3]tagSet          // теги по областям (индекс — TagScope)
 	title  string             // основное и альтернативное название, Normalize
 	scan   string             // сканлейтор, Normalize
+	types  map[string]bool    // типы действующих тегов (для missing)
 }
 
 // tagSet — теги одной области для сравнения.
@@ -58,7 +59,7 @@ func NewMemIndex() *MemIndex {
 }
 
 func newDoc(g model.Gallery) *doc {
-	d := &doc{g: g, tags: map[model.Tag]bool{}}
+	d := &doc{g: g, tags: map[model.Tag]bool{}, types: map[string]bool{}}
 	add := func(s string) {
 		if s = Normalize(strings.TrimSpace(s)); s != "" {
 			d.hay = append(d.hay, s)
@@ -77,6 +78,7 @@ func newDoc(g model.Gallery) *doc {
 		}
 		d.scopes[ScopeEffective].add(t)
 		d.tags[t] = true
+		d.types[t.Type] = true
 		add(t.Name)
 		add(t.String())
 	}
@@ -178,6 +180,20 @@ func (d *doc) match(f Filter) bool {
 			return !has
 		}
 		return has
+	case FieldMissing:
+		var missing bool
+		switch v.Text {
+		case MissingMeta:
+			missing = !g.HasMeta
+		case MissingTags:
+			missing = len(d.tags) == 0
+		default:
+			missing = !d.types[v.Text]
+		}
+		if f.Op == OpNotHas {
+			return !missing
+		}
+		return missing
 	case FieldTitle:
 		return strings.Contains(d.title, Normalize(v.Text))
 	case FieldScanlator:

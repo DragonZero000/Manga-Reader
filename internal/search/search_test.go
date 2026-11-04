@@ -12,8 +12,8 @@ import (
 
 func TestFieldsDescribed(t *testing.T) {
 	all := Fields()
-	if len(all) != 9 {
-		t.Fatalf("ожидалось 9 полей, получено %d", len(all))
+	if len(all) != 10 {
+		t.Fatalf("ожидалось 10 полей, получено %d", len(all))
 	}
 	seen := map[string]bool{}
 	for _, fi := range all {

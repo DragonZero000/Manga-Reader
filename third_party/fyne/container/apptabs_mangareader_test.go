@@ -3,6 +3,7 @@
 package container
 
 import (
+	"image/color"
 	"testing"
 
 	"fyne.io/fyne/v2"
@@ -49,4 +50,38 @@ func TestAppTabsSelectKeepsContent(t *testing.T) {
 	if first.refreshes == 0 || second.refreshes == 0 {
 		t.Fatal("смена темы не обновила содержимое вкладок")
 	}
+}
+
+// Подпись вкладки с DangerImportance — цвета ошибки темы, выбрана вкладка
+// или нет.
+func TestTabItemDangerLabel(t *testing.T) {
+	test.NewTempApp(t)
+	errTab := NewTabItem("err", widget.NewLabel("e"))
+	errTab.SetImportance(widget.DangerImportance)
+	tabs := NewAppTabs(NewTabItem("1", widget.NewLabel("1")), errTab)
+	w := test.NewTempWindow(t, tabs)
+	w.Resize(fyne.NewSize(300, 300))
+
+	want := theme.Color(theme.ColorNameError)
+	for _, sel := range []int{0, 1} {
+		tabs.SelectIndex(sel)
+		got := labelColor(t, errTab.button)
+		if got != want {
+			t.Errorf("выбрана вкладка %d: цвет подписи %v, ожидался %v", sel, got, want)
+		}
+	}
+	if c := labelColor(t, tabs.Items[0].button); c == want {
+		t.Errorf("обычная вкладка получила цвет ошибки")
+	}
+	errTab.SetImportance(widget.MediumImportance)
+	tabs.Refresh()
+	if c := labelColor(t, errTab.button); c == want {
+		t.Error("после снятия важности подпись осталась красной")
+	}
+}
+
+func labelColor(t *testing.T, b *tabButton) color.Color {
+	t.Helper()
+	r := test.TempWidgetRenderer(t, b).(*tabButtonRenderer)
+	return r.label.Color
 }

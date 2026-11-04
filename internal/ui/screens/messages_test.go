@@ -105,7 +105,7 @@ func TestReasonTextAllCodes(t *testing.T) {
 		search.ReasonNegationTagsOnly, search.ReasonNoValue, search.ReasonNotNumber, search.ReasonIDExactOnly,
 		search.ReasonBadSize, search.ReasonBadDate, search.ReasonUnknownField, search.ReasonOpNotAllowed,
 		search.ReasonEmptyText, search.ReasonEmptyTag, search.ReasonNegative, search.ReasonBadRange,
-		search.ReasonNoDate, search.ReasonBadDateRange,
+		search.ReasonNoDate, search.ReasonBadDateRange, search.ReasonUnknownValue,
 	}
 	for _, lang := range []string{"ru", "en"} {
 		useLang(t, lang)

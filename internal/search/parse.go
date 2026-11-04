@@ -39,6 +39,7 @@ var queryFields = map[string]fieldParser{
 	"size":       {field: FieldSize},
 	"uploaded":   {field: FieldUploaded},
 	"added":      {field: FieldAdded},
+	"missing":    {field: FieldMissing},
 }
 
 // Parse разбирает строку запроса: слова и фразы в кавычках ищутся как часть
@@ -65,7 +66,7 @@ func Parse(s string) (Query, error) {
 			continue
 		}
 		fp := queryFields[name]
-		if neg && !fp.isTag {
+		if neg && !fp.isTag && fp.field != FieldMissing {
 			return Query{}, &ParseError{tok, Reason{Code: ReasonNegationTagsOnly}}
 		}
 		value = strings.TrimSpace(unquote(value))
@@ -146,6 +147,16 @@ func parseFilter(fp fieldParser, value string, neg bool) (Filter, error) {
 			op = OpNotHas
 		}
 		return Filter{Field: FieldTag, Op: op, Value: Value{Tag: model.Tag{Type: fp.tagType, Name: value}, Scope: fp.scope}}, nil
+	case fp.field == FieldMissing:
+		v := strings.ToLower(value)
+		if !isMissingValue(v) {
+			return Filter{}, reason(ReasonUnknownValue, value)
+		}
+		op := OpHas
+		if neg {
+			op = OpNotHas
+		}
+		return Filter{Field: FieldMissing, Op: op, Value: Value{Text: v}}, nil
 	case fp.field == FieldTitle || fp.field == FieldScanlator:
 		return Filter{Field: fp.field, Op: OpContains, Value: Value{Text: Normalize(value)}}, nil
 	case fp.field == FieldUploaded:

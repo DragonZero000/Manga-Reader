@@ -170,6 +170,12 @@ func TestFormats(t *testing.T) {
 		if got := Size(512); got != c.big {
 			t.Errorf("%s Size(512) = %q", c.lang, got)
 		}
+		if got, want := SizeDigits(1363148800, 2), strings.Replace("1,27 ", ",", T("number.decimal"), 1)+T("size.gb"); got != want {
+			t.Errorf("%s SizeDigits(1,27 ГБ) = %q, want %q", c.lang, got, want)
+		}
+		if got := SizeDigits(512, 2); got != c.big {
+			t.Errorf("%s SizeDigits(512) = %q", c.lang, got)
+		}
 		if got := Int(12345); got != c.num {
 			t.Errorf("%s Int = %q", c.lang, got)
 		}

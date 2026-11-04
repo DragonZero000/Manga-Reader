@@ -70,10 +70,10 @@ func upsertDoc(ctx context.Context, tx *sql.Tx, g model.Gallery) error {
 		return err
 	}
 	_, err := tx.ExecContext(ctx, `INSERT INTO docs(key, rel, title_sort, title_norm, scan_norm, ext_id, pages,
-		favorites, size, uploaded, added) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		favorites, size, uploaded, added, has_meta) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		key, g.Key.ID, strings.ToLower(g.Title), search.Normalize(g.Title+"\n"+g.AltTitle),
 		search.Normalize(strings.TrimSpace(g.Scanlator)), g.ExternalID, len(g.Pages), g.Favorites,
-		g.File.Size, nanos(g.Uploaded), nanos(g.File.ModTime))
+		g.File.Size, nanos(g.Uploaded), nanos(g.File.ModTime), g.HasMeta)
 	return err
 }
 
@@ -216,6 +216,22 @@ func filterCond(f search.Filter) (string, []any, error) {
 		cond += `)`
 		if f.Op == search.OpNotHas {
 			cond = `NOT ` + cond
+		}
+		return cond, args, nil
+	case search.FieldMissing:
+		var cond string
+		var args []any
+		switch v.Text {
+		case search.MissingMeta:
+			cond = `d.has_meta = 0`
+		case search.MissingTags:
+			cond = `NOT EXISTS (SELECT 1 FROM tags t WHERE t.key = d.key AND t.src IN (0, 1))`
+		default:
+			cond = `NOT EXISTS (SELECT 1 FROM tags t WHERE t.key = d.key AND t.src IN (0, 1) AND t.type = ?)`
+			args = []any{v.Text}
+		}
+		if f.Op == search.OpNotHas {
+			cond = `NOT (` + cond + `)`
 		}
 		return cond, args, nil
 	case search.FieldTitle:

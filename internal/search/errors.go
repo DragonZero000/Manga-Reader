@@ -34,6 +34,8 @@ const (
 	ReasonBadRange ReasonCode = "bad_range"
 	// ReasonNoDate — дата не задана.
 	ReasonNoDate ReasonCode = "no_date"
+	// ReasonUnknownValue — значение поля не из допустимых: «missing:title» (значение).
+	ReasonUnknownValue ReasonCode = "unknown_value"
 	// ReasonBadDateRange — начало диапазона дат позже конца.
 	ReasonBadDateRange ReasonCode = "bad_date_range"
 )
@@ -54,6 +56,7 @@ var reasonText = map[ReasonCode]string{
 	ReasonBadRange:         "invalid range: %d is greater than %d",
 	ReasonNoDate:           "no date specified",
 	ReasonBadDateRange:     "invalid date range: start is after end",
+	ReasonUnknownValue:     "unknown value %q",
 }
 
 // Reason — причина ошибки запроса: вид и параметры.
