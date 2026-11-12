@@ -142,6 +142,10 @@ func NewShell(a fyne.App, svc *app.Services) *Shell {
 		s.library.SetRandomMode(mode)
 		s.search.SetRandomMode(mode)
 	}, s.grid.Reload) // плотность сетки — сразу в библиотеке и поиске
+	s.settings.OnSortChanged = func() {
+		s.library.StartSortChanged()
+		s.search.StartSortChanged()
+	}
 	s.setupBrowser(a)
 
 	s.libraryTab = container.NewTabItemWithIcon(i18n.T("tab.library"), theme.StorageIcon(), tabContent(s.library.Content()))

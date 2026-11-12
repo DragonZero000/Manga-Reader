@@ -18,6 +18,7 @@ import (
 	"mangareader/internal/library"
 	"mangareader/internal/model"
 	"mangareader/internal/problems"
+	"mangareader/internal/search"
 	"mangareader/internal/storage"
 )
 
@@ -53,6 +54,7 @@ type Library struct {
 	busyDelay time.Duration // задержка повтора (меняется в тестах)
 
 	count    *widget.Label
+	sort     *sortControl
 	refresh  *widget.Button
 	random   *randomButton
 	tools    *fyne.Container // кнопки панели справа
@@ -77,7 +79,14 @@ func NewLibrary(svc *app.Services, metrics *GridMetrics, notify func(string), ac
 	l.grid = newGalleryGrid(svc.Thumbs, metrics, actions)
 	l.random = newRandomButton(app.RandomMode(svc.Settings), l.grid.Items, func(g model.Gallery) { actions.Open(g) })
 	l.tools = container.NewHBox(l.random.btn, l.activity, l.refresh)
-	toolbar := container.NewBorder(nil, nil, l.count, l.tools)
+	l.sort = newSortControl(func() search.Sort { return app.StartSort(svc.Settings) }, l.resort)
+	// на телефоне счётчик и кнопки панели занимают всю ширину: контрол — отдельной строкой
+	var toolbar fyne.CanvasObject
+	if isMobile() {
+		toolbar = container.NewVBox(container.NewBorder(nil, nil, l.count, l.tools), container.NewHBox(l.sort.btn))
+	} else {
+		toolbar = container.NewBorder(nil, nil, container.NewHBox(l.count, l.sort.btn), l.tools)
+	}
 
 	l.empty, l.emptyDir = newEmptyState()
 	l.grid.Widget().Hide()
@@ -106,6 +115,24 @@ func (l *Library) AddTool(o fyne.CanvasObject) {
 	l.tools.Objects = append([]fyne.CanvasObject{l.tools.Objects[0], o}, l.tools.Objects[1:]...)
 	l.tools.Refresh()
 }
+
+// resort упорядочивает загруженный список новой сортировкой и показывает его
+// с начала; сканирование не запускается.
+func (l *Library) resort(s search.Sort) {
+	l.grid.SetItems(sortedCopy(l.grid.Items(), s))
+	l.grid.ScrollToTop()
+}
+
+// StartSortChanged применяет новую стартовую сортировку, если на вкладке
+// сортировку вручную не меняли.
+func (l *Library) StartSortChanged() {
+	if l.sort.StartChanged() {
+		l.resort(l.sort.Sort())
+	}
+}
+
+// Sort — контрол сортировки (для тестов).
+func (l *Library) Sort() *sortControl { return l.sort }
 
 // SetRandomMode задаёт режим кнопки 🎲 и начинает круг заново.
 func (l *Library) SetRandomMode(mode string) { l.random.picker.SetMode(mode) }
@@ -196,7 +223,7 @@ func (l *Library) ShowCached(res library.ScanResult) {
 	if l.scanned || (len(res.Galleries) == 0 && len(res.Errors) == 0) {
 		return
 	}
-	l.grid.SetItems(res.Galleries)
+	l.grid.SetItems(sortedCopy(res.Galleries, l.sort.Sort()))
 	l.updateCount()
 	if len(res.Galleries) > 0 {
 		l.show(l.grid.Widget())
@@ -234,9 +261,10 @@ func (l *Library) applyScan(res library.ScanResult, err error) {
 	l.scanned = true
 	l.retryBusy(len(res.Busy))
 	// без изменений сетка не обновляется: карточки не перезагружают обложки
-	changed := !sameGalleries(l.grid.Items(), res.Galleries)
+	sorted := sortedCopy(res.Galleries, l.sort.Sort())
+	changed := !sameGalleries(l.grid.Items(), sorted)
 	if changed {
-		l.grid.SetItems(res.Galleries)
+		l.grid.SetItems(sorted)
 	}
 	l.updateCount()
 	l.updateEmptyDir()

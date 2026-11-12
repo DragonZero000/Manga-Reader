@@ -14,6 +14,7 @@ import (
 	"mangareader/internal/app"
 	"mangareader/internal/display"
 	"mangareader/internal/i18n"
+	"mangareader/internal/search"
 )
 
 // Settings — экран настроек: язык, папка библиотеки, поиск, браузер и
@@ -32,6 +33,12 @@ type Settings struct {
 	randomMode *widget.RadioGroup
 	// grid — «Карточек в ряду» (телефон) или «Размер карточек» (ПК)
 	grid *widget.RadioGroup
+	// sortField, sortDir — стартовая сортировка вкладок; OnSortChanged
+	// вызывается после её смены
+	sortField     *widget.Select
+	sortDir       *widget.RadioGroup
+	sortFields    map[string]search.Field
+	OnSortChanged func()
 	// readerDir — направление чтения в читалке; doubleTap — масштаб двойного тапа
 	readerDir *widget.RadioGroup
 	doubleTap *widget.Select
@@ -94,7 +101,7 @@ func NewSettings(a fyne.App, win fyne.Window, svc *app.Services, notify func(str
 	libraryCard := widget.NewCard(i18n.T("settings.library.title"), "", container.NewVBox(items...))
 	aboutCard := widget.NewCard(i18n.T("settings.about.title"), "", widget.NewLabel("MangaReader "+svc.Version))
 	cards := container.NewVBox(s.newLanguageCard(), libraryCard, s.newSearchCard(onSearchMode),
-		s.newRandomCard(onRandomMode), s.newGridCard(onGrid), s.newReaderCard(), s.newRetentionCard())
+		s.newSortCard(), s.newRandomCard(onRandomMode), s.newGridCard(onGrid), s.newReaderCard(), s.newRetentionCard())
 	if displaySupported {
 		cards.Add(s.newDisplayCard())
 	}
@@ -274,6 +281,59 @@ func (s *Settings) newSearchCard(onMode func(string)) *widget.Card {
 	}
 	return widget.NewCard(i18n.T("settings.search.title"), "",
 		container.NewVBox(s.searchMode, cardNote(i18n.T("settings.search.hint"))))
+}
+
+// newSortCard — раздел «Сортировка по умолчанию»: поле и направление, общие
+// для Библиотеки и Поиска.
+func (s *Settings) newSortCard() *widget.Card {
+	cur := app.StartSort(s.svc.Settings)
+	labels := make([]string, len(app.SortFields))
+	s.sortFields = map[string]search.Field{}
+	for i, f := range app.SortFields {
+		labels[i] = i18n.T(sortFieldKeys[f])
+		s.sortFields[labels[i]] = f
+	}
+	asc, desc := i18n.T("settings.sort.asc"), i18n.T("settings.sort.desc")
+	s.sortField = widget.NewSelect(labels, nil)
+	s.sortField.SetSelected(i18n.T(sortFieldKeys[cur.Field]))
+	s.sortDir = widget.NewRadioGroup([]string{asc, desc}, nil)
+	s.sortDir.Required = true
+	if cur.Desc {
+		s.sortDir.SetSelected(desc)
+	} else {
+		s.sortDir.SetSelected(asc)
+	}
+	save := func() {
+		f, ok := s.sortFields[s.sortField.Selected]
+		if !ok {
+			return
+		}
+		app.SetStartSort(s.svc.Settings, search.Sort{Field: f, Desc: s.sortDir.Selected == desc})
+		if s.OnSortChanged != nil {
+			s.OnSortChanged()
+		}
+	}
+	s.sortField.OnChanged = func(string) { save() }
+	s.sortDir.OnChanged = func(string) { save() }
+	return widget.NewCard(i18n.T("settings.sort.title"), "", container.NewVBox(
+		widget.NewLabel(i18n.T("settings.sort.field")), s.sortField, s.sortDir,
+		cardNote(i18n.T("settings.sort.hint"))))
+}
+
+// SelectSortField выбирает поле стартовой сортировки так, как пользователь
+// (для тестов).
+func (s *Settings) SelectSortField(f search.Field) {
+	s.sortField.SetSelected(i18n.T(sortFieldKeys[f]))
+}
+
+// SelectSortDesc выбирает направление стартовой сортировки так, как
+// пользователь (для тестов).
+func (s *Settings) SelectSortDesc(desc bool) {
+	if desc {
+		s.sortDir.SetSelected(i18n.T("settings.sort.desc"))
+	} else {
+		s.sortDir.SetSelected(i18n.T("settings.sort.asc"))
+	}
 }
 
 // Ключи перевода подписей направления чтения.

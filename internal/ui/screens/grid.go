@@ -213,6 +213,9 @@ func (g *galleryGrid) SetItems(items []model.Gallery) {
 	g.grid.Refresh()
 }
 
+// ScrollToTop прокручивает сетку в начало.
+func (g *galleryGrid) ScrollToTop() { g.grid.ScrollToTop() }
+
 // Items — текущие галереи сетки.
 func (g *galleryGrid) Items() []model.Gallery { return g.items }
 

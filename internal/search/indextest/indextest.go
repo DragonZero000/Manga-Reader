@@ -188,11 +188,22 @@ func testSortFields(t *testing.T, newIndex NewIndex) {
 		}
 		return g
 	}
-	idx := fill(t, newIndex(t),
+	gs := []model.Gallery{
 		mk("g1.zip", "Beta", 30, 5, 2, 300, 3, 1),
 		mk("g2.zip", "alpha", 10, 5, 9, 100, 1, 3),
 		mk("g10.zip", "Gamma", 20, 1, 9, 200, 2, 2),
-	)
+	}
+	idx := fill(t, newIndex(t), gs...)
+	// local sorts the same set with search.SortGalleries; the order must match the index
+	local := func(s search.Sort) []string {
+		c := append([]model.Gallery(nil), gs...)
+		search.SortGalleries(c, s)
+		ids := make([]string, len(c))
+		for i, g := range c {
+			ids[i] = g.Key.ID
+		}
+		return ids
+	}
 	cases := []struct {
 		field search.Field
 		asc   []string
@@ -220,9 +231,15 @@ func testSortFields(t *testing.T, newIndex NewIndex) {
 		if got := run(t, idx, q); !reflect.DeepEqual(got, c.asc) {
 			t.Errorf("сортировка %v ↑: %v, want %v", c.field, got, c.asc)
 		}
+		if got := local(q.Sort); !reflect.DeepEqual(got, c.asc) {
+			t.Errorf("SortGalleries %v ↑: %v, want %v", c.field, got, c.asc)
+		}
 		q.Sort.Desc = true
 		if got := run(t, idx, q); !reflect.DeepEqual(got, desc[c.field]) {
 			t.Errorf("сортировка %v ↓: %v, want %v", c.field, got, desc[c.field])
+		}
+		if got := local(q.Sort); !reflect.DeepEqual(got, desc[c.field]) {
+			t.Errorf("SortGalleries %v ↓: %v, want %v", c.field, got, desc[c.field])
 		}
 	}
 }

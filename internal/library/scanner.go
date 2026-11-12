@@ -43,7 +43,7 @@ type ScanResult struct {
 	Removed []model.Key
 }
 
-// Scanner обходит папку библиотеки и проверяет все файлы: .zip разбираются
+// Scanner обходит папку библиотеки и проверяет все файлы: zip, RAR и 7z (по содержимому) разбираются
 // как архивы, остальные попадают в ошибки. Неизменённые файлы (размер и
 // время изменения совпадают) повторно не открываются; с хранилищем
 // (ScanStore) — и после перезапуска приложения.
@@ -345,7 +345,7 @@ func openArchive(st storage.Storage, rel string) (storage.File, error) {
 	return st.Open(rel)
 }
 
-// readEntry проверяет файл: .zip разбирается как архив, остальные файлы —
+// readEntry проверяет файл: zip, RAR и 7z разбираются как архив, остальные файлы —
 // ошибка с типом, определённым по содержимому.
 func readEntry(st storage.Storage, e storage.Entry) (model.Gallery, []string, error) {
 	if e.Size == 0 {

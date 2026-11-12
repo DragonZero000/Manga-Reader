@@ -54,6 +54,7 @@ type Search struct {
 	runBtn   *widget.Button
 	random   *randomButton
 	status   *widget.Label
+	sort     *sortControl
 	grid     *galleryGrid
 	help     fyne.CanvasObject
 	content  fyne.CanvasObject
@@ -99,7 +100,9 @@ func NewSearch(svc *app.Services, metrics *GridMetrics, actions *GalleryActions)
 	// 🎲 — из результата в сетке; ошибка разбора сетку не меняет
 	s.random = newRandomButton(app.RandomMode(svc.Settings), s.grid.Items, func(g model.Gallery) { actions.Open(g) })
 	buttons := container.NewHBox(s.clearBtn, s.runBtn, s.random.btn)
-	top := container.NewVBox(container.NewBorder(nil, nil, nil, buttons, s.entry), s.status)
+	s.sort = newSortControl(func() search.Sort { return app.StartSort(svc.Settings) }, s.resort)
+	top := container.NewVBox(container.NewBorder(nil, nil, nil, buttons, s.entry),
+		container.NewBorder(nil, nil, nil, s.sort.btn, s.status))
 	s.content = container.NewBorder(top, nil, nil, nil, container.NewStack(s.help, s.grid.Widget()))
 	s.setStatus("", false)
 	s.grid.Widget().Hide()
@@ -129,6 +132,24 @@ func (s *Search) SetMode(mode string) {
 		s.runBtn.Hide()
 	}
 }
+
+// resort упорядочивает последнюю выдачу новой сортировкой и показывает её
+// с начала; запрос к индексу не выполняется.
+func (s *Search) resort(v search.Sort) {
+	s.grid.SetItems(sortedCopy(s.grid.Items(), v))
+	s.grid.ScrollToTop()
+}
+
+// StartSortChanged применяет новую стартовую сортировку, если на вкладке
+// сортировку вручную не меняли.
+func (s *Search) StartSortChanged() {
+	if s.sort.StartChanged() {
+		s.resort(s.sort.Sort())
+	}
+}
+
+// Sort — контрол сортировки (для тестов).
+func (s *Search) Sort() *sortControl { return s.sort }
 
 // SetRandomMode задаёт режим кнопки 🎲 и начинает круг заново.
 func (s *Search) SetRandomMode(mode string) { s.random.picker.SetMode(mode) }
@@ -255,7 +276,7 @@ func (s *Search) apply(items []model.Gallery, total int, err error) {
 		s.setStatus(i18n.T("search.failed", "Error", ErrorText(err)), true)
 		return
 	}
-	s.grid.SetItems(items)
+	s.grid.SetItems(sortedCopy(items, s.sort.Sort()))
 	s.total = total
 	s.updateFound()
 }

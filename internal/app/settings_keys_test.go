@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"mangareader/internal/i18n"
+	"mangareader/internal/search"
 	"mangareader/internal/storage"
 )
 
@@ -150,5 +151,29 @@ func TestReaderDoubleTap(t *testing.T) {
 	s.SetString(KeyReaderDoubleTap, "999")
 	if v := ReaderDoubleTapValue(s); v != "200" {
 		t.Fatalf("неизвестное значение %q", v)
+	}
+}
+
+func TestStartSort(t *testing.T) {
+	s := storage.NewMemSettings()
+	if v := StartSort(s); v != search.DefaultSort {
+		t.Fatalf("по умолчанию %+v", v)
+	}
+	for _, want := range []search.Sort{
+		{Field: search.FieldTitle}, {Field: search.FieldPages, Desc: true},
+		{Field: search.FieldSize}, {Field: search.FieldUploaded, Desc: true}, {Field: search.FieldAdded},
+	} {
+		SetStartSort(s, want)
+		if got := StartSort(s); got != want {
+			t.Fatalf("записали %+v, прочитали %+v", want, got)
+		}
+	}
+	s.SetString(KeySortField, "что-то")
+	if v := StartSort(s); v != search.DefaultSort {
+		t.Fatalf("неизвестное поле %+v", v)
+	}
+	s.SetString(KeySortField, "favorites") // существует, но в UI недоступно
+	if v := StartSort(s); v != search.DefaultSort {
+		t.Fatalf("поле вне списка UI %+v", v)
 	}
 }

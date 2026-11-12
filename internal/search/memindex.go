@@ -260,35 +260,47 @@ func cmpTime(t time.Time, f Filter) bool {
 
 // sortDocs упорядочивает результаты; при равенстве — ключ в натуральном порядке.
 func sortDocs(ds []*doc, s Sort) {
-	less := func(a, b *doc) int {
-		ga, gb := a.g, b.g
-		switch s.Field {
-		case FieldTitle:
-			return strings.Compare(strings.ToLower(ga.Title), strings.ToLower(gb.Title))
-		case FieldID:
-			return cmp64(ga.ExternalID, gb.ExternalID)
-		case FieldPages:
-			return cmp64(int64(len(ga.Pages)), int64(len(gb.Pages)))
-		case FieldFavorites:
-			return cmp64(int64(ga.Favorites), int64(gb.Favorites))
-		case FieldSize:
-			return cmp64(ga.File.Size, gb.File.Size)
-		case FieldUploaded:
-			return ga.Uploaded.Compare(gb.Uploaded)
-		default: // FieldAdded
-			return ga.File.ModTime.Compare(gb.File.ModTime)
-		}
+	sort.SliceStable(ds, func(i, j int) bool { return galleryLess(&ds[i].g, &ds[j].g, s) })
+}
+
+// SortGalleries упорядочивает галереи на месте тем же порядком, что и Search
+// с такой же сортировкой: пустое значение наименьшее, при равенстве — ключ
+// в натуральном порядке. Сортировка стабильная.
+func SortGalleries(gs []model.Gallery, s Sort) {
+	if s.Field == 0 {
+		s = DefaultSort
 	}
-	sort.SliceStable(ds, func(i, j int) bool {
-		c := less(ds[i], ds[j])
-		if c != 0 {
-			if s.Desc {
-				return c > 0
-			}
-			return c < 0
+	sort.SliceStable(gs, func(i, j int) bool { return galleryLess(&gs[i], &gs[j], s) })
+}
+
+// galleryLess — общий компаратор движка и SortGalleries.
+func galleryLess(a, b *model.Gallery, s Sort) bool {
+	if c := compareBy(a, b, s.Field); c != 0 {
+		if s.Desc {
+			return c > 0
 		}
-		return model.NaturalLess(ds[i].g.Key.ID, ds[j].g.Key.ID)
-	})
+		return c < 0
+	}
+	return model.NaturalLess(a.Key.ID, b.Key.ID)
+}
+
+func compareBy(a, b *model.Gallery, f Field) int {
+	switch f {
+	case FieldTitle:
+		return strings.Compare(strings.ToLower(a.Title), strings.ToLower(b.Title))
+	case FieldID:
+		return cmp64(a.ExternalID, b.ExternalID)
+	case FieldPages:
+		return cmp64(int64(len(a.Pages)), int64(len(b.Pages)))
+	case FieldFavorites:
+		return cmp64(int64(a.Favorites), int64(b.Favorites))
+	case FieldSize:
+		return cmp64(a.File.Size, b.File.Size)
+	case FieldUploaded:
+		return a.Uploaded.Compare(b.Uploaded)
+	default: // FieldAdded
+		return a.File.ModTime.Compare(b.File.ModTime)
+	}
 }
 
 func cmp64(a, b int64) int {

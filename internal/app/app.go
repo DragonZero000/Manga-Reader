@@ -138,6 +138,53 @@ func SetRandomMode(s storage.Settings, mode string) {
 	s.SetString(KeyRandomMode, mode)
 }
 
+// Стартовая сортировка Библиотеки и Поиска. Выбор на вкладке в настройки не
+// пишется и при следующем запуске сбрасывается на стартовую.
+const (
+	KeySortField = "ui.sort.field"
+	KeySortDesc  = "ui.sort.desc"
+)
+
+// SortFields — поля, по которым можно сортировать в UI, в порядке меню.
+var SortFields = []search.Field{search.FieldTitle, search.FieldPages, search.FieldSize, search.FieldAdded, search.FieldUploaded}
+
+// SortFieldAllowed сообщает, есть ли поле в SortFields.
+func SortFieldAllowed(f search.Field) bool {
+	for _, a := range SortFields {
+		if a == f {
+			return true
+		}
+	}
+	return false
+}
+
+// DefaultSortDirection — направление при выборе поля: название по
+// возрастанию, остальные по убыванию.
+func DefaultSortDirection(f search.Field) bool { return f != search.FieldTitle }
+
+// StartSort — стартовая сортировка из Settings; по умолчанию «Дата
+// добавления ↓», неизвестное поле — тоже она.
+func StartSort(s storage.Settings) search.Sort {
+	f, ok := search.FieldByName(s.String(KeySortField, ""))
+	if !ok || !SortFieldAllowed(f) {
+		return search.DefaultSort
+	}
+	return search.Sort{Field: f, Desc: s.String(KeySortDesc, "1") != "0"}
+}
+
+// SetStartSort сохраняет стартовую сортировку.
+func SetStartSort(s storage.Settings, v search.Sort) {
+	if !SortFieldAllowed(v.Field) {
+		v = search.DefaultSort
+	}
+	desc := "0"
+	if v.Desc {
+		desc = "1"
+	}
+	s.SetString(KeySortField, v.Field.String())
+	s.SetString(KeySortDesc, desc)
+}
+
 // KeyUILanguage — язык интерфейса: код языка из i18n.Available или
 // i18n.Auto (как в системе, по умолчанию). Применяется при запуске.
 const KeyUILanguage = "ui.language"
