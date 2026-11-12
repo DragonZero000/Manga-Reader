@@ -82,6 +82,11 @@ func TestShellInEnglish(t *testing.T) {
 	svc.MobileBrowser = true
 	svc.Browser = browser.New(browser.Options{FirefoxDir: filepath.Join(dir, "none"), ProfileDir: dir, DownloadDir: dir})
 	s := NewShell(a, svc)
+	// загрузка обложки идёт в своей горутине: без заглушки она доходит до apply
+	// посреди другого теста и портит общий шейпер шрифтов
+	drop := func(func()) {}
+	s.Details.SetDispatcher(drop)
+	s.Reader.SetDispatcher(drop)
 	s.Details.Open(model.Gallery{
 		Key: model.LocalKey("a.zip"), Title: "english name", AltTitle: "japanese name", NumPages: 3,
 		Pages: []model.Page{{Name: "1.jpg"}}, ExternalID: 5, Favorites: 12345, Scanlator: "group",
