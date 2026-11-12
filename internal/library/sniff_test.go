@@ -85,11 +85,6 @@ func TestScanReasons(t *testing.T) {
 	writeFile(t, dir, "g-3.zip", []byte("<!DOCTYPE html><html><body>Проверка браузера</body></html>"))
 	writeFile(t, dir, "clip.mp4", ftyp("isom"))
 	writeFile(t, dir, "empty.zip", nil)
-	writeFile(t, dir, "book.cbz", func() []byte {
-		p := writeZip(t, t.TempDir(), "x.zip", file{"1.png", pngBytes(t, 2, 2)})
-		data, _ := os.ReadFile(p)
-		return data
-	}())
 	// обрезанный корректный архив
 	full, err := os.ReadFile(filepath.Join("..", "..", "testdata", "example.zip"))
 	if err != nil {
@@ -98,11 +93,10 @@ func TestScanReasons(t *testing.T) {
 	writeFile(t, dir, "part.zip", full[:len(full)/2])
 
 	tests := []struct{ rel, want string }{
-		{"g-2.zip", "image - only zip archives are supported"},
+		{"g-2.zip", "image - only zip, RAR and 7z archives are supported"},
 		{"g-3.zip", "web page (HTML) instead of an archive - the site probably returned an error or a check page"},
-		{"clip.mp4", "video - only zip archives are supported"},
+		{"clip.mp4", "video - only zip, RAR and 7z archives are supported"},
 		{"empty.zip", "empty file"},
-		{"book.cbz", `zip archive with extension ".cbz" - only .zip files are supported`},
 		{"part.zip", ErrNotZip.Error()},
 	}
 	for _, tt := range tests {

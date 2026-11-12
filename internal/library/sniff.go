@@ -29,10 +29,9 @@ const (
 // UnsupportedError — файл не является галереей; тип определён по содержимому.
 type UnsupportedError struct {
 	Kind Kind
-	Ext  string // расширение файла (для KindZip)
 }
 
-const onlyZip = " - only zip archives are supported"
+const onlyZip = " - only zip, RAR and 7z archives are supported"
 
 // Error — технический текст на английском; текст на языке интерфейса UI
 // строит по Kind и Ext.
@@ -47,13 +46,11 @@ func (e *UnsupportedError) Error() string {
 	case KindPDF:
 		return "PDF" + onlyZip
 	case KindOtherArchive:
-		return "RAR/7z archive" + onlyZip
+		return "RAR/7z archive - could not be read"
 	case KindText:
 		return "text file" + onlyZip
 	case KindHTML:
 		return "web page (HTML) instead of an archive - the site probably returned an error or a check page"
-	case KindZip:
-		return "zip archive with extension \"" + e.Ext + "\" - only .zip files are supported"
 	}
 	return "unsupported format"
 }

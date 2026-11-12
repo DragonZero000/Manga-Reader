@@ -6,7 +6,7 @@
 [![Release](https://img.shields.io/github/v/release/DragonZero000/Manga-Reader)](https://github.com/DragonZero000/Manga-Reader/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-An offline manga reader for zip archives on **Windows** and **Android**, with a built-in Firefox-based browser: archives you download in it go straight into your library. Written in Go with [Fyne](https://fyne.io).
+An offline manga reader for zip, RAR and 7z archives on **Windows** and **Android**, with a built-in Firefox-based browser: archives you download in it go straight into your library. Written in Go with [Fyne](https://fyne.io).
 
 > **The interface is in English and Russian.** It follows the system language by default (English if there is no translation for it); pick the language in **Settings** → **Язык / Language**.
 
@@ -18,7 +18,7 @@ An offline manga reader for zip archives on **Windows** and **Android**, with a 
 
 ## Features
 
-- **Library** — a grid of covers from a folder of `.zip` archives; new files show up on their own, no restart needed. Pick the card size (Windows) or the number of cards per row (Android); the 🎲 button opens a random gallery.
+- **Library** — a grid of covers from a folder of `.zip`, `.cbz`, `.rar`, `.cbr`, `.7z` or `.cb7` archives; new files show up on their own, no restart needed. Pick the card size (Windows) or the number of cards per row (Android); the 🎲 button opens a random gallery.
 - **Card menu** — **⋮** on a card, right-click (PC) or long press (phone): open, read, open in browser, copy title, show in folder (Windows), reset progress, delete — to the Recycle Bin on Windows, after a confirmation.
 - **Metadata** — titles, tags grouped by type (artist, group, character, language…), upload date and more from a `meta.json` inside the archive; add your own tags and hide unwanted ones without touching the archive.
 - **Reader** — paged mode (tap zones, swipe, keyboard, wheel) and a continuous strip; zoom up to 500% (Ctrl+wheel on PC, pinch on Android, double tap); jump to a page by number; right-to-left reading for manga.
@@ -43,7 +43,7 @@ Ready-made builds are on the [Releases](https://github.com/DragonZero000/Manga-R
 
 1. Unpack the zip anywhere you have write access (not `Program Files`), e.g. `D:\MangaReader`.
 2. Run `MangaReader\mangareader.exe`.
-3. Put `.zip` archives into the `manga` folder next to the app, or download them with the **Browser** button.
+3. Put `.zip`, `.cbz`, `.rar` or `.7z` archives into the `manga` folder next to the app, or download them with the **Browser** button.
 
 To update, replace `mangareader.exe` and the `browser\firefox` folder with the ones from the new zip; `manga`, `settings.json`, `library.db`, `user.db` and `browser\profile` are kept.
 

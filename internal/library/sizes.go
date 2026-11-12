@@ -1,7 +1,7 @@
 package library
 
 import (
-	"archive/zip"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/gif"  // регистрация декодеров для DecodeConfig
@@ -26,33 +26,27 @@ func (s *Source) PageSizes(k model.Key) ([]PageSize, error) {
 	if !ok {
 		return nil, fmt.Errorf("gallery %s not found", k)
 	}
-	zr, closeFn, err := s.openGallery(g)
+	c, closeFn, err := s.openGallery(g)
 	if err != nil {
 		return nil, err
 	}
 	defer closeFn()
 
-	// записи по сырому имени, как в findEntry: первая запись-файл
-	entries := make(map[string]*zip.File, len(zr.File))
-	for _, f := range zr.File {
-		if _, ok := entries[f.Name]; !ok && !f.FileInfo().IsDir() {
-			entries[f.Name] = f
-		}
-	}
 	out := make([]PageSize, len(g.Pages))
 	for i, p := range g.Pages {
-		out[i] = pageSize(entries[p.Name], p.Name)
+		out[i] = pageSize(c, p.Name)
 	}
 	return out, nil
 }
 
-// pageSize читает заголовок изображения записи f (nil — записи нет).
-func pageSize(f *zip.File, name string) PageSize {
-	if f == nil {
-		return PageSize{Err: fmt.Errorf("page %q not found in the archive", name)}
-	}
-	rc, err := f.Open()
+// pageSize читает заголовок изображения записи name контейнера c.
+func pageSize(c container, name string) PageSize {
+	rc, err := c.Open(name)
 	if err != nil {
+		var nf errEntryNotFound
+		if errors.As(err, &nf) {
+			return PageSize{Err: fmt.Errorf("page %q not found in the archive", name)}
+		}
 		return PageSize{Err: err}
 	}
 	defer rc.Close()

@@ -92,14 +92,14 @@ func problemKind(err error) (string, bool) {
 			return i18n.T("problem.text"), true
 		case library.KindHTML:
 			return i18n.T("problem.html"), true
-		case library.KindZip:
-			return i18n.T("problem.zip_ext", "Ext", ue.Ext), true
 		}
 		return i18n.T("problem.unknown"), true
 	case errors.Is(err, library.ErrEmpty):
 		return i18n.T("problem.empty"), true
 	case errors.Is(err, library.ErrNoImages):
 		return i18n.T("problem.no_images"), true
+	case errors.Is(err, library.ErrPassword):
+		return i18n.T("problem.password"), true
 	case errors.Is(err, library.ErrNotZip):
 		return i18n.T("problem.not_zip"), true
 	}

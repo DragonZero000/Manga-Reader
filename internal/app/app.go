@@ -321,11 +321,14 @@ func SetRetentionDays(s storage.Settings, days int) {
 }
 
 // thumbsConfig — объём кэша миниатюр в памяти, число декодеров (0 — по
-// умолчанию) и папка кэша обложек на диске («» — только память).
+// умолчанию), папка кэша обложек на диске («» — только память) и папка
+// распаковки solid-архивов RAR.
 type thumbsConfig struct {
 	limit   int64
 	workers int
 	dir     string
+	// solidDir — папка распаковки solid-архивов RAR («» — без кэша)
+	solidDir string
 }
 
 // openCatalog открывает каталог библиотеки path для папки root; nil — не
@@ -452,6 +455,12 @@ func newServices(version string, st storage.Storage, settings storage.Settings, 
 		s.Index = search.NewMemIndex()
 		s.Library = library.NewSource(st, s.Index)
 	}
+	if tc.solidDir != "" {
+		// остатки прерванного запуска не нужны: кэш живёт только пока открыто приложение
+		sc := library.NewSolidCache(tc.solidDir, 0)
+		sc.Clear()
+		s.Library.SetSolidCache(sc)
+	}
 	s.Thumbs = thumbs.New(s.Library.OpenPage, tc.limit, tc.workers)
 	if tc.dir != "" {
 		s.covers = thumbs.NewDirStore(tc.dir)
@@ -552,6 +561,7 @@ func (s *Services) PruneCovers() {
 
 // Close закрывает каталог и пользовательские данные (при выходе из приложения).
 func (s *Services) Close() {
+	s.Library.ClearSolidCache()
 	if s.stopBg != nil {
 		s.stopBg()
 	}

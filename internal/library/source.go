@@ -1,7 +1,6 @@
 package library
 
 import (
-	"archive/zip"
 	"bytes"
 	"context"
 	"errors"
@@ -42,8 +41,9 @@ type Source struct {
 	stMu     sync.RWMutex
 	st       storage.Storage // nil — папка не выбрана (Android)
 	scanner  *Scanner
-	observer Observer // nil — нет
-	overlay  Overlay  // nil — без наложения пользователя
+	observer Observer    // nil — нет
+	overlay  Overlay     // nil — без наложения пользователя
+	solid    *SolidCache // nil — solid-RAR читается без кэша распаковки
 
 	scanMu sync.Mutex // занят на время сканирования
 	// edits — сколько правок (Refresh, Reindex) ждут или держат scanMu:
@@ -356,17 +356,17 @@ func (s *Source) OpenPage(k model.Key, page string) (io.ReadCloser, error) {
 		return nil, fmt.Errorf("page %q not found in %s", page, k)
 	}
 
-	zr, closeFn, err := s.openGallery(g)
+	c, closeFn, err := s.openGallery(g)
 	if err != nil {
 		return nil, err
 	}
 	defer closeFn()
-	zf := findEntry(zr, page)
-	if zf == nil {
-		return nil, fmt.Errorf("page %q not found in the archive of %s", page, k)
-	}
-	f, err := zf.Open()
+	f, err := c.Open(page)
 	if err != nil {
+		var nf errEntryNotFound
+		if errors.As(err, &nf) {
+			return nil, fmt.Errorf("page %q not found in the archive of %s", page, k)
+		}
 		return nil, fmt.Errorf("opening %q: %w", page, err)
 	}
 	defer f.Close()
@@ -379,7 +379,7 @@ func (s *Source) OpenPage(k model.Key, page string) (io.ReadCloser, error) {
 
 // openGallery открывает архив галереи из хранилища. Файл закрывается
 // возвращённой функцией — архив не удерживается дольше чтения.
-func (s *Source) openGallery(g model.Gallery) (*zip.Reader, func(), error) {
+func (s *Source) openGallery(g model.Gallery) (container, func(), error) {
 	st := s.storage()
 	if st == nil {
 		return nil, nil, fmt.Errorf("%w: library folder is not selected", storage.ErrUnavailable)
@@ -388,10 +388,29 @@ func (s *Source) openGallery(g model.Gallery) (*zip.Reader, func(), error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("opening %s: %w", g.Key.ID, err)
 	}
-	zr, err := zip.NewReader(f, f.Size())
+	c, err := openContainer(f, s.solidCache(), solidKey(g.Key.ID, g.File.Size, g.File.ModTime))
 	if err != nil {
 		f.Close()
-		return nil, nil, fmt.Errorf("%w: %v", ErrNotZip, err)
+		return nil, nil, err
 	}
-	return zr, func() { f.Close() }, nil
+	return c, func() { c.Close(); f.Close() }, nil
+}
+
+// SetSolidCache задаёт кэш распаковки solid-архивов RAR (nil — без кэша: такие
+// архивы читаются проходом по файлу при каждом открытии страницы).
+func (s *Source) SetSolidCache(c *SolidCache) {
+	s.stMu.Lock()
+	s.solid = c
+	s.stMu.Unlock()
+}
+
+func (s *Source) solidCache() *SolidCache {
+	s.stMu.RLock()
+	defer s.stMu.RUnlock()
+	return s.solid
+}
+
+// ClearSolidCache удаляет распакованные solid-архивы (при выходе из приложения).
+func (s *Source) ClearSolidCache() {
+	s.solidCache().Clear()
 }

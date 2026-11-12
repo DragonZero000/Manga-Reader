@@ -11,6 +11,7 @@ dist/
 /library.db-wal
 /library.db-shm
 /browser/
+temp/
 
 # Android (Gradle): генерируется make build-android
 /android/.gradle/

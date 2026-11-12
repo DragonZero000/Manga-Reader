@@ -134,7 +134,7 @@ func TestErrorKindRoundTrip(t *testing.T) {
 		ErrNotZip,
 		fmt.Errorf("%w: zip: not a valid zip file", ErrNotZip),
 		&UnsupportedError{Kind: KindHTML},
-		&UnsupportedError{Kind: KindZip, Ext: ".rar"},
+		&UnsupportedError{Kind: KindPDF},
 		errors.New("не удалось открыть: нет доступа"),
 	} {
 		got := RestoreError(ErrorKind(err), err.Error())

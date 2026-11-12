@@ -24,9 +24,9 @@ The Firefox ESR and GeckoView builds may themselves include third-party code. Th
 | [fyne.io/systray](https://github.com/fyne-io/systray) | v1.12.2 | Apache-2.0 |
 | [github.com/fsnotify/fsnotify](https://github.com/fsnotify/fsnotify) | v1.9.0 | BSD-3-Clause |
 | [golang.org/x/image](https://cs.opensource.google/go/x/image) | v0.24.0 | BSD-3-Clause |
-| [golang.org/x/net](https://cs.opensource.google/go/x/net) | v0.35.0 | BSD-3-Clause |
-| [golang.org/x/sys](https://cs.opensource.google/go/x/sys) | v0.30.0 | BSD-3-Clause |
-| [golang.org/x/text](https://cs.opensource.google/go/x/text) | v0.22.0 | BSD-3-Clause |
+| [golang.org/x/net](https://cs.opensource.google/go/x/net) | v0.48.0 | BSD-3-Clause |
+| [golang.org/x/sys](https://cs.opensource.google/go/x/sys) | v0.40.0 | BSD-3-Clause |
+| [golang.org/x/text](https://cs.opensource.google/go/x/text) | v0.40.0 | BSD-3-Clause |
 | [github.com/go-gl/glfw](https://github.com/go-gl/glfw) (with bundled GLFW) | v3.4 | BSD-3-Clause (bindings), zlib (GLFW) |
 | [github.com/go-gl/gl](https://github.com/go-gl/gl) | 2026-03-31 | MIT |
 | [github.com/go-text/render](https://github.com/go-text/render) | v0.2.1 | BSD-3-Clause |
@@ -48,8 +48,22 @@ The Firefox ESR and GeckoView builds may themselves include third-party code. Th
 | [github.com/nicksnyder/go-i18n/v2](https://github.com/nicksnyder/go-i18n) | v2.5.1 | MIT |
 | [github.com/yuin/goldmark](https://github.com/yuin/goldmark) | v1.8.2 | MIT |
 | [github.com/nfnt/resize](https://github.com/nfnt/resize) | 2018-02-21 | ISC |
+| [github.com/nwaples/rardecode/v2](https://github.com/nwaples/rardecode) | v2.4.6 | BSD-2-Clause |
+| [github.com/bodgit/sevenzip](https://github.com/bodgit/sevenzip) | v1.6.5 | BSD-3-Clause |
+| [github.com/bodgit/plumbing](https://github.com/bodgit/plumbing) | v1.3.0 | BSD-3-Clause |
+| [github.com/bodgit/windows](https://github.com/bodgit/windows) | v1.0.1 | BSD-3-Clause |
+| [github.com/andybalholm/brotli](https://github.com/andybalholm/brotli) | v1.2.2 | MIT |
+| [github.com/klauspost/compress](https://github.com/klauspost/compress) | v1.19.0 | BSD-3-Clause, MIT |
+| [github.com/pierrec/lz4/v4](https://github.com/pierrec/lz4) | v4.1.27 | BSD-3-Clause |
+| [github.com/ulikunitz/xz](https://github.com/ulikunitz/xz) | v0.5.15 | BSD-3-Clause |
+| [github.com/stangelandcl/ppmd](https://github.com/stangelandcl/ppmd) | v0.1.1 | MIT |
+| [github.com/spf13/afero](https://github.com/spf13/afero) | v1.15.0 | Apache-2.0 |
+| [go4.org](https://github.com/go4org/go4) | 2026-01-12 | Apache-2.0 |
+| [github.com/hashicorp/golang-lru/v2](https://github.com/hashicorp/golang-lru) (unmodified) | v2.0.7 | MPL-2.0 |
 
 Exact versions are in [`go.mod`](go.mod). The full license texts ship with each module and are available at the links above.
+
+`github.com/hashicorp/golang-lru/v2` is used unmodified and is licensed under the [Mozilla Public License 2.0](https://www.mozilla.org/MPL/2.0/); the MPL-2.0 applies only to its own files, not to MangaReader's code. Its source code: [github.com/hashicorp/golang-lru/tree/v2.0.7](https://github.com/hashicorp/golang-lru/tree/v2.0.7).
 
 The files `internal/i18n/fyne/base.<lang>.json` are copies of Fyne's built-in translations (`fyne.io/fyne/v2/lang/translations`, BSD-3-Clause, same license as `fyne.io/fyne/v2` above); they are embedded into the app to show Fyne's own texts in the app language.
 

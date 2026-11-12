@@ -71,7 +71,7 @@ type Gallery struct {
 	// оглавления архива (путь, CRC32, размер). Не зависит от имени файла и
 	// meta.json; по нему узнаётся переименованный или перемещённый архив.
 	Fingerprint string `json:",omitempty"`
-	// HasMeta — в архиве найден и разобран meta.json. Пустой, но корректный
+	// HasMeta — в архиве найден и разобран meta.json или ComicInfo.xml. Пустой, но корректный
 	// meta.json даёт true; нет файла или он не разобрался — false.
 	HasMeta bool
 	// Custom и Hidden — наложение пользователя из user.db: свои теги в

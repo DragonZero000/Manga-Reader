@@ -2,12 +2,13 @@
 
 # User guide
 
-MangaReader shows manga from zip archives in your library folder and helps you grow it: the built-in browser saves downloads straight into that folder. Only the browser needs the internet — the library, reader and search work offline.
+MangaReader shows manga from zip, RAR and 7z archives in your library folder and helps you grow it: the built-in browser saves downloads straight into that folder. Only the browser needs the internet — the library, reader and search work offline.
 
 > The interface is available in English and Russian. By default it follows the system language (English if the app has no translation for it); you can pick the language in **Settings** → **Язык / Language**.
 
 - [Library folder](#library-folder)
 - [Archive format](#archive-format)
+- [Where to get files](#where-to-get-files)
 - [Library](#library)
 - [Gallery page](#gallery-page)
 - [Reader](#reader)
@@ -29,7 +30,7 @@ MangaReader\
 ├── settings.json   ← settings, created after the first change
 ├── library.db      ← library catalog (created automatically, safe to delete)
 ├── user.db         ← your data about works (don't delete)
-├── manga\          ← put your .zip archives here (created on first start)
+├── manga\          ← put your archives here (.zip, .cbz, .rar, .7z) (created on first start)
 └── browser\
     ├── firefox\    ← built-in browser
     └── profile\    ← browser profile: bookmarks, cookies, extensions
@@ -56,7 +57,9 @@ While the app is open, the library updates itself: new, changed and removed file
 
 ## Archive format
 
-A gallery is a `.zip` archive with images (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`) and, optionally, a `meta.json` file:
+A gallery is a zip, RAR or 7z archive with images (`.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`) and, optionally, a `meta.json` and/or `ComicInfo.xml` file. The extension doesn't matter: `.zip`, `.cbz`, `.rar`, `.cbr`, `.7z`, `.cb7` and any other name work, because the type is detected by content. PDF and EPUB are not supported.
+
+RAR 5 (plain and solid) and 7z (plain and solid) are checked; RAR 4 should open but has not been tested. A **solid** RAR cannot be read page by page, so the first time you open a page the app unpacks the whole archive into a temporary cache (up to 512 MB, cleared when you close the app); an archive that does not fit is shown as an error. Archives protected with a password are not supported and land on the **Errors** tab.
 
 ```text
 example.zip
@@ -69,7 +72,7 @@ example.zip
 - Pages are ordered by name in natural order: `2.jpg` comes before `10.jpg`. Subfolders inside the archive are allowed.
 - File names inside the archive may be in any encoding (for example, Shift-JIS from Japanese archivers), and folders may be separated by `/` or `\`. Service files (`__MACOSX`, names starting with `.`) are ignored; if several files have exactly the same name, the first one is used.
 - The first page is the cover.
-- Without `meta.json` the file name becomes the title, and there are no tags or details.
+- Without `meta.json` and `ComicInfo.xml` the file name becomes the title, and there are no tags or details.
 
 `meta.json` fields the app understands (everything else is ignored):
 
@@ -86,6 +89,41 @@ example.zip
 | `url`, `source`, `link`, `source_url`, `gallery_url` | Link to the work (the first `http(s)` one is used) | **Open in browser** button |
 
 Example: [`testdata/example.zip`](../../testdata/example.zip).
+
+### ComicInfo.xml
+
+`ComicInfo.xml` (the standard comic-reader format, in UTF-8) is read from any depth of the archive; if there are several, the least nested one is used. It is a second source of details: **`meta.json` wins** — `ComicInfo.xml` only fills in what `meta.json` leaves empty (title, alternative title, link, date, page count) and adds tags that aren't there yet. A broken `ComicInfo.xml` is ignored with a warning. Fields:
+
+| Field | Becomes |
+|---|---|
+| `Title` (otherwise `Series` plus `Number`) | Title |
+| `AlternateSeries` | Alternative title |
+| `Tags` (comma-separated) | `tag` tags |
+| `Characters` | `character` tags |
+| `LanguageISO` | `language` tag (`en` → `english`; an unknown code is kept as is) |
+| `Format` | `category` tag |
+| `Writer`, `Penciller` | `artist` tags |
+| `Publisher` | `group` tag |
+| `Year`, `Month`, `Day` | Upload date (a missing month or day is 1; no year — no date) |
+| `PageCount` | Page count |
+| `Web` | Link to the work, only if the address has a path (a bare site address is ignored) |
+
+`Manga` (reading direction) and `AgeRating` are ignored. Example: [`testdata/cbz-example.cbz`](../../testdata/cbz-example.cbz).
+
+## Where to get files
+
+What the sites checked by hand give you (only what was verified is listed):
+
+| Site | File you get |
+|---|---|
+| E-Hentai | zip |
+| nhentai | zip, cbz |
+| Desu.me | zip with `.webp` pages |
+| DriveThruComics | pdf or zip (pdf is not supported) |
+| GetComics | zip or cbz |
+| MangaLib | shows a download, but no file is produced |
+
+Other sites work online only or are unstable, so there is nothing to download from them.
 
 ## Library
 
@@ -208,7 +246,7 @@ The **✕** button clears the box and keeps the results on screen. The 🎲 butt
 | `-tag:yuri` | Excludes works with the tag (also `-artist:…` etc.) |
 | `custom-tag:"my fav"` | Your own tag of any type, see [Editing tags](#editing-tags) |
 | `hidden-tag:yuri` | An original tag you hid |
-| `missing:artist` | Works with no tag of a type (`artist`, `group`, `parody`, `character`, `language`, `category`, `tag`); also `missing:tags` (no tags at all) and `missing:meta` (no `meta.json` in the archive) |
+| `missing:artist` | Works with no tag of a type (`artist`, `group`, `parody`, `character`, `language`, `category`, `tag`); also `missing:tags` (no tags at all) and `missing:meta` (no `meta.json` or `ComicInfo.xml` in the archive) |
 | `pages:>20` | Page count: `>`, `<`, `>=`, `<=`, range `10..50` |
 | `uploaded:2024` | Upload date on the site: `2024`, `>2024-06`, `2024-01..2024-03` |
 | `added:>=2025-01` | When the file appeared in the folder (file modification time) |
@@ -233,7 +271,7 @@ Blocks, in this order (each one can be turned off, see below):
 - **By upload year** — one row per year of the upload date on the site, including years with no works, and **No date**.
 - **Library growth** — works by the time the file was changed: by month while the history is shorter than 24 months, otherwise by year (the arrow next to a year shows its months).
 - **Your tags** — how many works have your own and hidden tags, and a top of each.
-- **Metadata quality** — works without `meta.json`, without an artist, without a language, without tags.
+- **Metadata quality** — works without `meta.json` and `ComicInfo.xml`, without an artist, without a language, without tags.
 
 Tapping a tag, bucket, year, month or a quality row opens **Search** with the matching query (for example `size:>5mb size:<=10mb`, `missing:artist`) in front of which the statistics filter is put, so the found number matches the number in the row.
 
@@ -278,11 +316,11 @@ The **Browser** button on the library toolbar opens a Firefox-based browser. Eve
 
 ## Errors
 
-The app checks **every** file in the library folder. Only a `.zip` archive with images becomes a gallery; everything else lands on the **Errors** tab with a reason. The tab is there only while there are errors (it sits before **Settings**), and its icon and label are red. Examples of reasons:
+The app checks **every** file in the library folder. Only a zip, RAR or 7z archive with images (any extension, including `.cbz`) becomes a gallery; everything else lands on the **Errors** tab with a reason. The tab is there only while there are errors (it sits before **Settings**), and its icon and label are red. Examples of reasons:
 
-- "Image - only zip archives are supported": pictures, video, audio, PDF, RAR/7z, text — the type is detected by content, not by extension;
+- "Image - only zip, RAR and 7z archives are supported": pictures, video, audio, PDF, text — the type is detected by content, not by extension;
 - "Web page (HTML) instead of an archive" — the site returned an error or check page instead of the file;
-- "not a zip archive or the archive is damaged", "no images", "Empty file", "The file is in use by another program".
+- "not a valid archive or the archive is damaged", "the archive is password protected", "no images", "Empty file", "The file is in use by another program".
 
 Reasons are shown in the current interface language, including for files checked before the language was changed.
 

@@ -26,20 +26,18 @@ func TestProblemText(t *testing.T) {
 		err    error
 		ru, en string
 	}{
-		{&library.UnsupportedError{Kind: library.KindImage}, "Изображение — поддерживаются только zip-архивы", "Image - only zip archives are supported"},
-		{&library.UnsupportedError{Kind: library.KindVideo}, "Видео — поддерживаются только zip-архивы", "Video - only zip archives are supported"},
-		{&library.UnsupportedError{Kind: library.KindAudio}, "Аудио — поддерживаются только zip-архивы", "Audio - only zip archives are supported"},
-		{&library.UnsupportedError{Kind: library.KindPDF}, "PDF — поддерживаются только zip-архивы", "PDF - only zip archives are supported"},
-		{&library.UnsupportedError{Kind: library.KindOtherArchive}, "Архив RAR/7z — поддерживаются только zip-архивы", "RAR/7z archive - only zip archives are supported"},
-		{&library.UnsupportedError{Kind: library.KindText}, "Текстовый файл — поддерживаются только zip-архивы", "Text file - only zip archives are supported"},
+		{&library.UnsupportedError{Kind: library.KindImage}, "Изображение — поддерживаются только архивы zip, RAR и 7z", "Image - only zip, RAR and 7z archives are supported"},
+		{&library.UnsupportedError{Kind: library.KindVideo}, "Видео — поддерживаются только архивы zip, RAR и 7z", "Video - only zip, RAR and 7z archives are supported"},
+		{&library.UnsupportedError{Kind: library.KindAudio}, "Аудио — поддерживаются только архивы zip, RAR и 7z", "Audio - only zip, RAR and 7z archives are supported"},
+		{&library.UnsupportedError{Kind: library.KindPDF}, "PDF — поддерживаются только архивы zip, RAR и 7z", "PDF - only zip, RAR and 7z archives are supported"},
+		{&library.UnsupportedError{Kind: library.KindOtherArchive}, "Архив RAR/7z — не удалось прочитать", "RAR/7z archive - could not be read"},
+		{&library.UnsupportedError{Kind: library.KindText}, "Текстовый файл — поддерживаются только архивы zip, RAR и 7z", "Text file - only zip, RAR and 7z archives are supported"},
 		{&library.UnsupportedError{Kind: library.KindHTML}, "Веб-страница (HTML) вместо архива — вероятно, сайт вернул страницу с ошибкой или проверкой",
 			"Web page (HTML) instead of an archive - the site probably returned an error or a check page"},
-		{&library.UnsupportedError{Kind: library.KindZip, Ext: ".cbz"}, "Zip-архив с расширением «.cbz» — поддерживаются только файлы .zip",
-			"Zip archive with the “.cbz” extension - only .zip files are supported"},
 		{&library.UnsupportedError{Kind: library.KindUnknown}, "Неподдерживаемый формат", "Unsupported format"},
 		{library.ErrEmpty, "Пустой файл", "Empty file"},
 		{library.ErrNoImages, "нет изображений", "no images"},
-		{fmt.Errorf("%w: zip: not a valid zip file", library.ErrNotZip), "не zip-архив или архив повреждён", "not a zip archive or the archive is damaged"},
+		{fmt.Errorf("%w: zip: not a valid zip file", library.ErrNotZip), "не архив или архив повреждён", "not a valid archive or the archive is damaged"},
 		{storage.ErrBusy, "Файл занят другой программой", "The file is in use by another program"},
 		{errors.New("could not open: access denied"), "Не удалось прочитать файл: could not open: access denied", "Could not read the file: could not open: access denied"},
 	}
@@ -59,8 +57,8 @@ func TestProblemText(t *testing.T) {
 // Причина, восстановленная из каталога, переводится по виду.
 func TestProblemTextRestored(t *testing.T) {
 	useLang(t, "en")
-	err := library.RestoreError(library.ErrorKind(&library.UnsupportedError{Kind: library.KindImage}), "image - only zip archives are supported")
-	if got := ProblemText(err); got != "Image - only zip archives are supported" {
+	err := library.RestoreError(library.ErrorKind(&library.UnsupportedError{Kind: library.KindImage}), "image - only zip, RAR and 7z archives are supported")
+	if got := ProblemText(err); got != "Image - only zip, RAR and 7z archives are supported" {
 		t.Errorf("восстановленная причина: %q", got)
 	}
 }

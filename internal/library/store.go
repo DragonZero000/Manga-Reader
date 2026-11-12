@@ -30,7 +30,9 @@ type ScanStore interface {
 // файлы, результат которых мог измениться (needsRecheck), не пересканируя
 // библиотеку целиком. При изменении правил разбора — увеличить и дополнить
 // needsRecheck. 1 — имена записей zip: «\», не UTF-8, «./», повторы.
-const ParseRevision = 1
+// 2 — тип файла по содержимому (.cbz и др.), ComicInfo.xml.
+// 3 — архивы RAR и 7z.
+const ParseRevision = 3
 
 // StoredEntry — результат разбора файла: галерея или ошибка.
 type StoredEntry struct {
@@ -67,6 +69,7 @@ const (
 	errKindEmpty       = "empty"
 	errKindNoImages    = "no_images"
 	errKindNotZip      = "not_zip"
+	errKindPassword    = "password"
 	errKindUnsupported = "unsupported" // unsupported:<Kind>:<Ext>
 )
 
@@ -75,11 +78,13 @@ func ErrorKind(err error) string {
 	var ue *UnsupportedError
 	switch {
 	case errors.As(err, &ue):
-		return fmt.Sprintf("%s:%d:%s", errKindUnsupported, ue.Kind, ue.Ext)
+		return fmt.Sprintf("%s:%d", errKindUnsupported, ue.Kind)
 	case errors.Is(err, ErrEmpty):
 		return errKindEmpty
 	case errors.Is(err, ErrNoImages):
 		return errKindNoImages
+	case errors.Is(err, ErrPassword):
+		return errKindPassword
 	case errors.Is(err, ErrNotZip):
 		return errKindNotZip
 	}
@@ -89,9 +94,9 @@ func ErrorKind(err error) string {
 // RestoreError восстанавливает ошибку по виду и тексту.
 func RestoreError(kind, text string) error {
 	if rest, ok := strings.CutPrefix(kind, errKindUnsupported+":"); ok {
-		k, ext, _ := strings.Cut(rest, ":")
+		k, _, _ := strings.Cut(rest, ":") // прежние записи: unsupported:<Kind>:<расширение>
 		if n, err := strconv.Atoi(k); err == nil {
-			return &UnsupportedError{Kind: Kind(n), Ext: ext}
+			return &UnsupportedError{Kind: Kind(n)}
 		}
 	}
 	var base error
@@ -102,6 +107,8 @@ func RestoreError(kind, text string) error {
 		base = ErrNoImages
 	case errKindNotZip:
 		base = ErrNotZip
+	case errKindPassword:
+		base = ErrPassword
 	}
 	if base != nil && text == base.Error() {
 		return base

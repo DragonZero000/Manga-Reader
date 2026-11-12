@@ -119,7 +119,10 @@ func NewScannerWithStore(st storage.Storage, store ScanStore) *Scanner {
 // искажённое прежним сохранением в каталог) и с повторяющимися именами.
 func needsRecheck(e StoredEntry) bool {
 	if e.Err != nil {
-		return errors.Is(e.Err, ErrNoImages)
+		// KindZip: .cbz и другие zip с «чужим» расширением, KindOtherArchive: RAR и
+		// 7z раньше отклонялись
+		var ue *UnsupportedError
+		return errors.Is(e.Err, ErrNoImages) || (errors.As(e.Err, &ue) && (ue.Kind == KindZip || ue.Kind == KindOtherArchive))
 	}
 	seen := make(map[string]bool, len(e.Gallery.Pages))
 	for _, p := range e.Gallery.Pages {
@@ -356,9 +359,12 @@ func readEntry(st storage.Storage, e storage.Entry) (model.Gallery, []string, er
 		return model.Gallery{}, nil, fmt.Errorf("could not open: %w", err)
 	}
 	defer f.Close()
-	ext := path.Ext(e.RelPath)
-	if !strings.EqualFold(ext, ".zip") {
-		return model.Gallery{}, nil, &UnsupportedError{Kind: Sniff(f), Ext: ext}
+	// тип определяется по содержимому, а не по расширению; .zip с
+	// нераспознанным содержимым разбирается как архив — причина «не zip или
+	// повреждён» точнее, чем «неподдерживаемый формат»
+	kind := Sniff(f)
+	if kind != KindZip && kind != KindOtherArchive && !(kind == KindUnknown && strings.EqualFold(path.Ext(e.RelPath), ".zip")) {
+		return model.Gallery{}, nil, &UnsupportedError{Kind: kind}
 	}
 	g, warnings, err := ReadArchive(f, e.RelPath, e, displayPath(st, e.RelPath))
 	if err == nil && g.SourceURL == "" {

@@ -19,6 +19,9 @@ import (
 // coversDirName — папка кэша обложек в системном кэше приложения.
 const coversDirName = "covers"
 
+// solidDirName — папка распаковки solid-архивов RAR в системном кэше приложения.
+const solidDirName = "solid"
+
 // New — Android: папка библиотеки выбирается пользователем (SAF), выбор
 // хранится в настройках Fyne (внутреннее хранилище приложения).
 func New(version string, a fyne.App) *Services {
@@ -41,7 +44,7 @@ func New(version string, a fyne.App) *Services {
 	}
 	// телефон: меньше памяти и ядер под миниатюры, чтобы не мешать UI; обложки
 	// на диске — в системном кэше приложения (TMPDIR = getCacheDir())
-	s := newServices(version, st, settings, thumbsConfig{limit: 48 << 20, workers: 2, dir: filepath.Join(os.TempDir(), coversDirName)}, cat)
+	s := newServices(version, st, settings, thumbsConfig{limit: 48 << 20, workers: 2, dir: filepath.Join(os.TempDir(), coversDirName), solidDir: filepath.Join(os.TempDir(), solidDirName)}, cat)
 	s.CanChooseFolder = true
 	s.MobileBrowser = true
 	s.Links = links
